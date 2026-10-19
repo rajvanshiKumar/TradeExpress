@@ -2,6 +2,7 @@ import prisma from '../config/db.js';
 import { generateOrderNumber } from '../utils/orderNumber.js';
 import { sendOrderConfirmationEmail } from './emailService.js';
 import { initiateEscrowForOrder } from './escrowService.js';
+import { createNotification } from './notificationService.js';
 
 export async function validateAndCalculateOrder({ lines, shippingMethod = 'standard' }) {
   if (!lines || !Array.isArray(lines) || lines.length === 0) {
@@ -298,6 +299,17 @@ export async function createOrder({
     });
   }
 
+  // Notify supplier of incoming wholesale order
+  if (order.supplierId) {
+    createNotification({
+      userId: order.supplierId,
+      title: `New Order: #${order.orderNumber}`,
+      message: `Received new bulk order of ₹${Number(order.total).toLocaleString('en-IN')} from ${order.buyerCompany || order.buyerName}.`,
+      type: 'ORDER',
+      link: `/supplier/orders?order=${order.orderNumber}`,
+    }).catch(() => {});
+  }
+
   return formatOrder(order);
 }
 
@@ -419,7 +431,19 @@ export async function cancelBuyerOrder({ orderId, userId, reason = '' }) {
       },
     });
 
-    return formatOrder(updated);
+    const formatted = formatOrder(updated);
+
+    if (order.supplierId) {
+      createNotification({
+        userId: order.supplierId,
+        title: `Order Cancelled: #${order.orderNumber}`,
+        message: `Buyer cancelled order #${order.orderNumber}. Inventory stock has been restored.`,
+        type: 'ORDER',
+        link: `/supplier/orders?order=${order.orderNumber}`,
+      }).catch(() => {});
+    }
+
+    return formatted;
   });
 }
 

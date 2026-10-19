@@ -208,7 +208,7 @@ export default function Header() {
               aria-controls="header-search"
               className={scrolled ? "" : "max-lg:hidden"}
             />
-            <div className="hidden min-[1700px]:block">
+            <div className="hidden lg:block">
               <PreferencesMenu />
             </div>
             <IconLink

@@ -8,6 +8,7 @@ import NotFound from './NotFound';
 import infoPages from '../data/infoPages';
 import useLocalStorage from '../hooks/useLocalStorage';
 import useDocumentTitle from '../hooks/useDocumentTitle';
+import SupportTicketsSection from '../components/support/SupportTicketsSection';
 import { STORAGE_KEYS } from '../utils/constants';
 import { focusFirstError, hasErrors, rules, validate } from '../utils/validators';
 
@@ -95,6 +96,7 @@ export default function Info() {
           </section>
         ))}
         {page.faqs ? <Faq items={page.faqs} /> : null}
+        {slug === 'help' ? <SupportTicketsSection /> : null}
         {page.contactForm ? <ContactForm /> : null}
         <div className="flex flex-wrap gap-3">
           <Button to="/products" variant="navy">Browse products</Button>

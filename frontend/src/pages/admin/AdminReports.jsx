@@ -34,6 +34,7 @@ import { countBy, ordersByMonth } from '../../utils/analytics';
 import { INQUIRY_STATUSES, ORDER_STATUSES } from '../../utils/constants';
 import { formatDate } from '../../utils/formatDate';
 import { apiGet, apiPost } from '../../services/apiClient';
+import AdminSupportDesk from '../../components/admin/AdminSupportDesk';
 
 const SORTS = {
   newest: { label: 'Newest first', compare: (a, b) => new Date(b.createdAt) - new Date(a.createdAt) },
@@ -250,6 +251,7 @@ export default function AdminReports() {
             { id: 'orders', label: 'Orders', count: orders.length },
             { id: 'escrow', label: 'Escrow & Payouts', count: escrowLedgers.length },
             { id: 'disputes', label: 'Buyer Disputes', count: disputes.filter((d) => d.status === 'OPEN').length },
+            { id: 'tickets', label: 'Support Desk' },
             { id: 'commission', label: 'Platform Commission' },
           ]}
           active={tab}
@@ -257,6 +259,7 @@ export default function AdminReports() {
           idPrefix="reports"
         />
         <TabPanel id={tab} idPrefix="reports" className="pt-5">
+          {tab === 'tickets' ? <AdminSupportDesk /> : null}
           {tab === 'escrow' ? (
             <div className="space-y-6">
               {/* Escrow Summary Stats */}

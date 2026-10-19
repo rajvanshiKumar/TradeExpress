@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Eye, Package, Search, Truck } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Eye, Package, Search, Truck, RotateCcw, FileText } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Button from '../../components/common/Button';
 import { StatusBadge } from '../../components/common/Badge';
@@ -12,6 +12,8 @@ import { TableSkeleton } from '../../components/common/Skeleton';
 import OrderDetails from '../../components/forms/OrderDetails';
 import useAuth from '../../hooks/useAuth';
 import useOrders from '../../hooks/useOrders';
+import useCart from '../../hooks/useCart';
+import useProducts from '../../hooks/useProducts';
 import useCurrency from '../../hooks/useCurrency';
 import useNotifications from '../../hooks/useNotifications';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -24,6 +26,9 @@ export default function BuyerOrders() {
   const { orders, loading, error, reload, updateOrderStatus } = useOrders();
   const { money } = useCurrency();
   const { showToast } = useNotifications();
+  const navigate = useNavigate();
+  const { addToCart } = useCart();
+  const { getProduct } = useProducts();
   const [searchParams, setSearchParams] = useSearchParams();
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
@@ -45,6 +50,114 @@ export default function BuyerOrders() {
     updateOrderStatus(cancelId, 'Cancelled');
     showToast(`Order ${cancelId} cancelled.`, 'info');
     setCancelId(null);
+  };
+
+  const handleReorder = (order) => {
+    let count = 0;
+    for (const item of order.items) {
+      const prod = getProduct(item.productId || item.id) || {
+        id: item.productId || item.id,
+        name: item.name,
+        moq: item.quantity,
+        stock: 99999,
+        unit: item.unit || 'piece',
+        priceTiers: [{ min: 1, price: item.unitPrice }],
+      };
+      addToCart(prod, item.quantity, item.variant || null);
+      count++;
+    }
+    showToast(`Added ${count} product(s) from order ${order.id} to your cart.`, 'success');
+    navigate('/cart');
+  };
+
+  const handlePrintOrderInvoice = (order) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const buyer = order.address || {};
+    const invoiceNum = order.invoiceNumber || `TS-INV-${order.orderNumber || order.id}`;
+    const invoiceDate = new Date(order.createdAt || Date.now()).toLocaleDateString('en-IN');
+    const items = order.items || [];
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>GST Tax Invoice & Purchase Order - ${order.orderNumber || order.id}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; color: #1e293b; font-size: 13px; line-height: 1.5; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 25px; }
+            .logo { font-size: 24px; font-weight: 800; color: #047857; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 25px; }
+            .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+            th { background: #f1f5f9; text-align: left; padding: 10px; font-size: 12px; border: 1px solid #cbd5e1; }
+            td { padding: 10px; border: 1px solid #e2e8f0; }
+            .totals { margin-left: auto; width: 320px; }
+            .totals-row { display: flex; justify-content: space-between; padding: 5px 0; }
+            .totals-row.grand { font-size: 16px; font-weight: bold; border-top: 2px solid #0f172a; color: #047857; margin-top: 5px; padding-top: 8px; }
+            .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 11px; color: #64748b; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="logo">TradeSphere</div>
+              <p style="margin: 5px 0 0 0; font-size: 11px; color: #475569;">B2B Wholesale Fulfillment · GSTIN: 27AABCT9999F1Z0</p>
+            </div>
+            <div style="text-align: right;">
+              <h2 style="margin: 0; font-size: 18px;">GST TAX INVOICE & PO</h2>
+              <p style="margin: 3px 0; font-weight: bold;">${invoiceNum}</p>
+              <p style="margin: 3px 0; color: #64748b;">Date: ${invoiceDate}</p>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="box">
+              <h4 style="margin: 0 0 8px 0; text-transform: uppercase;">Consignor / Supplier</h4>
+              <p style="margin: 0; font-weight: bold;">TradeSphere Verified Wholesale Merchant</p>
+              <p style="margin: 2px 0;">GSTIN: 27AABCT1234F1Z1</p>
+            </div>
+            <div class="box">
+              <h4 style="margin: 0 0 8px 0; text-transform: uppercase;">Consignee / Buyer</h4>
+              <p style="margin: 0; font-weight: bold;">${order.contact?.name || buyer.name || user.name}</p>
+              <p style="margin: 2px 0;">${order.contact?.company || user.company || ''}</p>
+              <p style="margin: 2px 0;">${buyer.street || ''}, ${buyer.city || ''}, ${buyer.state || ''} - ${buyer.postalCode || ''}</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>#</th><th>Description</th><th>HSN</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
+            </thead>
+            <tbody>
+              ${items.map((item, idx) => `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td><strong>${item.name}</strong></td>
+                  <td>${item.hsnCode || '8471'}</td>
+                  <td>${item.quantity} ${item.unit || 'pcs'}</td>
+                  <td>₹${Number(item.unitPrice).toLocaleString('en-IN')}</td>
+                  <td>₹${Number(item.unitPrice * item.quantity).toLocaleString('en-IN')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="totals">
+            <div class="totals-row"><span>Subtotal:</span><span>₹${Number(order.totals?.subtotal || 0).toLocaleString('en-IN')}</span></div>
+            <div class="totals-row"><span>Logistics & Freight:</span><span>₹${Number(order.totals?.shipping || 0).toLocaleString('en-IN')}</span></div>
+            <div class="totals-row"><span>GST (18%):</span><span>₹${Number(order.totals?.tax || 0).toLocaleString('en-IN')}</span></div>
+            <div class="totals-row grand"><span>Total Value:</span><span>₹${Number(order.totals?.total || 0).toLocaleString('en-IN')}</span></div>
+          </div>
+          <div class="footer">
+            <p>Computer generated GST invoice and purchase order. E.&O.E.</p>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
   };
 
   return (
@@ -84,8 +197,10 @@ export default function BuyerOrders() {
                     <td><span className="block min-w-32 text-[0.8125rem] font-medium text-ink">{getPaymentMethod(order.paymentMethod)?.label ?? 'Other'}</span><span className="text-xs text-muted">{getPaymentStatus(order)}</span></td>
                     <td><StatusBadge status={order.status} /></td>
                     <td>
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-1.5 flex-wrap">
                         <Button variant="outline" size="sm" icon={Eye} onClick={() => open(order.id)} aria-label={`View order ${order.id}`}>View</Button>
+                        <Button variant="outline" size="sm" icon={FileText} onClick={() => handlePrintOrderInvoice(order)} aria-label={`Print invoice for order ${order.id}`}>Invoice</Button>
+                        <Button variant="secondary" size="sm" icon={RotateCcw} onClick={() => handleReorder(order)} aria-label={`Reorder items from order ${order.id}`}>Reorder</Button>
                         <Button variant="outline" size="sm" icon={Truck} to={`/track/${order.orderNumber || order.id}`} aria-label={`Track order ${order.id}`}>Track</Button>
                         {order.status === 'Pending' ? <Button variant="dangerOutline" size="sm" onClick={() => setCancelId(order.id)} aria-label={`Cancel order ${order.id}`}>Cancel</Button> : null}
                       </div>

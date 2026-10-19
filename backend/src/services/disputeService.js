@@ -1,5 +1,6 @@
 import prisma from '../config/db.js';
 import * as escrowService from './escrowService.js';
+import { createNotification, notifyUsersByRole } from './notificationService.js';
 
 export async function createDispute({
   orderId,
@@ -70,6 +71,13 @@ export async function createDispute({
       messages: { orderBy: { createdAt: 'asc' } },
     },
   });
+
+  notifyUsersByRole('ADMIN', {
+    title: `Inspection Dispute: #${dispute.order?.orderNumber}`,
+    message: `Buyer opened a dispute: "${reason}". Evidence submitted.`,
+    type: 'DISPUTE',
+    link: `/admin/reports?tab=disputes`,
+  }).catch(() => {});
 
   return dispute;
 }
@@ -167,6 +175,27 @@ export async function resolveDispute(disputeId, { action, resolutionNote = '', r
     throw error;
   }
 
+  const notifyParties = () => {
+    if (dispute.buyerId) {
+      createNotification({
+        userId: dispute.buyerId,
+        title: `Dispute Ruling: #${dispute.order?.orderNumber}`,
+        message: `Admin issued ruling on order #${dispute.order?.orderNumber}: ${action}.`,
+        type: 'DISPUTE',
+        link: `/track/${dispute.order?.orderNumber}`,
+      }).catch(() => {});
+    }
+    if (dispute.order?.supplierId) {
+      createNotification({
+        userId: dispute.order.supplierId,
+        title: `Dispute Ruling: #${dispute.order?.orderNumber}`,
+        message: `Admin issued ruling on order #${dispute.order?.orderNumber}: ${action}.`,
+        type: 'DISPUTE',
+        link: `/supplier/orders`,
+      }).catch(() => {});
+    }
+  };
+
   if (action === 'APPROVE_FULL_REFUND') {
     // Refund escrow to buyer
     await escrowService.refundEscrow(dispute.orderId);
@@ -187,6 +216,7 @@ export async function resolveDispute(disputeId, { action, resolutionNote = '', r
       include: { messages: true },
     });
 
+    notifyParties();
     return updated;
   }
 
@@ -221,6 +251,7 @@ export async function resolveDispute(disputeId, { action, resolutionNote = '', r
       include: { messages: true },
     });
 
+    notifyParties();
     return updated;
   }
 
@@ -246,6 +277,7 @@ export async function resolveDispute(disputeId, { action, resolutionNote = '', r
       include: { messages: true },
     });
 
+    notifyParties();
     return updated;
   }
 

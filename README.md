@@ -6,7 +6,7 @@ TradeSphere is a full-stack, enterprise-grade B2B marketplace platform for manuf
 
 ## Tech Stack
 
-- **Frontend**: React (Vite), Tailwind CSS utility styling + custom component tokens, Lucide Icons.
+- **Frontend**: React (Vite), Tailwind CSS utility styling + custom component tokens, Lucide Icons, Recharts data analytics.
 - **Backend**: Node.js + Express.js modular REST API with route controllers, services, middleware, and centralized error handling.
 - **Database**: MySQL 8.0 with **Prisma ORM** (models, relations, migrations, seeding, atomic transactions).
 - **Payment Gateway**: Razorpay in **Sandbox Mode** with cryptographic HMAC SHA-256 signature verification and Cash on Delivery (COD) support.
@@ -15,49 +15,82 @@ TradeSphere is a full-stack, enterprise-grade B2B marketplace platform for manuf
 
 ---
 
-## Project Structure
+## Platform Features Overview
 
-```
-TradeSphere-full/
-├── frontend/                     # React + Vite client application
-│   ├── src/
-│   │   ├── components/           # Reusable UI cards, forms, dialogs, modals
-│   │   ├── contexts/             # Auth, Cart, Currency, Order, Product contexts
-│   │   ├── pages/                # Home, Products, Checkout, OrderConfirmation, OrderTracking, Dashboards
-│   │   ├── services/             # apiClient, orderService, paymentService, productService
-│   │   ├── utils/                # images (HD mappings), calculateTotals, formatDate, units
-│   │   └── routes/               # AppRoutes (Public, RoleRoute, ProtectedRoute)
-│   ├── .env                      # Local frontend environment config
-│   ├── .env.example              # Template frontend environment variables
-│   └── package.json
-│
-├── backend/                      # Node.js + Express.js REST API
-│   ├── prisma/
-│   │   ├── schema.prisma         # Prisma MySQL database schema
-│   │   └── seed.js               # Database seeding (categories, users, 51 products)
-│   ├── src/
-│   │   ├── config/               # db (Prisma), env, mailer (Nodemailer), razorpay
-│   │   ├── controllers/          # auth, product, category, order, payment, tracking
-│   │   ├── middleware/           # authMiddleware (JWT), errorHandler, validate
-│   │   ├── routes/               # REST API route definitions
-│   │   ├── services/             # Business logic, transactions, email, payment verification
-│   │   ├── utils/                # jwt, orderNumber generator, emailTemplates (HTML)
-│   │   ├── app.js                # Express app configuration & middleware
-│   │   └── server.js             # Server entry point
-│   ├── scripts/
-│   │   └── verify-all.js         # Automated end-to-end verification test suite
-│   ├── .env                      # Local backend environment config
-│   ├── .env.example              # Template backend environment variables
-│   └── package.json
-└── README.md                     # Monorepo documentation
-```
+### Phase 1: Core Bulk-Trade & Statutory Operations (P1)
+1. **Statutory KYC & Business Verification**:
+   - Company registration, GSTIN (15-character state-coded), PAN (10-character alphanumeric), bank account & IFSC verification.
+   - Warehouse location with address, state, and pincode.
+   - Document upload for GST certificate, PAN card, and cancelled cheque via `/api/upload`.
+   - Admin KYC verification review panel (`/admin/verification`) with Approve/Reject ruling and rejection reasons.
+2. **Supplier Product Management & Bulk Upload**:
+   - Product CRUD with title, description, category, MOQ, unit (pieces, kg, cartons), tiered price breaks, stock quantity, lead time.
+   - Mandatory **HSN Code** (e.g. 8471) and **GST Rate** (0%, 5%, 12%, 18%, 28%).
+   - Sample availability toggle and sample pricing.
+   - Bulk Excel product upload via `.xlsx` with downloadable template (`/api/supplier/products/bulk/template`) and row-by-row validation report.
+3. **Supplier Order Fulfillment Workflow**:
+   - Accept or Reject incoming bulk orders with reasons.
+   - Status progression: `ORDER_CONFIRMED` → `PACKED` → `SHIPPED` → `DELIVERED`.
+   - "Dispatch Order" modal requiring Transporter Name, Tracking / LR Number, Tax Invoice PDF link, and E-Way Bill PDF link.
+4. **GST Tax Engine & Escrow Advance**:
+   - State-based tax calculation: Intra-state (CGST 9% + SGST 9%) vs Inter-state (IGST 18%).
+   - 20% partial advance payment option with remaining balance payable on delivery.
+   - Unique supplier tax invoice numbering series: `TS-INV-<SUP>-<TIMESTAMP>`.
+   - Cancellation enforcement: buyer can cancel strictly prior to `PACKED` status.
+   - Razorpay webhook endpoint with HMAC-SHA256 signature verification.
+   - Platform Commission Settings (`/api/admin/commission`) with global, category, and supplier overrides.
 
 ---
 
-## Getting Started Locally (Windows / macOS / Linux)
+### Phase 2: Wholesale Negotiation, Escrow & Disputes (P2)
+1. **RFQ 3-Round Negotiation State Machine**:
+   - Enforces a maximum of 3 negotiation rounds (`currentVersion <= 3`).
+   - Revision history saved across versions (`v1`, `v2`, `v3`) with audit trail of proposed unit price, freight, lead time, and notes.
+   - Quoted statuses: `SENT`, `COUNTERED`, `ACCEPTED`, `REJECTED`, `CLOSED`.
+   - "Accept & Order" converts negotiated locked price directly into cart and checkout.
+2. **Escrow Ledger & Supplier Payout Flow**:
+   - Automated escrow initiation on order payment holding funds securely during inspection.
+   - Automatic platform commission deduction.
+   - Admin Escrow & Payouts management tab (`/admin/reports?tab=escrow`) with live volume cards: Total Held, Payouts Settled, Platform Commission, Total Refunded.
+   - "Release Payout" creates verifiable `SupplierPayout` record (`PAY-TS-...`).
+3. **Buyer Inspection & Dispute Resolution**:
+   - Inspection dispute filing on `DELIVERED` orders (`QUALITY_MISMATCH`, `DAMAGED_GOODS`, `SHORTAGE`, `INCORRECT_ITEMS`).
+   - Automatically freezes escrow payout (`FROZEN_DISPUTED`).
+   - Admin dispute mediation modal supporting Full Refund, Partial Refund, or Rejection.
+4. **Verified Ratings & Reviews**:
+   - Rating locked until order reaches `DELIVERED` state (1 review per order).
+   - Multi-metric rating: Overall 1–5 stars, Material Quality, Packaging Protection, Delivery Timeliness, and verified buyer comment.
+   - Integrated into Product Details page with verified buyer badges.
+
+---
+
+### Phase 3: Communications, Help Desk & Enterprise Readiness (P3)
+1. **Live In-App Notification Centre**:
+   - Notification Bell in header with real-time unread count badge.
+   - Automated triggers on new orders, status changes, quote submissions, counter-offers, escrow releases, disputes, and ticket replies.
+   - Dual sync: merges local alerts and backend `/api/notifications` records.
+2. **Support Ticketing System**:
+   - Help Desk modal for Buyers and Suppliers to raise issues (Order, Billing, Technical, General) with priority flags.
+   - Interactive conversation thread between users and support staff.
+   - Admin Support Desk tab in `AdminReports.jsx` for reviewing tickets, updating statuses (`OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`), and sending official replies.
+3. **One-Click Reorder & Downloadable Invoices**:
+   - One-click "Reorder" button on past orders in `BuyerOrders.jsx` automatically loading products and quantities into cart.
+   - Standardized printable GST Tax Invoice & Purchase Order window (`printInvoice.js`) with full tax breakdown, consignor/consignee GSTIN, and E.&O.E. legal footer.
+4. **Multi-Currency Wholesale Selector**:
+   - Header currency switcher (`INR ₹`, `USD $`, `EUR €`).
+   - Live conversion rates from INR base pricing to international wholesale currencies.
+5. **Supplier Subscription Plans**:
+   - Gold, Silver, and Free Tier comparison matrix on Supplier Dashboard.
+   - Listing limit indicators (e.g. 100 listings on Gold, instant escrow payout, verified trust badge).
+6. **SEO & Clean Crawling**:
+   - `sitemap.xml` listing public marketplace pages with update frequencies.
+   - `robots.txt` protecting authenticated panels and guiding search engine bots.
+
+---
+
+## Getting Started Locally
 
 ### 1. Prerequisites
-
 - **Node.js**: v18.0.0 or later
 - **MySQL Server**: 8.0 or later (running locally on port 3306 or remote)
 - **npm** or **pnpm**
@@ -65,39 +98,24 @@ TradeSphere-full/
 ---
 
 ### 2. Database Setup (MySQL)
-
 1. Ensure MySQL Server is running.
-2. Create the database:
-   ```sql
-   CREATE DATABASE tradesphere_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-   ```
-3. In `backend/.env`, configure your database connection string:
+2. In `backend/.env`, configure your database connection string:
    ```env
    DATABASE_URL="mysql://root:YOUR_PASSWORD@localhost:3306/tradesphere_db"
+   ```
+3. Generate Prisma client:
+   ```bash
+   cd backend
+   npx prisma generate
    ```
 
 ---
 
 ### 3. Backend Setup
-
 1. Open a terminal and navigate to `backend/`:
    ```bash
    cd backend
    npm install
-   ```
-2. Generate Prisma Client and push the schema to MySQL:
-   ```bash
-   npm run prisma:generate
-   npm run prisma:push
-   ```
-3. Seed the database with categories, default users, and 51 wholesale products:
-   ```bash
-   npm run prisma:seed
-   ```
-4. Start the backend development server:
-   ```bash
-   npm start
-   # or with live reloading:
    npm run dev
    ```
    The backend server runs on `http://localhost:5000/api`.
@@ -105,19 +123,10 @@ TradeSphere-full/
 ---
 
 ### 4. Frontend Setup
-
 1. Open a new terminal and navigate to `frontend/`:
    ```bash
    cd frontend
    npm install
-   ```
-2. Ensure `frontend/.env` points to the backend:
-   ```env
-   VITE_PUBLIC_API_BASE_URL=http://localhost:5000/api
-   VITE_PUBLIC_API_PRODUCTS_PATH=products
-   ```
-3. Start the Vite development server:
-   ```bash
    npm run dev
    ```
    The frontend runs on `http://localhost:5173`.
@@ -126,92 +135,57 @@ TradeSphere-full/
 
 ## Default Seeded Accounts
 
-The seed script creates the following pre-configured accounts:
-
 | Role | Email | Password | Details |
 | :--- | :--- | :--- | :--- |
 | **Buyer** | `buyer@tradesphere.com` | `TradeSphere@2026` | Verified wholesale buyer with saved address |
 | **Supplier** | `supplier@novatech.com` | `TradeSphere@2026` | Verified electronics manufacturer |
-| **Admin** | `krajvanshi244@gmail.com` | `modiji@12345` | Platform super administrator with full panel access (`/admin/login`) |
+| **Admin** | `admin@tradesphere.com` | `password123` | Platform super administrator with full panel access |
+| **Admin (Legacy)** | `krajvanshi244@gmail.com` | `modiji@12345` | Super admin login (`/admin/login`) |
 
 ---
 
-## Payment Gateway Sandbox Configuration
+## API Endpoints Reference
 
-Online payments are processed through **Razorpay** in sandbox/test mode:
+### Authentication & KYC
+- `POST /api/auth/register` — Register Buyer or Supplier
+- `POST /api/auth/login` — Sign in and receive JWT token
+- `POST /api/auth/kyc/submit` — Submit statutory KYC (GSTIN, PAN, bank IFSC)
+- `POST /api/auth/kyc/documents` — Upload KYC verification documents
 
-- In `backend/.env`:
-  ```env
-  RAZORPAY_KEY_ID="rzp_test_placeholder_key"
-  RAZORPAY_KEY_SECRET="placeholder_secret_key"
-  PAYMENT_GATEWAY_MODE="sandbox"
-  ```
-- **How Verification Works**:
-  1. The client initiates an order on the backend (`POST /api/orders`).
-  2. The server verifies stock, MOQ, and server-side pricing.
-  3. The payment gateway generates an order ID (`POST /api/payments/create-order`).
-  4. In sandbox mode, the backend generates and validates an HMAC SHA-256 signature (`POST /api/payments/verify` or `POST /api/payments/sandbox-pay`).
-  5. The order status is transactionally updated to `ORDER_CONFIRMED` and `paymentStatus` to `PAID`.
-  6. Cash on Delivery (COD) orders are confirmed immediately with `paymentStatus: 'COD'`.
+### Products & Bulk Upload
+- `GET /api/products` — Filter products by category, MOQ, price, location
+- `GET /api/products/:id` — Product details with tiered pricing and verified reviews
+- `POST /api/supplier/products` — Add product with HSN code and GST rate
+- `GET /api/supplier/products/bulk/template` — Download standard `.xlsx` product template
+- `POST /api/supplier/products/bulk/upload` — Upload `.xlsx` spreadsheet with error report
 
----
+### Orders & Logistics
+- `POST /api/orders` — Create bulk wholesale order with state tax breakdown
+- `GET /api/orders/:id` — Order status and tracking details
+- `POST /api/supplier/orders/:id/accept` — Accept order and generate `TS-INV` invoice series
+- `POST /api/supplier/orders/:id/reject` — Reject order with capacity/inventory reason
+- `PATCH /api/supplier/orders/:id/status` — Advance status to `PACKED`
+- `POST /api/supplier/orders/:id/dispatch` — Dispatch order with Transporter LR & E-Way Bill
 
-## Email Notifications (Nodemailer SMTP)
+### RFQ & Quotation Negotiation
+- `POST /api/rfq` — Post Request for Quotation
+- `GET /api/rfq` — List open RFQs
+- `POST /api/rfq/:id/quote` — Submit wholesale quotation
+- `POST /api/rfq/quotes/:quoteId/counter` — Submit Counter-Offer (max 3 rounds)
+- `POST /api/rfq/quotes/:quoteId/accept` — Accept Quote and lock negotiated price
 
-Order confirmation emails are dispatched automatically upon order confirmation:
+### Escrow, Disputes & Reviews
+- `GET /api/escrow/summary` — Overview of held, settled, and refunded escrow
+- `POST /api/escrow/:orderId/release` — Admin manual/automatic supplier payout release
+- `POST /api/disputes` — Raise inspection dispute for delivered order with photo evidence
+- `POST /api/disputes/:id/resolve` — Admin dispute ruling (Full Refund, Partial Refund, Reject)
+- `POST /api/reviews/:orderId` — Submit verified buyer review after delivery
 
-- **SMTP Configuration** (`backend/.env`):
-  ```env
-  SMTP_HOST="smtp.gmail.com"
-  SMTP_PORT=587
-  SMTP_SECURE=false
-  SMTP_USER="your-email@gmail.com"
-  SMTP_PASS="your-16-character-app-password"
-  SMTP_FROM="TradeSphere Orders <orders@tradesphere.com>"
-  ```
-- **Fallback Behavior**:
-  If no SMTP credentials are provided, Nodemailer automatically creates an ephemeral **Ethereal Email** test account and logs the public preview link in the backend console (e.g. `https://ethereal.email/message/...`).
-- **Template Details**:
-  - Branded TradeSphere HTML header and styling
-  - Itemized product table with public HTTPS photographs
-  - Order reference number and date
-  - Subtotal, Shipping fee, 18% GST calculation, and Grand Total
-  - Shipping address and payment method
-  - Clickable direct link to **Track My Order** (`/track/:orderNumber`)
-
----
-
-## Order Tracking
-
-The `/track/:orderNumber` page renders a visual progress timeline with 6 lifecycle stages:
-1. **Order Placed**: Logged in database with initial status.
-2. **Order Confirmed**: Payment verified or Cash on Delivery approved.
-3. **Processing**: Items picked and packed at the supplier warehouse.
-4. **Shipped**: Dispatched with freight carrier.
-5. **Out for Delivery**: Local courier handoff for final delivery.
-6. **Delivered**: Goods delivered and signed.
-
-Support for **Cancelled** and **Refunded** states is included, displaying appropriate alerts and stopping further progression.
-
----
-
-## Running Verification Tests
-
-To verify the entire full-stack pipeline end-to-end:
-
-```bash
-cd backend
-npm run test:e2e
-```
-
-The test suite runs 27 automated assertions verifying:
-1. MySQL database connection & seeded tables
-2. User authentication & JWT token generation
-3. Product catalog retrieval & HD image integrity
-4. Server-side inventory, MOQ, and tiered price calculations
-5. Cash on Delivery (COD) order flow & stock decrement
-6. Duplicate order submission prevention (Idempotency)
-7. Online payment sandbox creation & HMAC SHA-256 signature verification
-8. Order confirmation email dispatch & HTML rendering
-9. Multi-stage order tracking API & lifecycle timeline
-10. Order status progression persistence in MySQL
+### Notifications & Support Tickets
+- `GET /api/notifications` — Fetch user's in-app alerts and unread count
+- `PATCH /api/notifications/:id/read` — Mark notification as read
+- `PATCH /api/notifications/read-all` — Mark all notifications read
+- `POST /api/tickets` — Create support ticket
+- `GET /api/tickets` — List user tickets or all tickets for admin
+- `POST /api/tickets/:id/messages` — Add message reply to support ticket thread
+- `PATCH /api/tickets/:id/status` — Admin update ticket status (`OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`)

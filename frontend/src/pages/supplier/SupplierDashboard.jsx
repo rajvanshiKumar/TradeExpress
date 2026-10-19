@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Boxes, CircleDollarSign, FileText, MessageSquare, Package, Plus, TriangleAlert } from 'lucide-react';
+import { Boxes, CircleDollarSign, FileText, MessageSquare, Package, Plus, TriangleAlert, Crown, Check } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import StatCard from '../../components/common/StatCard';
 import Button from '../../components/common/Button';
+import Modal from '../../components/common/Modal';
 import { StatusBadge } from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import SupplierGuard from './SupplierGuard';
@@ -26,10 +28,34 @@ function Overview({ company, products }) {
   const myInquiries = inquiries.filter((inquiry) => inquiry.companyId === company.id);
   const openInquiries = myInquiries.filter((inquiry) => ['Submitted', 'Viewed'].includes(inquiry.status));
   const lowStock = products.filter((product) => product.stock < product.moq * LOW_STOCK_FACTOR);
+  const [showPlansModal, setShowPlansModal] = useState(false);
 
   return (
     <div className="space-y-8">
       <SectionHeading title={company.name} description="Supplier overview" actions={<><Button to={`/suppliers/${company.slug}`} variant="outline" size="sm">View public profile</Button><Button to="/supplier/products/new" size="sm" icon={Plus}>Add product</Button></>} />
+
+      {/* Subscription Tier Banner */}
+      <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm font-black text-sm">
+            GOLD
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-navy-950 text-sm">Gold Merchant Membership · Active</h3>
+              <span className="rounded-full bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 text-[10px]">VERIFIED TIER</span>
+            </div>
+            <p className="text-xs text-muted mt-0.5">
+              Active Catalogue: <strong className="text-navy-900">{products.length} of 100</strong> listings used · Priority RFQ matching · 0% escrow delay
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" icon={Crown} onClick={() => setShowPlansModal(true)}>
+            View Plan Limits
+          </Button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard icon={Boxes} label="Products listed" value={products.length} hint={`${products.filter((product) => product.status === 'Active').length} active`} to="/supplier/products" />
@@ -37,6 +63,49 @@ function Overview({ company, products }) {
         <StatCard icon={CircleDollarSign} tone="success" label="Order value" value={money(revenue)} hint="Excludes cancelled orders" to="/supplier/analytics" />
         <StatCard icon={FileText} tone="warning" label="Open inquiries" value={openInquiries.length} hint={`${unreadCount} unread ${unreadCount === 1 ? 'message' : 'messages'}`} to="/supplier/inquiries" />
       </div>
+
+      {/* Plans Comparison Modal */}
+      <Modal open={showPlansModal} onClose={() => setShowPlansModal(false)} title="TradeSphere Supplier Plans" className="max-w-2xl">
+        <div className="space-y-4">
+          <p className="text-xs text-muted">Compare wholesale merchant tiers and listing capacity:</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Free */}
+            <div className="rounded-xl border p-4 bg-white space-y-2 text-xs">
+              <span className="font-bold text-slate-700">Free Tier</span>
+              <p className="text-lg font-black text-navy-900">₹0 <span className="text-[10px] font-normal text-muted">/mo</span></p>
+              <ul className="space-y-1.5 text-muted pt-2 border-t">
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Up to 5 listings</li>
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Standard RFQs</li>
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Standard Escrow</li>
+              </ul>
+            </div>
+
+            {/* Silver */}
+            <div className="rounded-xl border p-4 bg-white space-y-2 text-xs">
+              <span className="font-bold text-slate-700">Silver Verified</span>
+              <p className="text-lg font-black text-navy-900">₹4,999 <span className="text-[10px] font-normal text-muted">/yr</span></p>
+              <ul className="space-y-1.5 text-muted pt-2 border-t">
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Up to 25 listings</li>
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Verified Badge</li>
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Priority RFQ alerts</li>
+              </ul>
+            </div>
+
+            {/* Gold */}
+            <div className="rounded-xl border-2 border-amber-400 bg-amber-50/50 p-4 space-y-2 text-xs relative">
+              <span className="absolute -top-2.5 right-3 bg-amber-500 text-white font-bold text-[9px] px-2 py-0.5 rounded-full">ACTIVE</span>
+              <span className="font-bold text-amber-900">Gold Verified</span>
+              <p className="text-lg font-black text-navy-900">₹14,999 <span className="text-[10px] font-normal text-muted">/yr</span></p>
+              <ul className="space-y-1.5 text-navy-900 pt-2 border-t border-amber-200">
+                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> 100 listings allowed</li>
+                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Instant Escrow Payout</li>
+                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Dedicated Account Mgr</li>
+                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Top Supplier Placement</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </Modal>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <section className="ts-card overflow-hidden" aria-labelledby="supplier-recent-orders">

@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { createNotification } from './notificationService.js';
 
 export async function getSupplierOrders(supplierUser) {
   const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
@@ -90,6 +91,16 @@ export async function acceptSupplierOrder(supplierUser, orderId) {
     return res;
   });
 
+  if (order.userId) {
+    createNotification({
+      userId: order.userId,
+      title: `Order Confirmed: #${order.orderNumber}`,
+      message: `Your wholesale order #${order.orderNumber} has been accepted and confirmed by the supplier.`,
+      type: 'ORDER',
+      link: `/track/${order.orderNumber}`,
+    }).catch(() => {});
+  }
+
   return updated;
 }
 
@@ -144,6 +155,16 @@ export async function rejectSupplierOrder(supplierUser, orderId, reason = '') {
     return res;
   });
 
+  if (order.userId) {
+    createNotification({
+      userId: order.userId,
+      title: `Order Rejected: #${order.orderNumber}`,
+      message: `Supplier was unable to accept order #${order.orderNumber}: ${reason || 'Capacity constraints'}.`,
+      type: 'ORDER',
+      link: `/buyer/orders`,
+    }).catch(() => {});
+  }
+
   return updated;
 }
 
@@ -187,6 +208,16 @@ export async function updateSupplierOrderStatus(supplierUser, orderId, { status,
     return res;
   });
 
+  if (order.userId) {
+    createNotification({
+      userId: order.userId,
+      title: `Order Status: ${status}`,
+      message: `Order #${order.orderNumber} is now marked as ${status}.`,
+      type: 'ORDER',
+      link: `/track/${order.orderNumber}`,
+    }).catch(() => {});
+  }
+
   return updated;
 }
 
@@ -222,6 +253,16 @@ export async function dispatchSupplierOrder(supplierUser, orderId, { carrierName
 
     return res;
   });
+
+  if (order.userId) {
+    createNotification({
+      userId: order.userId,
+      title: `Shipment Dispatched: #${order.orderNumber}`,
+      message: `Order #${order.orderNumber} has been dispatched with ${carrierName || 'Carrier'}. Tracking Number: ${trackingNumber || 'N/A'}.`,
+      type: 'ORDER',
+      link: `/track/${order.orderNumber}`,
+    }).catch(() => {});
+  }
 
   return updated;
 }

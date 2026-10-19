@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
+import { Printer } from 'lucide-react';
 import Image from '../common/Image';
+import Button from '../common/Button';
 import { StatusBadge } from '../common/Badge';
 import { AddressBlock } from './AddressForm';
 import useCurrency from '../../hooks/useCurrency';
@@ -8,6 +10,7 @@ import { getPaymentMethod, getPaymentStatus } from '../../utils/payments';
 import { getShippingMethod } from '../../utils/calculateTotals';
 import { formatDateTime } from '../../utils/formatDate';
 import { quantityLabel } from '../../utils/units';
+import { printInvoice } from '../../utils/printInvoice';
 
 /**
  * Full details of one order. `companyId` limits the item list to one supplier's
@@ -28,7 +31,12 @@ export default function OrderDetails({ order, companyId = null }) {
           <p className="text-sm font-bold text-navy-900">{order.id}</p>
           <p className="text-xs text-muted">Placed {formatDateTime(order.createdAt)}</p>
         </div>
-        <StatusBadge status={order.status} />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" icon={Printer} onClick={() => printInvoice(order)}>
+            Print PO & Invoice
+          </Button>
+          <StatusBadge status={order.status} />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border bg-white">

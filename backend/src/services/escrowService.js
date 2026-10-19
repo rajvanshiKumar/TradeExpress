@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { createNotification } from './notificationService.js';
 
 /**
  * Calculates and initiates an escrow ledger entry for an order once payment is confirmed.
@@ -130,6 +131,16 @@ export async function releaseEscrow(orderId, { adminNote = '' } = {}) {
     });
   }
 
+  if (ledger.order?.supplierId) {
+    createNotification({
+      userId: ledger.order.supplierId,
+      title: `Escrow Released: ₹${Number(ledger.payoutAmount).toLocaleString('en-IN')}`,
+      message: `Escrow payout of ₹${Number(ledger.payoutAmount).toLocaleString('en-IN')} for order #${ledger.order.orderNumber} has been released.`,
+      type: 'PAYOUT',
+      link: `/supplier/orders`,
+    }).catch(() => {});
+  }
+
   return {
     ledger: updatedLedger,
     payout,
@@ -141,15 +152,31 @@ export async function releaseEscrow(orderId, { adminNote = '' } = {}) {
  * Freezes escrow when buyer reports a dispute during inspection.
  */
 export async function freezeEscrowForDispute(orderId) {
-  const existing = await prisma.escrowLedger.findUnique({ where: { orderId } });
+  const existing = await prisma.escrowLedger.findUnique({
+    where: { orderId },
+    include: { order: true },
+  });
   if (!existing) {
     await initiateEscrowForOrder(orderId);
   }
 
-  return prisma.escrowLedger.update({
+  const updated = await prisma.escrowLedger.update({
     where: { orderId },
     data: { status: 'FROZEN_DISPUTED' },
+    include: { order: true },
   });
+
+  if (updated.order?.supplierId) {
+    createNotification({
+      userId: updated.order.supplierId,
+      title: `Payout Frozen: Dispute Raised`,
+      message: `A buyer dispute has been reported on order #${updated.order.orderNumber}. Escrow funds are frozen pending review.`,
+      type: 'DISPUTE',
+      link: `/supplier/orders`,
+    }).catch(() => {});
+  }
+
+  return updated;
 }
 
 /**

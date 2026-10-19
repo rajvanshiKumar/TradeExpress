@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { createNotification } from './notificationService.js';
 
 export async function createRfq({
   buyerId = null,
@@ -264,6 +265,16 @@ export async function submitQuote(rfqId, {
     }
   }
 
+  if (rfq.buyerId) {
+    createNotification({
+      userId: rfq.buyerId,
+      title: `Quotation Received: ${rfq.title}`,
+      message: `A supplier submitted a quote of ₹${Number(unitPrice).toLocaleString('en-IN')}/unit for your RFQ #${rfq.rfqNumber}.`,
+      type: 'QUOTE',
+      link: `/inquiries`,
+    }).catch(() => {});
+  }
+
   return quotation;
 }
 
@@ -330,6 +341,24 @@ export async function counterOffer(quoteId, {
     },
   });
 
+  if (proposedBy === 'BUYER' && quotation.supplierId) {
+    createNotification({
+      userId: quotation.supplierId,
+      title: `Counter-Offer: #${quotation.quoteNumber}`,
+      message: `Buyer countered Quote #${quotation.quoteNumber} at ₹${Number(unitPrice).toLocaleString('en-IN')}/unit (Round ${nextVer} of 3).`,
+      type: 'QUOTE',
+      link: `/supplier/inquiries`,
+    }).catch(() => {});
+  } else if (proposedBy === 'SUPPLIER' && quotation.rfq?.buyerId) {
+    createNotification({
+      userId: quotation.rfq.buyerId,
+      title: `Revised Quote: #${quotation.quoteNumber}`,
+      message: `Supplier revised Quote #${quotation.quoteNumber} to ₹${Number(unitPrice).toLocaleString('en-IN')}/unit (Round ${nextVer} of 3).`,
+      type: 'QUOTE',
+      link: `/inquiries`,
+    }).catch(() => {});
+  }
+
   return updated;
 }
 
@@ -365,6 +394,16 @@ export async function acceptQuote(quoteId, { buyerId = null }) {
     where: { id: quotation.rfqId },
     data: { status: 'CLOSED' },
   });
+
+  if (quotation.supplierId) {
+    createNotification({
+      userId: quotation.supplierId,
+      title: `Quote Accepted: #${quotation.quoteNumber}`,
+      message: `Buyer accepted Quote #${quotation.quoteNumber}! The negotiated order has been locked.`,
+      type: 'QUOTE',
+      link: `/supplier/inquiries`,
+    }).catch(() => {});
+  }
 
   return updatedQuote;
 }

@@ -14,6 +14,8 @@ import rfqRoutes from './rfqRoutes.js';
 import escrowRoutes from './escrowRoutes.js';
 import disputeRoutes from './disputeRoutes.js';
 import reviewRoutes from './reviewRoutes.js';
+import notificationRoutes from './notificationRoutes.js';
+import ticketRoutes from './ticketRoutes.js';
 
 const router = Router();
 
@@ -32,6 +34,8 @@ router.use('/rfq', rfqRoutes);
 router.use('/escrow', escrowRoutes);
 router.use('/disputes', disputeRoutes);
 router.use('/reviews', reviewRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/tickets', ticketRoutes);
 
 router.get('/health', (req, res) => {
   res.json({
