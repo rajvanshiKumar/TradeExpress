@@ -50,3 +50,16 @@ export async function sandboxSimulate(req, res, next) {
     next(error);
   }
 }
+
+export async function handleWebhook(req, res, next) {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    const result = await paymentService.handleRazorpayWebhook({
+      rawBody: req.body,
+      signature,
+    });
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}

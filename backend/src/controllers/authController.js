@@ -62,3 +62,73 @@ export async function addAddress(req, res, next) {
     next(error);
   }
 }
+
+export async function forgotPassword(req, res, next) {
+  try {
+    const result = await authService.forgotPassword(req.body.email);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function resetPassword(req, res, next) {
+  try {
+    const result = await authService.resetPassword(req.body);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function changePassword(req, res, next) {
+  try {
+    const result = await authService.changePassword({
+      userId: req.user.id,
+      currentPassword: req.body.currentPassword,
+      newPassword: req.body.newPassword,
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateProfile(req, res, next) {
+  try {
+    const user = await authService.updateUserProfile(req.user.id, req.body);
+    res.json({
+      success: true,
+      message: 'Profile updated successfully.',
+      data: user,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function submitKyc(req, res, next) {
+  try {
+    const result = await authService.submitKyc(req.user.id, req.body);
+    res.json({
+      success: true,
+      message: 'KYC submitted successfully. Status: PENDING verification.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getKyc(req, res, next) {
+  try {
+    const result = await authService.getKycStatus(req.user.id);
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

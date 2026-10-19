@@ -1,5 +1,5 @@
 import prisma from '../config/db.js';
-import { getRazorpayClient, verifyRazorpaySignature, createSandboxSignature } from '../config/razorpay.js';
+import { getRazorpayClient, verifyRazorpaySignature, createSandboxSignature, verifyWebhookSignature } from '../config/razorpay.js';
 import { ENV } from '../config/env.js';
 import { sendOrderConfirmationEmail } from './emailService.js';
 
@@ -16,12 +16,22 @@ export async function createPaymentOrder({ orderId }) {
   }
 
   if (order.paymentStatus === 'PAID') {
-    const error = new Error('This order has already been paid.');
+    const error = new Error('This order has already been fully paid.');
     error.statusCode = 400;
     throw error;
   }
 
-  const amountInPaise = Math.round(Number(order.total) * 100);
+  // Determine payable amount (partial advance vs balance vs full)
+  let payableAmount = Number(order.total);
+  if (order.isPartialPayment) {
+    if (order.paymentStatus === 'UNPAID' && order.advanceAmount) {
+      payableAmount = Number(order.advanceAmount);
+    } else if (order.paymentStatus === 'PARTIALLY_PAID' && order.balanceDue) {
+      payableAmount = Number(order.balanceDue);
+    }
+  }
+
+  const amountInPaise = Math.round(payableAmount * 100);
   const razorpay = getRazorpayClient();
 
   let gatewayOrderId = null;
@@ -36,6 +46,7 @@ export async function createPaymentOrder({ orderId }) {
           orderId: order.id,
           orderNumber: order.orderNumber,
           buyerEmail: order.buyerEmail,
+          isPartialPayment: String(order.isPartialPayment),
         },
       });
       gatewayOrderId = response.id;
@@ -53,7 +64,7 @@ export async function createPaymentOrder({ orderId }) {
       orderId: order.id,
       gateway: 'razorpay',
       paymentOrderId: gatewayOrderId,
-      amount: order.total,
+      amount: payableAmount,
       currency: 'INR',
       status: 'PENDING',
     },
@@ -64,8 +75,10 @@ export async function createPaymentOrder({ orderId }) {
     orderId: order.id,
     orderNumber: order.orderNumber,
     paymentOrderId: gatewayOrderId,
-    amount: Number(order.total),
+    amount: payableAmount,
     amountInPaise,
+    isPartialPayment: order.isPartialPayment,
+    paymentStatus: order.paymentStatus,
     currency: 'INR',
     buyerName: order.buyerName,
     buyerEmail: order.buyerEmail,
@@ -119,14 +132,32 @@ export async function verifyPayment({ orderId, paymentOrderId, transactionId, si
     throw error;
   }
 
+  let newPaymentStatus = 'PAID';
+  let paymentAmount = Number(order.total);
+  let statusNote = '';
+
+  if (order.isPartialPayment) {
+    if (order.paymentStatus === 'UNPAID') {
+      newPaymentStatus = 'PARTIALLY_PAID';
+      paymentAmount = Number(order.advanceAmount || (Number(order.total) * 0.2).toFixed(2));
+      statusNote = `Partial advance payment of ₹${paymentAmount.toLocaleString('en-IN')} confirmed via Razorpay (Txn: ${transactionId}). Balance ₹${Number(order.balanceDue || 0).toLocaleString('en-IN')} due on delivery.`;
+    } else if (order.paymentStatus === 'PARTIALLY_PAID') {
+      newPaymentStatus = 'PAID';
+      paymentAmount = Number(order.balanceDue || 0);
+      statusNote = `Final balance payment of ₹${paymentAmount.toLocaleString('en-IN')} confirmed via Razorpay (Txn: ${transactionId}). Full payment complete.`;
+    }
+  } else {
+    statusNote = `Online payment of ₹${Number(order.total).toLocaleString('en-IN')} confirmed via Razorpay (Txn: ${transactionId}).`;
+  }
+
   // Transactionally update Order, Payment, and Status History
   const updatedOrder = await prisma.$transaction(async (tx) => {
     // 1. Update order
     const updated = await tx.order.update({
       where: { id: order.id },
       data: {
-        paymentStatus: 'PAID',
-        orderStatus: 'ORDER_CONFIRMED',
+        paymentStatus: newPaymentStatus,
+        orderStatus: order.orderStatus === 'ORDER_PLACED' ? 'ORDER_CONFIRMED' : order.orderStatus,
       },
       include: {
         items: true,
@@ -143,7 +174,7 @@ export async function verifyPayment({ orderId, paymentOrderId, transactionId, si
         transactionId,
         paymentOrderId,
         signature,
-        amount: order.total,
+        amount: paymentAmount,
         currency: 'INR',
         status: 'PAID',
         rawResponse: { verified: true, verifiedAt: new Date().toISOString() },
@@ -154,8 +185,8 @@ export async function verifyPayment({ orderId, paymentOrderId, transactionId, si
     await tx.orderStatusHistory.create({
       data: {
         orderId: order.id,
-        status: 'ORDER_CONFIRMED',
-        notes: `Online payment of ₹${Number(order.total).toLocaleString('en-IN')} confirmed via Razorpay (Txn: ${transactionId}).`,
+        status: updated.orderStatus,
+        notes: statusNote,
         changedBy: 'Payment Gateway',
       },
     });
@@ -194,4 +225,66 @@ export async function simulateSandboxPayment({ orderId, paymentOrderId }) {
     transactionId,
     signature,
   });
+}
+
+export async function handleRazorpayWebhook({ rawBody, signature }) {
+  const isValid = verifyWebhookSignature({ rawBody, signature });
+  if (!isValid) {
+    const error = new Error('Invalid Razorpay webhook signature');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const payload = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
+  const event = payload.event;
+  console.log(`[TradeSphere Webhook] Received Razorpay event: ${event}`);
+
+  if (event === 'payment.captured' || event === 'order.paid') {
+    const paymentEntity = payload.payload?.payment?.entity;
+    const orderEntity = payload.payload?.order?.entity;
+
+    const gatewayOrderId = paymentEntity?.order_id || orderEntity?.id;
+    const transactionId = paymentEntity?.id;
+    const orderIdNote = paymentEntity?.notes?.orderId || orderEntity?.notes?.orderId;
+
+    let order = null;
+    if (orderIdNote) {
+      order = await prisma.order.findUnique({ where: { id: orderIdNote } });
+    }
+    if (!order && gatewayOrderId) {
+      const existingPayment = await prisma.payment.findFirst({
+        where: { paymentOrderId: gatewayOrderId },
+        include: { order: true },
+      });
+      if (existingPayment?.order) {
+        order = existingPayment.order;
+      }
+    }
+
+    if (order && order.paymentStatus !== 'PAID') {
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            paymentStatus: order.isPartialPayment ? 'PARTIALLY_PAID' : 'PAID',
+            orderStatus: order.orderStatus === 'ORDER_PLACED' ? 'ORDER_CONFIRMED' : order.orderStatus,
+          },
+        });
+        await tx.payment.create({
+          data: {
+            orderId: order.id,
+            gateway: 'razorpay_webhook',
+            transactionId: transactionId || 'webhook_' + Date.now(),
+            paymentOrderId: gatewayOrderId,
+            amount: paymentEntity?.amount ? paymentEntity.amount / 100 : order.total,
+            currency: 'INR',
+            status: 'PAID',
+            rawResponse: payload,
+          },
+        });
+      });
+    }
+  }
+
+  return { received: true };
 }

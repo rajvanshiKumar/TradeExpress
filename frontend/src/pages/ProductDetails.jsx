@@ -51,7 +51,10 @@ export default function ProductDetails() {
   const [quantity, setQuantity] = useState(1);
   const [variant, setVariant] = useState({});
   const [tab, setTab] = useState('description');
+  const [sampleModalOpen, setSampleModalOpen] = useState(false);
+  const [sampleQuantity, setSampleQuantity] = useState(1);
   useDocumentTitle(product?.name ?? 'Product');
+
 
   useEffect(() => {
     if (!product) return;
@@ -164,14 +167,104 @@ export default function ProductDetails() {
               <Button size="lg" variant="navy" icon={ShoppingCart} disabled={outOfStock} onClick={() => addToCart(product, quantity, variantEntries.length ? variant : null)}>
                 {outOfStock ? 'Out of stock' : inCart(product.id) ? 'Add more to cart' : 'Add to Cart'}
               </Button>
-              <Button variant="outline" icon={FileText} to={`/rfq?product=${product.id}`} className="sm:col-span-2">Request a Quote</Button>
+              {product.sampleAvailable !== false && (
+                <Button
+                  variant="outline"
+                  icon={PackageCheck}
+                  onClick={() => setSampleModalOpen(true)}
+                  className="sm:col-span-2 border-brand-500/40 bg-brand-50/50 text-navy-900 hover:bg-brand-50 font-semibold"
+                >
+                  Request Sample ({money(product.samplePrice || product.price)} / {product.unit})
+                </Button>
+              )}
+              <Button variant="outline" icon={FileText} to={`/rfq?product=${product.id}`}>Request a Quote</Button>
               <Button variant="outline" icon={MessageSquare} onClick={() => company && contact(company, product)} disabled={!company}>Contact Supplier</Button>
-              <div className="flex gap-2.5">
+              <div className="flex gap-2.5 sm:col-span-2">
                 <Button variant="outline" icon={Share2} onClick={share} className="flex-1">Share</Button>
                 <WishlistButton product={product} className="!size-11 !rounded-[0.625rem] border-navy-200 shadow-none" />
               </div>
             </div>
           </section>
+
+          {/* Sample Request Dialog */}
+          {sampleModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 p-4 backdrop-blur-sm">
+              <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-navy-900/[0.08]">
+                <div className="flex items-center gap-2 border-b border-navy-900/[0.06] pb-3">
+                  <PackageCheck className="size-5 text-brand-600" />
+                  <h3 className="text-lg font-bold text-ink">Request a Product Sample</h3>
+                </div>
+
+                <div className="mt-4 space-y-4">
+                  <div className="flex items-center gap-3 rounded-xl bg-ivory/80 p-3 border border-navy-900/[0.06]">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-sm text-ink truncate">{product.name}</p>
+                      <p className="text-xs text-muted">Supplier: {company?.name}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-navy-900">{money(product.samplePrice || product.price)}</p>
+                      <p className="text-[11px] text-muted">per {product.unit}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-ink mb-1.5">
+                      Sample Quantity (Max 5 units)
+                    </label>
+                    <div className="flex items-center gap-3">
+                      {[1, 2, 3, 5].map((qty) => (
+                        <button
+                          key={qty}
+                          type="button"
+                          onClick={() => setSampleQuantity(qty)}
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-all ${
+                            sampleQuantity === qty
+                              ? 'border-brand-600 bg-brand-50 text-brand-700'
+                              : 'border-navy-900/10 text-muted hover:bg-slate-50'
+                          }`}
+                        >
+                          {qty} {product.unit}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-3 text-xs text-muted space-y-1 border border-navy-900/[0.06]">
+                    <p className="flex justify-between">
+                      <span>Sample cost ({sampleQuantity} × {money(product.samplePrice || product.price)}):</span>
+                      <span className="font-semibold text-ink">{money((product.samplePrice || product.price) * sampleQuantity)}</span>
+                    </p>
+                    <p className="flex justify-between">
+                      <span>Express courier dispatch:</span>
+                      <span className="font-semibold text-ink">Ships in 24–48 hours</span>
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-navy-900/[0.06]">
+                    <Button type="button" variant="outline" onClick={() => setSampleModalOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      icon={ShoppingCart}
+                      onClick={() => {
+                        addToCart(
+                          { ...product, price: product.samplePrice || product.price, isSample: true, name: `[Sample] ${product.name}` },
+                          sampleQuantity,
+                          variantEntries.length ? variant : null
+                        );
+                        showToast(`Added ${sampleQuantity} sample unit(s) to your cart.`);
+                        setSampleModalOpen(false);
+                      }}
+                    >
+                      Add Sample to Cart
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
 
           <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {facts.map((fact) => (

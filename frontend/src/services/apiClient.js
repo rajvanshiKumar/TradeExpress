@@ -38,8 +38,13 @@ async function request(method, path, body = null, { signal, timeoutMs = 12000, h
   };
 
   if (body !== null && body !== undefined) {
-    reqHeaders['Content-Type'] = 'application/json';
-    options.body = JSON.stringify(body);
+    if (typeof FormData !== 'undefined' && body instanceof FormData) {
+      options.body = body;
+      // Do not set Content-Type header so the browser sets multipart/form-data with boundary
+    } else {
+      reqHeaders['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(body);
+    }
   }
 
   // Check for stored token

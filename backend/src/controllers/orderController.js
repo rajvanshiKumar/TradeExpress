@@ -35,8 +35,11 @@ export async function createOrder(req, res, next) {
       buyerEmail: buyerEmail || req.user?.email,
       buyerPhone: buyerPhone || req.user?.phone,
       buyerCompany: buyerCompany || req.user?.company,
+      buyerGstin: req.body.buyerGstin,
+      supplierGstin: req.body.supplierGstin,
       shippingMethod,
       paymentMethod,
+      isPartialPayment: req.body.isPartialPayment,
       deliveryAddress,
       lines,
       idempotencyKey,
@@ -46,6 +49,23 @@ export async function createOrder(req, res, next) {
     res.status(201).json({
       success: true,
       message: 'Order created successfully.',
+      data: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function cancelOrder(req, res, next) {
+  try {
+    const order = await orderService.cancelBuyerOrder({
+      orderId: req.params.identifier,
+      userId: req.user?.id,
+      reason: req.body.reason,
+    });
+    res.json({
+      success: true,
+      message: 'Order cancelled successfully.',
       data: order,
     });
   } catch (error) {

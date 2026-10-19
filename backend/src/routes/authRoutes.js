@@ -26,6 +26,34 @@ router.post(
 );
 
 router.get('/me', authenticateJWT, authController.me);
+router.put('/profile', authenticateJWT, authController.updateProfile);
+router.post(
+  '/change-password',
+  authenticateJWT,
+  validate([
+    body('currentPassword').notEmpty().withMessage('Current password is required.'),
+    body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters.'),
+  ]),
+  authController.changePassword
+);
+
+router.post(
+  '/forgot-password',
+  validate([body('email').isEmail().withMessage('Valid email is required.')]),
+  authController.forgotPassword
+);
+
+router.post(
+  '/reset-password',
+  validate([
+    body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters.'),
+  ]),
+  authController.resetPassword
+);
+
+router.post('/kyc', authenticateJWT, authController.submitKyc);
+router.get('/kyc', authenticateJWT, authController.getKyc);
+
 router.get('/addresses', authenticateJWT, authController.getAddresses);
 router.post(
   '/addresses',

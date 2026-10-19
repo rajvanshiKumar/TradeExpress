@@ -25,6 +25,7 @@ enum OrderStatus {
   ORDER_PLACED
   ORDER_CONFIRMED
   PROCESSING
+  PACKED
   SHIPPED
   OUT_FOR_DELIVERY
   DELIVERED
@@ -33,21 +34,42 @@ enum OrderStatus {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  passwordHash String
-  name         String
-  role         Role      @default(BUYER)
-  company      String?
-  phone        String?
-  city         String?
-  country      String?   @default("India")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                  String               @id @default(uuid())
+  email               String               @unique
+  passwordHash        String
+  name                String
+  role                Role                 @default(BUYER)
+  company             String?
+  phone               String?
+  city                String?
+  country             String?              @default("India")
+  gstin               String?
+  pan                 String?
+  bankAccountNumber    String?
+  bankIfsc            String?
+  bankName            String?
+  warehouseAddress    String?              @db.Text
+  warehouseState      String?
+  warehousePincode    String?
+  kycStatus           String?              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED
+  kycRejectionReason  String?              @db.Text
+  isVerified          Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
-  addresses    Address[]
-  orders       Order[]
-  carts        Cart[]
+  addresses           Address[]
+  orders              Order[]              @relation("BuyerOrders")
+  supplierOrders      Order[]              @relation("SupplierOrders")
+  carts               Cart[]
+  kycDocuments        KycDocument[]
+  passwordResetTokens PasswordResetToken[]
+  rfqs                Rfq[]                @relation("BuyerRfqs")
+  quotations          Quotation[]          @relation("SupplierQuotes")
+  disputesRaised      Dispute[]            @relation("BuyerDisputes")
+  reviewsWritten      Review[]             @relation("BuyerReviews")
+  supportTickets      SupportTicket[]
+  notifications       Notification[]
+  payouts             SupplierPayout[]
 
   @@map("users")
 }
@@ -59,6 +81,7 @@ model Address {
   label      String   @default("Office")
   name       String
   company    String?
+  gstin      String?
   phone      String
   street     String
   city       String
@@ -79,6 +102,7 @@ model Category {
   description   String?   @db.Text
   photo         String?   @db.Text
   subcategories Json?
+  attributes    Json?     // Category-specific attribute definitions
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -88,41 +112,54 @@ model Category {
 }
 
 model Product {
-  id             String         @id @default(uuid())
-  sku            String         @unique
-  name           String
-  slug           String         @unique
-  companyId      String?
-  categorySlug   String
-  category       Category       @relation(fields: [categorySlug], references: [slug], onDelete: Restrict)
-  subcategory    String?
-  summary        String?        @db.Text
-  description    String?        @db.Text
-  photo          String?        @db.Text
-  currency       String         @default("INR")
-  price          Decimal        @db.Decimal(12, 2)
-  unit           String         @default("piece")
-  moq            Int            @default(1)
-  stock          Int            @default(100)
-  leadTimeDays   Int            @default(7)
-  status         String         @default("Active")
-  featured       Boolean        @default(false)
-  trending       Boolean        @default(false)
-  readyToShip    Boolean        @default(true)
-  isNew          Boolean        @default(false)
-  deal           Boolean        @default(false)
-  variants       Json?
-  specifications Json?
-  packaging      Json?
-  priceTiers     Json?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id               String         @id @default(uuid())
+  sku              String         @unique
+  name             String
+  slug             String         @unique
+  companyId        String?
+  supplierId       String?
+  categorySlug     String
+  category         Category       @relation(fields: [categorySlug], references: [slug], onDelete: Restrict)
+  subcategory      String?
+  summary          String?        @db.Text
+  description      String?        @db.Text
+  photo            String?        @db.Text
+  currency         String         @default("INR")
+  price            Decimal        @db.Decimal(12, 2)
+  unit             String         @default("piece")
+  moq              Int            @default(1)
+  stock            Int            @default(100)
+  leadTimeDays     Int            @default(7)
+  status           String         @default("Active")
+  featured         Boolean        @default(false)
+  trending         Boolean        @default(false)
+  readyToShip      Boolean        @default(true)
+  isNew            Boolean        @default(false)
+  deal             Boolean        @default(false)
+  hsnCode          String?        @default("8471")
+  gstRate          Decimal        @default(18.00) @db.Decimal(5, 2)
+  sampleAvailable  Boolean        @default(true)
+  samplePrice      Decimal?       @db.Decimal(12, 2)
+  moderationStatus String         @default("APPROVED") // APPROVED, PENDING, REJECTED
+  rejectionReason  String?        @db.Text
+  weightKg         Decimal?       @default(1.00) @db.Decimal(8, 2)
+  variants         Json?
+  specifications   Json?
+  packaging        Json?
+  priceTiers       Json?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
-  images         ProductImage[]
-  cartItems      CartItem[]
-  orderItems     OrderItem[]
+  images           ProductImage[]
+  cartItems        CartItem[]
+  orderItems       OrderItem[]
+  reviews          Review[]
+  rfqItems         RfqItem[]
 
   @@index([categorySlug])
+  @@index([status])
+  @@index([moderationStatus])
+  @@index([companyId])
   @@map("products")
 }
 
@@ -166,37 +203,63 @@ model CartItem {
 }
 
 model Order {
-  id              String               @id @default(uuid())
-  orderNumber     String               @unique
-  userId          String?
-  user            User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
-  buyerName       String
-  buyerEmail      String
-  buyerPhone      String
-  buyerCompany    String?
-  shippingMethod  String               @default("standard")
-  shippingEta     String?
-  paymentMethod   String               @default("online")
-  paymentStatus   PaymentStatus        @default(PENDING)
-  orderStatus     OrderStatus          @default(ORDER_PLACED)
-  subtotal        Decimal              @db.Decimal(12, 2)
-  shippingFee     Decimal              @db.Decimal(12, 2) @default(0)
-  tax             Decimal              @db.Decimal(12, 2) @default(0)
-  discount        Decimal              @db.Decimal(12, 2) @default(0)
-  total           Decimal              @db.Decimal(12, 2)
-  currency        String               @default("INR")
-  deliveryAddress Json
-  idempotencyKey  String?              @unique
-  notes           String?              @db.Text
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  id                    String               @id @default(uuid())
+  orderNumber           String               @unique
+  userId                String?
+  user                  User?                @relation("BuyerOrders", fields: [userId], references: [id], onDelete: SetNull)
+  supplierId            String?
+  supplier              User?                @relation("SupplierOrders", fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierCompanyId     String?
+  supplierInvoiceNumber String?
+  buyerName             String
+  buyerEmail            String
+  buyerPhone            String
+  buyerCompany          String?
+  buyerGstin            String?
+  supplierGstin         String?
+  shippingMethod        String               @default("standard")
+  shippingEta           String?
+  paymentMethod         String               @default("online")
+  paymentStatus         PaymentStatus        @default(PENDING)
+  orderStatus           OrderStatus          @default(ORDER_PLACED)
+  subtotal              Decimal              @db.Decimal(12, 2)
+  shippingFee           Decimal              @db.Decimal(12, 2) @default(0)
+  tax                   Decimal              @db.Decimal(12, 2) @default(0)
+  cgst                  Decimal              @default(0) @db.Decimal(12, 2)
+  sgst                  Decimal              @default(0) @db.Decimal(12, 2)
+  igst                  Decimal              @default(0) @db.Decimal(12, 2)
+  isInterState          Boolean              @default(false)
+  discount              Decimal              @db.Decimal(12, 2) @default(0)
+  total                 Decimal              @db.Decimal(12, 2)
+  isPartialPayment      Boolean              @default(false)
+  advanceAmount         Decimal              @default(0) @db.Decimal(12, 2)
+  balanceDue            Decimal              @default(0) @db.Decimal(12, 2)
+  currency              String               @default("INR")
+  deliveryAddress       Json
+  idempotencyKey        String?              @unique
+  trackingNumber        String?
+  carrierName           String?
+  invoiceUrl            String?              @db.Text
+  ewayBillUrl           String?              @db.Text
+  deliveryProofUrl      String?              @db.Text
+  rejectionReason       String?              @db.Text
+  deliveryAcceptedAt    DateTime?
+  notes                 String?              @db.Text
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
-  items           OrderItem[]
-  payments        Payment[]
-  statusHistory   OrderStatusHistory[]
+  items                 OrderItem[]
+  payments              Payment[]
+  statusHistory         OrderStatusHistory[]
+  dispute               Dispute?
+  review                Review?
+  escrowLedger          EscrowLedger?
 
   @@index([userId])
   @@index([buyerEmail])
+  @@index([supplierId])
+  @@index([orderStatus])
+  @@index([paymentStatus])
   @@map("orders")
 }
 
@@ -209,6 +272,8 @@ model OrderItem {
   productName  String
   productSku   String
   productPhoto String?  @db.Text
+  hsnCode      String?  @default("8471")
+  gstRate      Decimal  @default(18.00) @db.Decimal(5, 2)
   unit         String   @default("piece")
   quantity     Int
   unitPrice    Decimal  @db.Decimal(12, 2)
@@ -247,4 +312,276 @@ model OrderStatusHistory {
 
   @@index([orderId])
   @@map("order_status_history")
+}
+
+model KycDocument {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  docType   String   // GST_CERTIFICATE, PAN_CARD, CANCELLED_CHEQUE, WAREHOUSE_PROOF, BUSINESS_REG, OTHER
+  docNumber String?
+  fileName  String
+  fileUrl   String   @db.Text
+  fileSize  Int?
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("kyc_documents")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  otp       String?
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model CommissionSetting {
+  id         String   @id @default(uuid())
+  type       String   // GLOBAL, CATEGORY, SUPPLIER
+  targetId   String?  // category slug or supplier id (null for GLOBAL)
+  percentage Decimal  @default(5.00) @db.Decimal(5, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([type, targetId])
+  @@map("commission_settings")
+}
+
+model Rfq {
+  id                 String      @id @default(uuid())
+  rfqNumber          String      @unique
+  buyerId            String?
+  buyer              User?       @relation("BuyerRfqs", fields: [buyerId], references: [id], onDelete: SetNull)
+  buyerName          String
+  buyerEmail         String
+  buyerCompany       String?
+  title              String
+  categorySlug       String?
+  targetPrice        Decimal?    @db.Decimal(12, 2)
+  quantity           Int
+  unit               String      @default("piece")
+  deliveryPincode    String?
+  destinationCountry String      @default("India")
+  requiredByDate     DateTime?
+  specifications     String      @db.Text
+  attachmentUrl      String?     @db.Text
+  status             String      @default("OPEN") // OPEN, QUOTED, CLOSED, EXPIRED
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  items              RfqItem[]
+  quotations         Quotation[]
+
+  @@index([buyerId])
+  @@index([categorySlug])
+  @@map("rfqs")
+}
+
+model RfqItem {
+  id          String   @id @default(uuid())
+  rfqId       String
+  rfq         Rfq      @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName String
+  quantity    Int
+  unit        String   @default("piece")
+  targetPrice Decimal? @db.Decimal(12, 2)
+  notes       String?  @db.Text
+
+  @@map("rfq_items")
+}
+
+model Quotation {
+  id              String             @id @default(uuid())
+  quoteNumber     String             @unique
+  rfqId           String
+  rfq             Rfq                @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  supplierId      String
+  supplier        User               @relation("SupplierQuotes", fields: [supplierId], references: [id], onDelete: Cascade)
+  unitPrice       Decimal            @db.Decimal(12, 2)
+  gstPercentage   Decimal            @default(18.00) @db.Decimal(5, 2)
+  freightCharge   Decimal            @default(0) @db.Decimal(12, 2)
+  leadTimeDays    Int                @default(14)
+  paymentTerms    String?            @default("100% Advance")
+  validityDate    DateTime?
+  notes           String?            @db.Text
+  attachmentUrl   String?            @db.Text
+  status          String             @default("SENT") // DRAFT, SENT, VIEWED, COUNTERED, ACCEPTED, REJECTED, EXPIRED, WITHDRAWN, CLOSED
+  currentVersion  Int                @default(1)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  items           QuoteItem[]
+  versions        QuotationVersion[]
+
+  @@index([rfqId])
+  @@index([supplierId])
+  @@map("quotations")
+}
+
+model QuoteItem {
+  id          String    @id @default(uuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int
+  unitPrice   Decimal   @db.Decimal(12, 2)
+  lineTotal   Decimal   @db.Decimal(12, 2)
+
+  @@map("quote_items")
+}
+
+model QuotationVersion {
+  id            String    @id @default(uuid())
+  quotationId   String
+  quotation     Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  unitPrice     Decimal   @db.Decimal(12, 2)
+  gstPercentage Decimal   @db.Decimal(5, 2)
+  freightCharge Decimal   @db.Decimal(12, 2)
+  leadTimeDays  Int
+  paymentTerms  String?
+  notes         String?   @db.Text
+  proposedBy    String    // SUPPLIER, BUYER
+  createdAt     DateTime  @default(now())
+
+  @@index([quotationId])
+  @@map("quotation_versions")
+}
+
+model Dispute {
+  id          String           @id @default(uuid())
+  orderId     String           @unique
+  order       Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  buyerId     String
+  buyer       User             @relation("BuyerDisputes", fields: [buyerId], references: [id], onDelete: Cascade)
+  reason      String
+  description String           @db.Text
+  photoProof  String?          @db.Text
+  status      String           @default("OPEN") // OPEN, UNDER_REVIEW, RESOLVED_REFUND, RESOLVED_REJECTED
+  resolution  String?          @db.Text
+  refundAmount Decimal?        @db.Decimal(12, 2)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  messages    DisputeMessage[]
+
+  @@map("disputes")
+}
+
+model DisputeMessage {
+  id        String   @id @default(uuid())
+  disputeId String
+  dispute   Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  senderRole String  // BUYER, SUPPLIER, ADMIN
+  message   String   @db.Text
+  fileUrl   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@map("dispute_messages")
+}
+
+model EscrowLedger {
+  id             String    @id @default(uuid())
+  orderId        String    @unique
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amountHeld     Decimal   @db.Decimal(12, 2)
+  commissionRate Decimal   @default(5.00) @db.Decimal(5, 2)
+  commissionFee  Decimal   @default(0) @db.Decimal(12, 2)
+  payoutAmount   Decimal   @db.Decimal(12, 2)
+  status         String    @default("HELD") // HELD, RELEASED, REFUNDED
+  releasedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("escrow_ledgers")
+}
+
+model SupplierPayout {
+  id           String    @id @default(uuid())
+  supplierId   String
+  supplier     User      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  amount       Decimal   @db.Decimal(12, 2)
+  commission   Decimal   @db.Decimal(12, 2)
+  status       String    @default("PROCESSED") // PENDING, PROCESSED, FAILED
+  reference    String?
+  processedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([supplierId])
+  @@map("supplier_payouts")
+}
+
+model Review {
+  id            String   @id @default(uuid())
+  orderId       String   @unique
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     String?
+  product       Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  buyerId       String
+  buyer         User     @relation("BuyerReviews", fields: [buyerId], references: [id], onDelete: Cascade)
+  rating        Int      @default(5)
+  qualityRating Int      @default(5)
+  packagingRating Int    @default(5)
+  timelinessRating Int   @default(5)
+  comment       String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("reviews")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String   @db.Text
+  type      String   @default("INFO") // ORDER, RFQ, QUOTE, PAYOUT, SYSTEM
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model SupportTicket {
+  id        String          @id @default(uuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   String
+  category  String          @default("GENERAL") // GENERAL, ORDER, BILLING, TECHNICAL
+  priority  String          @default("NORMAL")
+  status    String          @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  messages  TicketMessage[]
+
+  @@index([userId])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id        String        @id @default(uuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderRole String       // USER, ADMIN
+  message   String        @db.Text
+  createdAt DateTime      @default(now())
+
+  @@map("ticket_messages")
 }

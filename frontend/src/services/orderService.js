@@ -30,7 +30,19 @@ function formatApiOrder(created, source = 'cart') {
     })),
     shippingMethod: created.shippingMethod,
     paymentMethod: created.paymentMethod,
-    paymentStatus: created.paymentStatus === 'PAID' ? 'paid' : (created.paymentStatus === 'COD' ? 'cod' : 'pending'),
+    paymentStatus: created.paymentStatus === 'PAID' ? 'paid' : (created.paymentStatus === 'PARTIALLY_PAID' ? 'partially_paid' : (created.paymentStatus === 'COD' ? 'cod' : 'pending')),
+    isPartialPayment: created.isPartialPayment || false,
+    advanceAmount: created.advanceAmount ? Number(created.advanceAmount) : null,
+    balanceDue: created.balanceDue ? Number(created.balanceDue) : null,
+    carrierName: created.carrierName || null,
+    trackingNumber: created.trackingNumber || null,
+    invoiceUrl: created.invoiceUrl || null,
+    ewayBillUrl: created.ewayBillUrl || null,
+    rejectionReason: created.rejectionReason || null,
+    cgst: created.cgst ? Number(created.cgst) : null,
+    sgst: created.sgst ? Number(created.sgst) : null,
+    igst: created.igst ? Number(created.igst) : null,
+    isInterState: created.isInterState || false,
     source: created.source || source,
     totals: {
       subtotal: Number(created.subtotal),
@@ -83,7 +95,7 @@ const orderService = {
   },
 
   /** Creates an order record. Persists to MySQL via Express backend if API is configured. */
-  async createOrder({ lines, totals, shippingMethod, paymentMethod, paymentStatus, source = 'cart', contact, address, buyer }) {
+  async createOrder({ lines, totals, shippingMethod, paymentMethod, paymentStatus, source = 'cart', contact, address, buyer, isPartialPayment, advanceAmount, balanceDue, buyerGstin, supplierGstin }) {
     if (isApiConfigured) {
       try {
         const payload = {
@@ -95,6 +107,11 @@ const orderService = {
           shippingMethod,
           paymentMethod,
           deliveryAddress: address,
+          isPartialPayment: Boolean(isPartialPayment),
+          advanceAmount: advanceAmount ? Number(advanceAmount) : null,
+          balanceDue: balanceDue ? Number(balanceDue) : null,
+          buyerGstin: buyerGstin || buyer?.gstin || null,
+          supplierGstin: supplierGstin || null,
           lines: lines.map((line) => ({
             productId: line.product?.id || line.productId,
             name: line.product?.name || line.name,
@@ -108,6 +125,7 @@ const orderService = {
         };
 
         const response = await apiPost('orders', payload);
+
         if (response.success && response.data) {
           const formatted = formatApiOrder(response.data, source);
           // Also mirror to local collection for instant offline access

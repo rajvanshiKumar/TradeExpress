@@ -8,6 +8,7 @@ import {
   ExternalLink,
   MapPin,
   Package,
+  Printer,
   RotateCcw,
   Search,
   Truck,
@@ -18,9 +19,10 @@ import Button from '../components/common/Button';
 import Image from '../components/common/Image';
 import { TableSkeleton } from '../components/common/Skeleton';
 import { StatusBadge } from '../components/common/Badge';
-import { apiGet, isApiConfigured } from '../services/apiClient';
+import { apiGet, apiPost, isApiConfigured } from '../services/apiClient';
 import orderService from '../services/orderService';
 import useCurrency from '../hooks/useCurrency';
+import useNotifications from '../hooks/useNotifications';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { formatDateTime } from '../utils/formatDate';
 import { quantityLabel } from '../utils/units';
@@ -29,6 +31,7 @@ const STEP_ICONS = {
   ORDER_PLACED: Package,
   ORDER_CONFIRMED: CheckCircle2,
   PROCESSING: Clock,
+  PACKED: Package,
   SHIPPED: Truck,
   OUT_FOR_DELIVERY: MapPin,
   DELIVERED: CheckCircle2,
@@ -45,9 +48,164 @@ export default function OrderTracking() {
   const [tracking, setTracking] = useState(null);
   const [loading, setLoading] = useState(Boolean(initialQuery));
   const [error, setError] = useState('');
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const { money } = useCurrency();
+  const { showToast } = useNotifications();
 
   useDocumentTitle(activeNumber ? `Track Order ${activeNumber}` : 'Track My Order');
+
+  const canCancel =
+    tracking &&
+    !tracking.isCancelled &&
+    (tracking.orderStatus === 'ORDER_PLACED' ||
+      tracking.orderStatus === 'ORDER_CONFIRMED' ||
+      tracking.orderStatus === 'Pending' ||
+      tracking.orderStatus === 'Confirmed');
+
+  const handleCancelOrder = async () => {
+    if (!tracking) return;
+    setCancelling(true);
+    try {
+      await apiPost(`orders/${tracking.orderNumber}/cancel`, {});
+      setTracking((prev) => ({
+        ...prev,
+        orderStatus: 'CANCELLED',
+        isCancelled: true,
+      }));
+      setCancelDialogOpen(false);
+      showToast('Order cancelled successfully.');
+    } catch (err) {
+      showToast(err.message || 'Failed to cancel order.', 'error');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handlePrintInvoice = () => {
+    if (!tracking) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const buyer = tracking.deliveryAddress || {};
+    const invoiceNum = tracking.invoiceNumber || `TS-INV-${tracking.orderNumber}`;
+    const invoiceDate = new Date(tracking.orderDate || Date.now()).toLocaleDateString('en-IN');
+    const items = tracking.items || [];
+    const isInter = tracking.isInterState;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>GST Tax Invoice & Purchase Order - ${tracking.orderNumber}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 40px; color: #1e293b; font-size: 13px; line-height: 1.5; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 25px; }
+            .logo { font-size: 24px; font-weight: 800; color: #047857; letter-spacing: -0.5px; }
+            .subtitle { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 600; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 25px; }
+            .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
+            .box h4 { margin: 0 0 10px 0; font-size: 12px; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+            th { background: #f1f5f9; text-align: left; padding: 10px; font-size: 12px; border: 1px solid #cbd5e1; }
+            td { padding: 10px; border: 1px solid #e2e8f0; }
+            .totals { margin-left: auto; width: 350px; }
+            .totals-row { display: flex; justify-content: space-between; padding: 5px 0; }
+            .totals-row.grand { font-size: 16px; font-weight: bold; border-top: 2px solid #0f172a; margin-top: 5px; padding-top: 10px; color: #047857; }
+            .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 11px; color: #64748b; text-align: center; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="logo">TradeSphere</div>
+              <div class="subtitle">B2B Wholesale Marketplace & Fulfillment</div>
+              <p style="margin: 5px 0 0 0; font-size: 11px; color: #475569;">TradeSphere B2B Private Limited · GSTIN: 27AABCT9999F1Z0</p>
+            </div>
+            <div style="text-align: right;">
+              <h2 style="margin: 0; color: #0f172a; font-size: 18px;">GST TAX INVOICE & PO</h2>
+              <p style="margin: 3px 0; font-weight: 600;">Invoice No: ${invoiceNum}</p>
+              <p style="margin: 3px 0; font-size: 12px; color: #64748b;">Order Ref: ${tracking.orderNumber}</p>
+              <p style="margin: 3px 0; font-size: 12px; color: #64748b;">Date: ${invoiceDate}</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="box">
+              <h4>Supplier / Consignor</h4>
+              <p style="margin: 0; font-weight: 700;">${tracking.supplierName || 'TradeSphere Verified Supplier'}</p>
+              <p style="margin: 2px 0;">GSTIN: ${tracking.supplierGstin || '27AABCT1234F1Z1'}</p>
+              <p style="margin: 2px 0;">State of Origin: ${tracking.supplierState || 'Maharashtra (State Code: 27)'}</p>
+            </div>
+            <div class="box">
+              <h4>Buyer / Bill To & Ship To</h4>
+              <p style="margin: 0; font-weight: 700;">${buyer.name || 'Purchasing Manager'}</p>
+              <p style="margin: 2px 0;">${buyer.company || ''}</p>
+              <p style="margin: 2px 0;">GSTIN: ${tracking.buyerGstin || 'URP (Unregistered Person)'}</p>
+              <p style="margin: 2px 0;">${buyer.street || ''}, ${buyer.city || ''}, ${buyer.state || ''} - ${buyer.postalCode || ''}</p>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Description of Goods</th>
+                <th>HSN / SAC</th>
+                <th>Qty</th>
+                <th>Rate (₹)</th>
+                <th>Taxable Val (₹)</th>
+                <th>GST Rate</th>
+                <th>Total (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((item, idx) => `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td><strong>${item.name || item.productName}</strong><br/><span style="font-size: 11px; color: #64748b;">SKU: ${item.sku || item.productSku || 'TS-SKU'}</span></td>
+                  <td>${item.hsnCode || '84713010'}</td>
+                  <td>${item.quantity} ${item.unit || 'pcs'}</td>
+                  <td>₹${Number(item.unitPrice).toLocaleString('en-IN')}</td>
+                  <td>₹${(item.unitPrice * item.quantity).toLocaleString('en-IN')}</td>
+                  <td>18%</td>
+                  <td>₹${(item.unitPrice * item.quantity * 1.18).toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="totals">
+            <div class="totals-row"><span>Taxable Subtotal:</span><span>₹${Number(tracking.totals?.subtotal || 0).toLocaleString('en-IN')}</span></div>
+            <div class="totals-row"><span>Logistics & Freight:</span><span>₹${Number(tracking.totals?.shippingFee || 0).toLocaleString('en-IN')}</span></div>
+            ${isInter ? `
+              <div class="totals-row"><span>IGST (18%):</span><span>₹${Number(tracking.totals?.tax || 0).toLocaleString('en-IN')}</span></div>
+            ` : `
+              <div class="totals-row"><span>CGST (9%):</span><span>₹${((tracking.totals?.tax || 0) / 2).toLocaleString('en-IN')}</span></div>
+              <div class="totals-row"><span>SGST (9%):</span><span>₹${((tracking.totals?.tax || 0) / 2).toLocaleString('en-IN')}</span></div>
+            `}
+            <div class="totals-row grand"><span>Total Invoice Value:</span><span>₹${Number(tracking.totals?.total || 0).toLocaleString('en-IN')}</span></div>
+            ${tracking.isPartialPayment ? `
+              <div class="totals-row" style="color: #b45309; font-weight: bold; margin-top: 5px;"><span>Advance Paid (20%):</span><span>₹${Number(tracking.advanceAmount || 0).toLocaleString('en-IN')}</span></div>
+              <div class="totals-row" style="color: #64748b;"><span>Balance Payable on Delivery:</span><span>₹${Number(tracking.balanceDue || 0).toLocaleString('en-IN')}</span></div>
+            ` : ''}
+          </div>
+
+          <div class="footer">
+            <p>This is a computer generated invoice and does not require physical signature. E.&O.E.</p>
+            <p>Subject to jurisdiction of courts in Mumbai, Maharashtra.</p>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
 
   useEffect(() => {
     if (paramOrderNumber || queryOrderNumber) {
@@ -225,12 +383,64 @@ export default function OrderTracking() {
                   <span className="font-semibold text-ink">{tracking.paymentStatus}</span> ({tracking.paymentMethod?.toUpperCase()})
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={handlePrintInvoice}
+                  variant="outline"
+                  size="sm"
+                  icon={Printer}
+                >
+                  Print GST Tax Invoice & PO
+                </Button>
+
+                {canCancel ? (
+                  <Button
+                    onClick={() => setCancelDialogOpen(true)}
+                    variant="danger"
+                    size="sm"
+                    icon={XCircle}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? 'Cancelling...' : 'Cancel Order'}
+                  </Button>
+                ) : !tracking.isCancelled ? (
+                  <span
+                    title="Orders cannot be cancelled once packed or in transit"
+                    className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 cursor-not-allowed"
+                  >
+                    Cancellation Closed ({tracking.orderStatus})
+                  </span>
+                ) : null}
+
                 <Button to="/buyer/orders" variant="outline" size="sm" icon={ArrowLeft}>
                   All Orders
                 </Button>
               </div>
             </div>
+
+            {/* Cancel Confirmation Dialog */}
+            {cancelDialogOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 p-4 backdrop-blur-sm">
+                <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-navy-900/[0.08]">
+                  <div className="flex items-center gap-2 border-b border-navy-900/[0.06] pb-3 text-danger">
+                    <XCircle className="size-5" />
+                    <h3 className="text-lg font-bold text-ink">Cancel Order #{tracking.orderNumber}?</h3>
+                  </div>
+                  <p className="mt-3 text-xs text-muted leading-relaxed">
+                    Cancellation is strictly allowed only before the PACKED stage. If cancelled now, your payment will be refunded to your original source and the supplier will be notified immediately.
+                  </p>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setCancelDialogOpen(false)} disabled={cancelling}>
+                      Keep Order
+                    </Button>
+                    <Button variant="danger" onClick={handleCancelOrder} disabled={cancelling}>
+                      {cancelling ? 'Processing...' : 'Confirm Cancellation'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
 
             {/* Special alerts for Cancelled / Refunded */}
             {tracking.isCancelled && (

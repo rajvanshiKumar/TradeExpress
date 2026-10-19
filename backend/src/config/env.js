@@ -10,6 +10,7 @@ export const ENV = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || 'rzp_test_TradeSphereSandbox',
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || 'sandboxSecretTradeSphere2026',
+  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET || 'sandboxSecretTradeSphere2026',
   PAYMENT_GATEWAY_MODE: process.env.PAYMENT_GATEWAY_MODE || 'sandbox',
   SMTP_HOST: process.env.SMTP_HOST || 'smtp.ethereal.email',
   SMTP_PORT: parseInt(process.env.SMTP_PORT || '587', 10),
@@ -18,3 +19,4 @@ export const ENV = {
   SMTP_PASS: process.env.SMTP_PASS || '',
   SMTP_FROM: process.env.SMTP_FROM || 'TradeSphere Marketplace <orders@tradesphere.com>',
 };
+

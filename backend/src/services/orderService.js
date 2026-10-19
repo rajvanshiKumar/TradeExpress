@@ -83,6 +83,10 @@ export async function validateAndCalculateOrder({ lines, shippingMethod = 'stand
       productName: product.name,
       productSku: product.sku,
       productPhoto: product.photo,
+      companyId: product.companyId || null,
+      supplierId: product.supplierId || null,
+      hsnCode: product.hsnCode || '8471',
+      gstRate: Number(product.gstRate || 18.0),
       unit: product.unit,
       quantity,
       unitPrice,
@@ -107,8 +111,24 @@ export async function validateAndCalculateOrder({ lines, shippingMethod = 'stand
     shippingEta = '5–7 business days';
   }
 
-  // Tax calculation (18% GST standard on wholesale in India)
-  const tax = Math.round(subtotal * 0.18 * 100) / 100;
+  // GST Calculation: Intra-state (CGST 9% + SGST 9%) vs Inter-state (IGST 18%)
+  // Default supplier state is Maharashtra if not specified
+  const buyerState = (deliveryAddress?.state || '').trim().toLowerCase();
+  const supplierState = (validatedItems[0]?.companyId ? 'maharashtra' : 'maharashtra').toLowerCase();
+  const isInterState = buyerState ? buyerState !== supplierState : false;
+
+  let cgst = 0;
+  let sgst = 0;
+  let igst = 0;
+
+  if (isInterState) {
+    igst = Math.round(subtotal * 0.18 * 100) / 100;
+  } else {
+    cgst = Math.round(subtotal * 0.09 * 100) / 100;
+    sgst = Math.round(subtotal * 0.09 * 100) / 100;
+  }
+
+  const tax = Math.round((cgst + sgst + igst) * 100) / 100;
   const discount = 0;
   const total = Math.round((subtotal + shippingFee + tax - discount) * 100) / 100;
 
@@ -118,6 +138,10 @@ export async function validateAndCalculateOrder({ lines, shippingMethod = 'stand
       subtotal,
       shippingFee,
       tax,
+      cgst,
+      sgst,
+      igst,
+      isInterState,
       discount,
       total,
     },
@@ -132,13 +156,17 @@ export async function createOrder({
   buyerEmail,
   buyerPhone,
   buyerCompany,
+  buyerGstin,
+  supplierGstin,
   shippingMethod = 'standard',
   paymentMethod = 'online',
+  isPartialPayment = false,
   deliveryAddress,
   lines,
   idempotencyKey,
   notes,
 }) {
+  const parsedAddress = typeof deliveryAddress === 'object' ? deliveryAddress : JSON.parse(deliveryAddress || '{}');
   // Check for duplicate submission using idempotency key
   if (idempotencyKey) {
     const existingOrder = await prisma.order.findUnique({
@@ -172,15 +200,26 @@ export async function createOrder({
       });
     }
 
+    const primarySupplierCompanyId = calculation.items[0]?.companyId || 'SUP';
+    const primarySupplierId = calculation.items[0]?.supplierId || null;
+    const supplierInvoiceSeries = `TS-INV-${primarySupplierCompanyId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()}-${Date.now().toString().slice(-6)}`;
+    const advanceAmount = isPartialPayment ? Math.round(calculation.totals.total * 0.20 * 100) / 100 : calculation.totals.total;
+    const balanceDue = isPartialPayment ? Math.round((calculation.totals.total - advanceAmount) * 100) / 100 : 0;
+
     // 2. Create Order record
     const created = await tx.order.create({
       data: {
         orderNumber,
         userId: userId || null,
+        supplierId: primarySupplierId,
+        supplierCompanyId: primarySupplierCompanyId,
+        supplierInvoiceNumber: supplierInvoiceSeries,
         buyerName,
         buyerEmail,
         buyerPhone,
         buyerCompany: buyerCompany || '',
+        buyerGstin: buyerGstin || null,
+        supplierGstin: supplierGstin || null,
         shippingMethod: calculation.shippingMethod,
         shippingEta: calculation.shippingEta,
         paymentMethod,
@@ -189,10 +228,17 @@ export async function createOrder({
         subtotal: calculation.totals.subtotal,
         shippingFee: calculation.totals.shippingFee,
         tax: calculation.totals.tax,
+        cgst: calculation.totals.cgst,
+        sgst: calculation.totals.sgst,
+        igst: calculation.totals.igst,
+        isInterState: calculation.totals.isInterState,
         discount: calculation.totals.discount,
         total: calculation.totals.total,
+        isPartialPayment: Boolean(isPartialPayment),
+        advanceAmount,
+        balanceDue,
         currency: 'INR',
-        deliveryAddress: typeof deliveryAddress === 'object' ? deliveryAddress : JSON.parse(deliveryAddress),
+        deliveryAddress: parsedAddress,
         idempotencyKey: idempotencyKey || null,
         notes: notes || '',
         items: {
@@ -201,6 +247,8 @@ export async function createOrder({
             productName: item.productName,
             productSku: item.productSku,
             productPhoto: item.productPhoto,
+            hsnCode: item.hsnCode || '8471',
+            gstRate: item.gstRate || 18.0,
             unit: item.unit,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
@@ -292,18 +340,93 @@ export async function listUserOrders(userId) {
   return orders.map(formatOrder);
 }
 
+export async function cancelBuyerOrder({ orderId, userId, reason = '' }) {
+  const where = orderId.startsWith('TS-') ? { orderNumber: orderId } : { id: orderId };
+  const order = await prisma.order.findFirst({
+    where,
+    include: { items: true },
+  });
+
+  if (!order) {
+    const error = new Error('Order not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (userId && order.userId && order.userId !== userId) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user?.role !== 'ADMIN') {
+      const error = new Error('You do not have permission to cancel this order.');
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
+  // Strict Rule: Buyer can cancel before "Packed"
+  const NON_CANCELLABLE = ['PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'REFUNDED'];
+  if (NON_CANCELLABLE.includes(order.orderStatus)) {
+    const error = new Error(`Order cannot be cancelled because it is already "${order.orderStatus}". Orders can only be cancelled before packing/dispatch.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return prisma.$transaction(async (tx) => {
+    // 1. Restore stock
+    for (const item of order.items) {
+      if (item.productId) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+    }
+
+    // 2. Update order status
+    const updated = await tx.order.update({
+      where: { id: order.id },
+      data: {
+        orderStatus: 'CANCELLED',
+        rejectionReason: reason || 'Cancelled by buyer before packing.',
+      },
+      include: {
+        items: true,
+        payments: true,
+        statusHistory: { orderBy: { createdAt: 'desc' } },
+      },
+    });
+
+    // 3. Record status history
+    await tx.orderStatusHistory.create({
+      data: {
+        orderId: order.id,
+        status: 'CANCELLED',
+        notes: `Order cancelled by buyer: ${reason || 'Buyer cancelled before packing.'}`,
+        changedBy: 'Buyer',
+      },
+    });
+
+    return formatOrder(updated);
+  });
+}
+
 function formatOrder(order) {
   return {
     ...order,
     subtotal: Number(order.subtotal),
     shippingFee: Number(order.shippingFee),
     tax: Number(order.tax),
+    cgst: Number(order.cgst || 0),
+    sgst: Number(order.sgst || 0),
+    igst: Number(order.igst || 0),
     discount: Number(order.discount),
     total: Number(order.total),
+    advanceAmount: Number(order.advanceAmount || 0),
+    balanceDue: Number(order.balanceDue || 0),
     items: (order.items || []).map((item) => ({
       ...item,
       unitPrice: Number(item.unitPrice),
       lineTotal: Number(item.lineTotal),
+      gstRate: Number(item.gstRate || 18.0),
     })),
   };
 }

@@ -6,6 +6,10 @@ import orderRoutes from './orderRoutes.js';
 import paymentRoutes from './paymentRoutes.js';
 import trackingRoutes from './trackingRoutes.js';
 import cartRoutes from './cartRoutes.js';
+import uploadRoutes from './uploadRoutes.js';
+import supplierProductRoutes from './supplierProductRoutes.js';
+import supplierOrderRoutes from './supplierOrderRoutes.js';
+import adminRoutes from './adminRoutes.js';
 
 const router = Router();
 
@@ -16,6 +20,10 @@ router.use('/orders', orderRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/tracking', trackingRoutes);
 router.use('/cart', cartRoutes);
+router.use('/upload', uploadRoutes);
+router.use('/supplier/products', supplierProductRoutes);
+router.use('/supplier/orders', supplierOrderRoutes);
+router.use('/admin', adminRoutes);
 
 router.get('/health', (req, res) => {
   res.json({
@@ -25,5 +33,6 @@ router.get('/health', (req, res) => {
     database: 'MySQL connected',
   });
 });
+
 
 export default router;

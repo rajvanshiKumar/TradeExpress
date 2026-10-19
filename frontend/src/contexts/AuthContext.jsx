@@ -137,21 +137,69 @@ export function AuthProvider({ children }) {
       return loginAdmin(email, password);
     }
 
+    // Try backend sign-in
+    let backendUser = null;
+    try {
+      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      if (baseUrl) {
+        const response = await fetch(`${baseUrl}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ email: clean, password }),
+        });
+        const data = await response.json();
+        if (response.ok && data.success && data.data?.token) {
+          localStorage.setItem('tradesphere_auth_token', data.data.token);
+          backendUser = data.data.user;
+        }
+      }
+    } catch {
+      // Fallback smoothly
+    }
+
     const account = accounts.find((item) => item.email.toLowerCase() === clean && PUBLIC_ROLES.includes(item.role));
-    // Always run a hash check so a missing account takes about as long as a wrong password.
-    const valid = await verifyPassword(password, account?.passwordHash ?? 'pbkdf2$210000$AAAAAAAAAAAAAAAAAAAAAA==$AAAA');
-    if (!account || !account.passwordHash || !valid) {
+    let activeAccount = account;
+
+    if (!activeAccount && backendUser) {
+      activeAccount = {
+        id: backendUser.id,
+        status: 'Active',
+        name: backendUser.name,
+        email: backendUser.email,
+        role: (backendUser.role || 'buyer').toLowerCase(),
+        company: backendUser.companyName || '',
+        companyId: backendUser.companyId || null,
+        country: 'India',
+        city: backendUser.warehouseCity || '',
+        phone: backendUser.phone || '',
+        joinedAt: backendUser.createdAt || new Date().toISOString(),
+        notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
+        passwordHash: await hashPassword(password),
+      };
+      setAccounts((prev) => [activeAccount, ...prev]);
+    }
+
+    if (!backendUser) {
+      const valid = await verifyPassword(password, account?.passwordHash ?? 'pbkdf2$210000$AAAAAAAAAAAAAAAAAAAAAA==$AAAA');
+      if (!account || !account.passwordHash || !valid) {
+        recordFailure();
+        return { ok: false, error: GENERIC_FAILURE };
+      }
+    }
+
+    if (!activeAccount) {
       recordFailure();
       return { ok: false, error: GENERIC_FAILURE };
     }
-    if (account.status === 'Suspended') return { ok: false, error: 'This account has been suspended. Please contact TradeSphere.' };
-    if (expectedRole && account.role !== expectedRole) {
-      return { ok: false, error: `This account is registered as a ${account.role === 'supplier' ? 'Supplier' : 'Buyer'}. Choose “${account.role === 'supplier' ? 'Supplier' : 'Buyer'}” above to sign in.` };
+
+    if (activeAccount.status === 'Suspended') return { ok: false, error: 'This account has been suspended. Please contact TradeSphere.' };
+    if (expectedRole && activeAccount.role !== expectedRole) {
+      return { ok: false, error: `This account is registered as a ${activeAccount.role === 'supplier' ? 'Supplier' : 'Buyer'}. Choose “${activeAccount.role === 'supplier' ? 'Supplier' : 'Buyer'}” above to sign in.` };
     }
     setAttempts({ count: 0, lockedUntil: 0 });
-    setSession(newSession(account.id, account.role));
-    return { ok: true, user: account };
-  }, [accounts, attempts, setSession, loginAdmin]);
+    setSession(newSession(activeAccount.id, activeAccount.role));
+    return { ok: true, user: activeAccount };
+  }, [accounts, attempts, setSession, loginAdmin, setAccounts]);
 
   /** Registers a Buyer or Supplier. Only a password hash is saved. Admin can never be chosen here. */
   const register = useCallback(async ({ name, email, password, company, country, city, phone, role }) => {
@@ -159,6 +207,32 @@ export function AuthProvider({ children }) {
     if (!isCryptoAvailable()) return { ok: false, error: 'Registration needs a secure connection (https or localhost).' };
     const clean = normalizeEmail(email);
     if (clean === ADMIN_EMAIL || accounts.some((item) => item.email.toLowerCase() === clean)) return { ok: false, error: 'An account with this email already exists.' };
+    
+    // Register on backend if available
+    try {
+      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      if (baseUrl) {
+        const response = await fetch(`${baseUrl}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            name: name.trim(),
+            email: clean,
+            password,
+            role: role.toUpperCase(),
+            companyName: company.trim(),
+            phone,
+          }),
+        });
+        const data = await response.json();
+        if (response.ok && data.success && data.data?.token) {
+          localStorage.setItem('tradesphere_auth_token', data.data.token);
+        }
+      }
+    } catch {
+      // Fallback smoothly
+    }
+
     const account = {
       id: makeId('TS-U'), status: 'Active', name: name.trim(), email: clean, role, company: company.trim(), companyId: null,
       country, city: city.trim(), phone, joinedAt: new Date().toISOString(), notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
@@ -173,8 +247,10 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     setSession(EMPTY_SESSION);
     removeStorage(STORAGE_KEYS.buyNow);
+    localStorage.removeItem('tradesphere_auth_token');
     setAttempts({ count: 0, lockedUntil: 0 });
   }, [setSession]);
+
 
   const updateAccount = useCallback((id, patch) => {
     // Role and password hash can never be changed through profile updates.

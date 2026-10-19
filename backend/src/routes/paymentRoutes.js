@@ -31,4 +31,7 @@ router.post(
   paymentController.sandboxSimulate
 );
 
+router.post('/webhook', paymentController.handleWebhook);
+
 export default router;
+

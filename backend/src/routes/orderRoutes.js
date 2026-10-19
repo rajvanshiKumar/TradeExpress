@@ -22,6 +22,7 @@ router.post(
 );
 
 router.get('/my-orders', authenticateJWT, orderController.getMyOrders);
+router.post('/:identifier/cancel', authenticateJWT, orderController.cancelOrder);
 router.get('/:identifier', optionalAuth, orderController.getOrder);
 
 export default router;

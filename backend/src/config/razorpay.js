@@ -43,3 +43,17 @@ export function createSandboxSignature({ orderId, paymentId }) {
     .update(body.toString())
     .digest('hex');
 }
+
+/**
+ * Verifies Razorpay Webhook signature using HMAC SHA256
+ */
+export function verifyWebhookSignature({ rawBody, signature, secret }) {
+  if (!rawBody || !signature) return false;
+  const webhookSecret = secret || ENV.RAZORPAY_WEBHOOK_SECRET || ENV.RAZORPAY_KEY_SECRET;
+  if (!webhookSecret) return false;
+  const expectedSignature = crypto
+    .createHmac('sha256', webhookSecret)
+    .update(typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody))
+    .digest('hex');
+  return expectedSignature === signature;
+}

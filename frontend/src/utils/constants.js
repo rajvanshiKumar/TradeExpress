@@ -90,12 +90,13 @@ export const PAYMENT_METHODS = [
   { id: 'cod', label: 'Cash on Delivery', note: 'Pay when the goods arrive' },
 ];
 
-export const ORDER_STATUSES = ['Pending', 'Confirmed', 'In Production', 'Shipped', 'Delivered', 'Cancelled'];
+export const ORDER_STATUSES = ['Pending', 'Confirmed', 'Packed', 'In Production', 'Shipped', 'Delivered', 'Cancelled'];
 export const INQUIRY_STATUSES = ['Submitted', 'Viewed', 'Quoted', 'Negotiating', 'Closed'];
 
 export const STATUS_TONES = {
   Pending: 'warning',
   Confirmed: 'navy',
+  Packed: 'navy',
   'In Production': 'navy',
   Shipped: 'brand',
   Delivered: 'success',
@@ -109,6 +110,7 @@ export const STATUS_TONES = {
   Suspended: 'danger',
   'Under review': 'warning',
 };
+
 
 export const PAGE_SIZE = 12;
 export const MAX_RECENTLY_VIEWED = 8;

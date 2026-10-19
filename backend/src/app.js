@@ -2,9 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import routes from './routes/index.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import { ENV } from './config/env.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -43,6 +48,9 @@ app.get('/', (req, res) => {
     version: '1.0.0',
   });
 });
+
+// Serve uploads
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Main API routes
 app.use('/api', routes);
