@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { Camera, Search } from 'lucide-react';
 import useProducts from '../../hooks/useProducts';
+import VisualSearchModal from '../common/VisualSearchModal';
 
 const SCOPES = [
   { value: 'products', label: 'Products' },
@@ -22,6 +23,7 @@ export default function SearchForm({ variant = 'header', idPrefix = 'search', on
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState('products');
   const [category, setCategory] = useState('');
+  const [visualSearchOpen, setVisualSearchOpen] = useState(false);
 
   // Keep the header field in sync with the page being viewed.
   useEffect(() => {
@@ -73,11 +75,21 @@ export default function SearchForm({ variant = 'header', idPrefix = 'search', on
         id={`${idPrefix}-query`} type="search" autoFocus={autoFocus} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} autoComplete="off"
         className={`min-w-0 flex-1 bg-transparent px-3 text-sm text-ink placeholder:text-slate-400 focus:outline-none sm:px-4 ${isHero ? 'h-12 sm:text-base' : 'h-10'}`}
       />
+      <button
+        type="button"
+        onClick={() => setVisualSearchOpen(true)}
+        title="Search by image or camera"
+        aria-label="Search by image or camera"
+        className="inline-flex size-9 sm:size-10 shrink-0 self-center items-center justify-center rounded-full text-navy-600 transition-colors hover:bg-navy-100 hover:text-navy-900 mr-1 sm:mr-1.5"
+      >
+        <Camera className="size-4 sm:size-5" />
+      </button>
       <button type="submit" className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold transition-colors ${isHero ? 'bg-brand-500 px-4 text-navy-900 hover:bg-brand-400 sm:px-7' : 'bg-navy-900 px-3.5 text-white hover:bg-navy-800 sm:px-5'}`}>
         <Search className="size-[1.125rem]" aria-hidden="true" />
         <span className={isHero ? 'hidden sm:inline' : 'hidden lg:inline'}>Search</span>
         <span className="sr-only sm:hidden">Search</span>
       </button>
+      <VisualSearchModal isOpen={visualSearchOpen} onClose={() => setVisualSearchOpen(false)} />
     </form>
   );
 }

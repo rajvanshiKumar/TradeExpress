@@ -123,7 +123,7 @@ export default function Header() {
             icon={Menu}
             label="Open menu"
             onClick={mobileMenu.onOpen}
-            className="-ml-2 lg:hidden"
+            className="lg:hidden shrink-0"
             aria-expanded={mobileMenu.open}
           />
           <Logo />
@@ -132,47 +132,46 @@ export default function Header() {
             aria-label="Main"
             ref={megaRef}
             onMouseLeave={scheduleClose}
-            className="relative hidden flex-1 min-w-0 items-center justify-center gap-0.5 xl:flex 2xl:gap-1"
+            className="relative hidden flex-1 min-w-0 items-center justify-center gap-1 xl:flex 2xl:gap-2"
           >
             {mainNav
               .filter((item) => !item.highlight)
               .map((item) => {
                 const active = isActive(item.to, location);
-                const classes = `relative inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-full px-2 text-[0.8125rem] font-semibold 2xl:px-3.5 2xl:text-[0.875rem] transition-colors ${active ? "text-navy-900" : "text-navy-700 hover:text-navy-900"}`;
-                const underline = active ? (
-                  <span
-                    className="absolute inset-x-2 -bottom-0.5 h-0.5 rounded-full bg-brand-500"
-                    aria-hidden="true"
-                  />
-                ) : null;
+                const pillClass = `relative inline-flex h-9 2xl:h-10 items-center whitespace-nowrap rounded-full px-2.5 2xl:px-3.5 text-[0.825rem] 2xl:text-[0.875rem] font-semibold transition-all ${
+                  active
+                    ? "bg-navy-900 text-white shadow-xs"
+                    : "text-navy-800 hover:bg-navy-100/80 hover:text-navy-950"
+                }`;
+
                 if (item.megaMenu) {
                   return (
                     <div
                       key={item.label}
-                      className="flex items-center"
+                      className="relative inline-flex items-center"
                       onMouseEnter={openMega}
                     >
                       <Link
                         to={item.to}
-                        className={classes}
+                        className={`relative inline-flex h-9 2xl:h-10 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 2xl:px-3.5 text-[0.825rem] 2xl:text-[0.875rem] font-semibold transition-all ${
+                          active || megaOpen
+                            ? "bg-navy-900 text-white shadow-xs"
+                            : "text-navy-800 hover:bg-navy-100/80 hover:text-navy-950"
+                        }`}
                         aria-current={active ? "page" : undefined}
                       >
-                        {item.label}
-                        {underline}
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={toggleMega}
-                        aria-expanded={megaOpen}
-                        aria-controls="mega-menu"
-                        aria-label="Show categories menu"
-                        className="-ml-2.5 inline-flex size-8 items-center justify-center rounded-full text-navy-700 hover:text-navy-900"
-                      >
+                        <span>{item.label}</span>
                         <ChevronDown
-                          className={`size-4 transition-transform duration-200 ${megaOpen ? "rotate-180" : ""}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            toggleMega();
+                          }}
+                          className={`size-3.5 transition-transform duration-200 ${
+                            megaOpen ? "rotate-180" : ""
+                          }`}
                           aria-hidden="true"
                         />
-                      </button>
+                      </Link>
                     </div>
                   );
                 }
@@ -182,10 +181,9 @@ export default function Header() {
                     to={item.to}
                     onMouseEnter={scheduleClose}
                     aria-current={active ? "page" : undefined}
-                    className={classes}
+                    className={pillClass}
                   >
                     {item.label}
-                    {underline}
                   </Link>
                 );
               })}
