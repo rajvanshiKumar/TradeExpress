@@ -157,9 +157,9 @@ export default function HeroSection() {
             id="hero-title"
             className="mt-3.5 text-3xl font-extrabold !leading-[1.08] tracking-[-0.04em] sm:text-4xl lg:text-[2.6rem] xl:text-[3.25rem] 2xl:text-[3.75rem]"
           >
-            Better spaces,
+            One Platform.
             <br />
-            <span className="font-medium text-navy-700">sourced smarter.</span>
+            <span className="font-medium text-navy-700">Millions of Business Opportunities.</span>
           </h1>
 
           <p className="mt-2.5 max-w-lg text-xs leading-relaxed text-navy-900/75 sm:mt-3 sm:text-sm lg:text-[0.9375rem] xl:text-base">
