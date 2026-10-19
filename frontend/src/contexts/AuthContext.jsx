@@ -241,13 +241,12 @@ export function AuthProvider({ children }) {
     if (!PUBLIC_ROLES.includes(role)) return { ok: false, error: 'Please choose Buyer or Supplier.' };
     if (!isCryptoAvailable()) return { ok: false, error: 'Registration needs a secure connection (https or localhost).' };
     const clean = normalizeEmail(email);
-    if (clean === ADMIN_EMAIL || accounts.some((item) => item.email.toLowerCase() === clean)) return { ok: false, error: 'An account with this email already exists.' };
     
-    // Register on backend MySQL database
+    // Register directly on backend MySQL database first
     let backendUser = null;
-    try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
-      if (baseUrl) {
+    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    if (baseUrl) {
+      try {
         const response = await fetch(`${baseUrl}/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -264,15 +263,23 @@ export function AuthProvider({ children }) {
           }),
         });
         const data = await response.json();
-        if (response.ok && data.success && data.data) {
+        if (!response.ok || !data.success) {
+          return { ok: false, error: data.message || 'An account with this email already exists.' };
+        }
+        if (data.data) {
           backendUser = data.data.user;
           if (data.data.token) {
             localStorage.setItem('tradesphere_auth_token', data.data.token);
           }
         }
+      } catch (err) {
+        console.warn('Backend registration failed, falling back to local verification:', err);
       }
-    } catch {
-      // Fallback smoothly if offline
+    }
+
+    // Only if backend was unreachable, fall back to checking local memory
+    if (!backendUser && (clean === ADMIN_EMAIL || accounts.some((item) => item.email.toLowerCase() === clean))) {
+      return { ok: false, error: 'An account with this email already exists.' };
     }
 
     const account = {
@@ -280,7 +287,8 @@ export function AuthProvider({ children }) {
       country, city: city.trim(), phone, joinedAt: backendUser?.createdAt || new Date().toISOString(), notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
       passwordHash: await hashPassword(password),
     };
-    setAccounts((previous) => [account, ...previous]);
+    // Replace any stale local entry for this email and save the new verified account
+    setAccounts((previous) => [account, ...previous.filter((item) => item.email.toLowerCase() !== clean)]);
     setSession(newSession(account.id, account.role));
     return { ok: true, user: account };
   }, [accounts, setAccounts, setSession]);
