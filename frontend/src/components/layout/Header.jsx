@@ -117,28 +117,32 @@ export default function Header() {
         </a>
 
         <div
-          className={`ts-container flex items-center gap-2 transition-[padding] duration-300 lg:gap-4 2xl:gap-6 ${scrolled ? "py-2" : "py-3 lg:py-4"}`}
+          className={`ts-container flex items-center justify-between gap-3 transition-[padding] duration-300 sm:gap-4 lg:gap-6 ${scrolled ? "py-2" : "py-3 lg:py-4"}`}
         >
-          <IconButton
-            icon={Menu}
-            label="Open menu"
-            onClick={mobileMenu.onOpen}
-            className="lg:hidden shrink-0"
-            aria-expanded={mobileMenu.open}
-          />
-          <Logo />
+          {/* Left: Mobile menu button & Brand Logo */}
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3.5 mr-2 sm:mr-4 lg:mr-8">
+            <IconButton
+              icon={Menu}
+              label="Open menu"
+              onClick={mobileMenu.onOpen}
+              className="lg:hidden shrink-0"
+              aria-expanded={mobileMenu.open}
+            />
+            <Logo />
+          </div>
 
+          {/* Center Navigation: Clean, spacious, completely separated from Logo */}
           <nav
             aria-label="Main"
             ref={megaRef}
             onMouseLeave={scheduleClose}
-            className="relative hidden flex-1 min-w-0 items-center justify-center gap-1 xl:flex 2xl:gap-2"
+            className="relative hidden shrink-0 items-center gap-1.5 lg:flex xl:gap-2.5"
           >
             {mainNav
               .filter((item) => !item.highlight)
               .map((item) => {
                 const active = isActive(item.to, location);
-                const pillClass = `relative inline-flex h-9 2xl:h-10 items-center whitespace-nowrap rounded-full px-2.5 2xl:px-3.5 text-[0.825rem] 2xl:text-[0.875rem] font-semibold transition-all ${
+                const pillClass = `relative inline-flex h-10 items-center whitespace-nowrap rounded-full px-3.5 text-sm font-semibold transition-all ${
                   active
                     ? "bg-navy-900 text-white shadow-xs"
                     : "text-navy-800 hover:bg-navy-100/80 hover:text-navy-950"
@@ -153,7 +157,7 @@ export default function Header() {
                     >
                       <Link
                         to={item.to}
-                        className={`relative inline-flex h-9 2xl:h-10 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 2xl:px-3.5 text-[0.825rem] 2xl:text-[0.875rem] font-semibold transition-all ${
+                        className={`relative inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm font-semibold transition-all ${
                           active || megaOpen
                             ? "bg-navy-900 text-white shadow-xs"
                             : "text-navy-800 hover:bg-navy-100/80 hover:text-navy-950"
@@ -197,6 +201,7 @@ export default function Header() {
             ) : null}
           </nav>
 
+          {/* Right Action Icons & User Account */}
           <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
             <IconButton
               icon={searchOpen ? X : Search}
@@ -248,25 +253,6 @@ export default function Header() {
             />
           </div>
         </div>
-
-        {/* Secondary row with the main navigation between lg and xl */}
-        <nav
-          aria-label="Sections"
-          className="hidden border-t border-navy-900/[0.06] lg:block xl:hidden"
-        >
-          <div className="ts-container flex items-center gap-1 overflow-x-auto py-1.5 ts-no-scrollbar">
-            {mainNav.map((item) => (
-              <Link
-                key={item.label}
-                to={item.to}
-                aria-current={isActive(item.to, location) ? "page" : undefined}
-                className={`shrink-0 rounded-full px-3.5 py-2 text-sm font-semibold ${isActive(item.to, location) ? "bg-navy-900 text-white" : item.highlight ? "ml-auto text-brand-600" : "text-navy-700 hover:text-navy-900"}`}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </nav>
       </header>
       <MobileMenu open={mobileMenu.open} onClose={mobileMenu.onClose} />
     </>

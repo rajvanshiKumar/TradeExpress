@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, ChevronRight } from "lucide-react";
+import { ArrowRight, Building2, ChevronRight, FileText } from "lucide-react";
 import useProducts from "../../hooks/useProducts";
 import Image from "../common/Image";
 
@@ -94,14 +94,30 @@ export default function MegaMenu({ id, onNavigate }) {
           </div>
         ) : null}
       </div>
-      <div className="flex items-center justify-between border-t bg-ivory px-6 py-3 text-sm">
-        <span className="text-muted">
-          Browse wholesale categories from suppliers worldwide.
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-ivory px-6 py-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <Link
+            to="/suppliers"
+            onClick={onNavigate}
+            className="inline-flex items-center gap-1.5 font-semibold text-navy-800 transition-colors hover:text-brand-600"
+          >
+            <Building2 className="size-4 text-brand-600" />
+            Find Verified Suppliers
+          </Link>
+          <span className="text-navy-300 hidden sm:inline">•</span>
+          <Link
+            to="/rfq"
+            onClick={onNavigate}
+            className="inline-flex items-center gap-1.5 font-semibold text-navy-800 transition-colors hover:text-brand-600"
+          >
+            <FileText className="size-4 text-brand-600" />
+            Request for Quotation (RFQ)
+          </Link>
+        </div>
         <Link
           to="/categories"
           onClick={onNavigate}
-          className="inline-flex items-center gap-1.5 font-semibold text-navy-900 hover:text-brand-600"
+          className="inline-flex items-center gap-1.5 font-semibold text-navy-900 transition-colors hover:text-brand-600"
         >
           View all categories
           <ArrowRight className="size-4" aria-hidden="true" />

@@ -3,14 +3,14 @@
 export const mainNav = [
   { label: 'Explore Products', to: '/products' },
   { label: 'Categories', to: '/categories', megaMenu: true },
-  { label: 'Find Suppliers', to: '/suppliers' },
-  { label: 'Request for Quotation', to: '/rfq' },
   { label: 'About Us', to: '/info/about' },
   { label: 'Become a Supplier', to: '/register?role=supplier', highlight: true },
 ];
 
 // Secondary shortcuts shown in the mobile menu and footer.
 export const quickLinks = [
+  { label: 'Find Suppliers', to: '/suppliers' },
+  { label: 'Request for Quotation (RFQ)', to: '/rfq' },
   { label: 'Ready to Ship', to: '/products?ready=1' },
   { label: 'Wholesale Deals', to: '/products?deal=1' },
   { label: 'Buyer Protection Guide', to: '/info/buyer-protection' },
@@ -31,8 +31,9 @@ export const footerColumns = [
     links: [
       { label: 'Explore products', to: '/products' },
       { label: 'All categories', to: '/categories' },
+      { label: 'Find verified suppliers', to: '/suppliers' },
+      { label: 'Request for quotation (RFQ)', to: '/rfq' },
       { label: 'Ready to ship', to: '/products?ready=1' },
-      { label: 'Request for quotation', to: '/rfq' },
       { label: 'Buyer protection guide', to: '/info/buyer-protection' },
       { label: 'Buyer dashboard', to: '/buyer' },
     ],
