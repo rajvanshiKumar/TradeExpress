@@ -185,6 +185,41 @@ export function AuthProvider({ children }) {
         recordFailure();
         return { ok: false, error: GENERIC_FAILURE };
       }
+
+      // Auto-sync existing local account to MySQL backend users table if missing
+      try {
+        const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+        if (baseUrl) {
+          const syncRes = await fetch(`${baseUrl}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({
+              name: account.name,
+              email: account.email,
+              password,
+              role: (account.role || 'buyer').toUpperCase(),
+              company: account.company || '',
+              companyName: account.company || '',
+              phone: account.phone || '',
+              city: account.city || '',
+              country: account.country || 'India',
+            }),
+          });
+          const syncData = await syncRes.json();
+          if (syncRes.ok && syncData.success && syncData.data?.user) {
+            backendUser = syncData.data.user;
+            if (syncData.data.token) {
+              localStorage.setItem('tradesphere_auth_token', syncData.data.token);
+            }
+            if (activeAccount) {
+              activeAccount.id = backendUser.id;
+              setAccounts((prev) => prev.map((a) => (a.email.toLowerCase() === clean ? { ...a, id: backendUser.id } : a)));
+            }
+          }
+        }
+      } catch {
+        // Continue with local session if backend unreachable
+      }
     }
 
     if (!activeAccount) {
@@ -208,7 +243,8 @@ export function AuthProvider({ children }) {
     const clean = normalizeEmail(email);
     if (clean === ADMIN_EMAIL || accounts.some((item) => item.email.toLowerCase() === clean)) return { ok: false, error: 'An account with this email already exists.' };
     
-    // Register on backend if available
+    // Register on backend MySQL database
+    let backendUser = null;
     try {
       const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
       if (baseUrl) {
@@ -220,22 +256,28 @@ export function AuthProvider({ children }) {
             email: clean,
             password,
             role: role.toUpperCase(),
-            companyName: company.trim(),
-            phone,
+            company: company?.trim() || '',
+            companyName: company?.trim() || '',
+            phone: phone || '',
+            city: city?.trim() || '',
+            country: country || 'India',
           }),
         });
         const data = await response.json();
-        if (response.ok && data.success && data.data?.token) {
-          localStorage.setItem('tradesphere_auth_token', data.data.token);
+        if (response.ok && data.success && data.data) {
+          backendUser = data.data.user;
+          if (data.data.token) {
+            localStorage.setItem('tradesphere_auth_token', data.data.token);
+          }
         }
       }
     } catch {
-      // Fallback smoothly
+      // Fallback smoothly if offline
     }
 
     const account = {
-      id: makeId('TS-U'), status: 'Active', name: name.trim(), email: clean, role, company: company.trim(), companyId: null,
-      country, city: city.trim(), phone, joinedAt: new Date().toISOString(), notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
+      id: backendUser?.id || makeId('TS-U'), status: 'Active', name: name.trim(), email: clean, role, company: company.trim(), companyId: null,
+      country, city: city.trim(), phone, joinedAt: backendUser?.createdAt || new Date().toISOString(), notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
       passwordHash: await hashPassword(password),
     };
     setAccounts((previous) => [account, ...previous]);

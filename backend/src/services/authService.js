@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { signJwt } from '../utils/jwt.js';
 
-export async function registerUser({ email, password, name, role = 'BUYER', company, phone, city, country }) {
+export async function registerUser({ email, password, name, role = 'BUYER', company, companyName, phone, city, country }) {
   const normalizedEmail = email.toLowerCase().trim();
   const existing = await prisma.user.findUnique({
     where: { email: normalizedEmail },
@@ -21,7 +21,7 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
       passwordHash,
       name,
       role: role.toUpperCase(),
-      company: company || '',
+      company: company || companyName || '',
       phone: phone || '',
       city: city || '',
       country: country || 'India',
