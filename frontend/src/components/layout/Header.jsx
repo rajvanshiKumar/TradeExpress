@@ -132,13 +132,13 @@ export default function Header() {
             aria-label="Main"
             ref={megaRef}
             onMouseLeave={scheduleClose}
-            className="relative hidden flex-1 items-center justify-center gap-0.5 xl:flex"
+            className="relative hidden flex-1 min-w-0 items-center justify-center gap-0.5 xl:flex 2xl:gap-1"
           >
             {mainNav
               .filter((item) => !item.highlight)
               .map((item) => {
                 const active = isActive(item.to, location);
-                const classes = `relative inline-flex h-11 items-center gap-1 whitespace-nowrap rounded-full px-2 text-[0.875rem] font-semibold 2xl:px-3.5 2xl:text-[0.9rem] transition-colors ${active ? "text-navy-900" : "text-navy-700 hover:text-navy-900"}`;
+                const classes = `relative inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-full px-2 text-[0.8125rem] font-semibold 2xl:px-3.5 2xl:text-[0.875rem] transition-colors ${active ? "text-navy-900" : "text-navy-700 hover:text-navy-900"}`;
                 const underline = active ? (
                   <span
                     className="absolute inset-x-2 -bottom-0.5 h-0.5 rounded-full bg-brand-500"
@@ -199,7 +199,7 @@ export default function Header() {
             ) : null}
           </nav>
 
-          <div className="ml-auto flex items-center gap-0.5 xl:ml-0">
+          <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
             <IconButton
               icon={searchOpen ? X : Search}
               label={searchOpen ? "Close search" : "Search"}
@@ -216,7 +216,7 @@ export default function Header() {
               icon={MessageSquare}
               label="Messages"
               count={messageCount}
-              className="max-sm:hidden xl:max-2xl:hidden"
+              className="hidden 2xl:inline-flex"
             />
             <NotificationsMenu />
             <IconLink
@@ -224,7 +224,7 @@ export default function Header() {
               icon={Heart}
               label="Saved items"
               count={wishlistCount}
-              className="max-xs:hidden"
+              className="hidden sm:inline-flex"
             />
             <IconLink
               to="/cart"
@@ -232,7 +232,7 @@ export default function Header() {
               label="Cart"
               count={cartCount}
             />
-            <div className="ml-2 hidden sm:block">
+            <div className="ml-1 shrink-0 sm:ml-2">
               <UserMenu />
             </div>
           </div>

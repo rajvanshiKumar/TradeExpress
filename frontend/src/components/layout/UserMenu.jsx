@@ -15,9 +15,9 @@ export default function UserMenu() {
 
   if (!user) {
     return (
-      <div className="flex items-center gap- 12">
-        <Button to="/login" variant="ghost" size="sm" className="max-md:hidden">Sign In</Button>
-        <Button to="/register" variant="navy" size="sm">Get Started</Button>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button to="/login" variant="ghost" size="sm" className="hidden lg:inline-flex whitespace-nowrap">Sign In</Button>
+        <Button to="/register" variant="navy" size="sm" className="whitespace-nowrap shadow-sm">Get Started</Button>
       </div>
     );
   }
