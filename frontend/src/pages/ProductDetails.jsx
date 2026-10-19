@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Clock, FileText, MessageSquare, PackageCheck, PackageX, Share2, ShoppingCart, Truck, Zap } from 'lucide-react';
+import { Clock, FileText, MessageSquare, PackageCheck, PackageX, Share2, ShoppingCart, Truck, Zap, CheckCircle2 } from 'lucide-react';
 import Breadcrumbs from '../components/common/Breadcrumbs';
 import Button from '../components/common/Button';
 import Badge from '../components/common/Badge';
@@ -26,6 +26,7 @@ import useCurrency from '../hooks/useCurrency';
 import useNotifications from '../hooks/useNotifications';
 import useContactSupplier from '../hooks/useContactSupplier';
 import useDocumentTitle from '../hooks/useDocumentTitle';
+import { apiGet, isApiConfigured } from '../services/apiClient';
 import { getLineTotal, getUnitPrice } from '../utils/calculateTotals';
 import { quantityLabel } from '../utils/units';
 import { formatDate } from '../utils/formatDate';
@@ -53,8 +54,31 @@ export default function ProductDetails() {
   const [tab, setTab] = useState('description');
   const [sampleModalOpen, setSampleModalOpen] = useState(false);
   const [sampleQuantity, setSampleQuantity] = useState(1);
+  const [reviewsData, setReviewsData] = useState({ reviews: [], totalReviews: 0, averageRating: 0 });
+  const [reviewsLoading, setReviewsLoading] = useState(false);
   useDocumentTitle(product?.name ?? 'Product');
 
+  useEffect(() => {
+    if (!product?.id) return;
+    let isMounted = true;
+    async function loadReviews() {
+      if (isApiConfigured) {
+        try {
+          setReviewsLoading(true);
+          const res = await apiGet(`reviews/product/${encodeURIComponent(product.id)}`);
+          if (isMounted && res && res.success && res.data) {
+            setReviewsData(res.data);
+          }
+        } catch (err) {
+          console.warn('[TradeSphere] Could not load verified reviews:', err.message);
+        } finally {
+          if (isMounted) setReviewsLoading(false);
+        }
+      }
+    }
+    loadReviews();
+    return () => { isMounted = false; };
+  }, [product?.id]);
 
   useEffect(() => {
     if (!product) return;
@@ -291,21 +315,74 @@ export default function ProductDetails() {
             ) : null}
             {tab === 'reviews' ? (
               <div>
-                <p className="mb-4 rounded-lg bg-navy-50 px-4 py-3 text-[0.8125rem] text-navy-800">Sample reviews shown for illustration.</p>
-                {company?.reviews?.length ? (
-                  <ul className="divide-y">
-                    {company.reviews.map((review) => (
-                      <li key={review.id} className="py-4 first:pt-0 last:pb-0">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-ink">{review.author}</p>
-                          <p className="text-xs text-muted">{formatDate(review.date)}</p>
+                {reviewsLoading ? (
+                  <div className="py-8 text-center text-sm text-muted">Loading verified reviews...</div>
+                ) : reviewsData.totalReviews > 0 ? (
+                  <div>
+                    <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-3xl font-black text-emerald-950">{reviewsData.averageRating.toFixed(1)}</span>
+                          <Rating value={reviewsData.averageRating} showValue={false} />
                         </div>
-                        <Rating value={review.rating} showValue={false} className="mt-1" />
-                        <p className="mt-1.5 text-sm text-ink">{review.text}</p>
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p className="text-sm text-muted">No reviews for this listing yet.</p>}
+                        <p className="mt-1 text-xs font-semibold text-emerald-800">
+                          Based on {reviewsData.totalReviews} verified wholesale order{reviewsData.totalReviews > 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-white/80 border border-emerald-300 px-3 py-1.5 rounded-full shadow-sm">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        Verified B2B Buyer Reviews
+                      </div>
+                    </div>
+
+                    <ul className="divide-y divide-slate-100">
+                      {reviewsData.reviews.map((review) => (
+                        <li key={review.id} className="py-4 first:pt-0 last:pb-0">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-ink">
+                                {review.buyer?.company || review.buyer?.name || 'Verified Wholesale Buyer'}
+                              </p>
+                              {review.buyer?.name && review.buyer?.company ? (
+                                <p className="text-xs text-muted">{review.buyer.name}</p>
+                              ) : null}
+                            </div>
+                            <p className="text-xs text-muted">{formatDate(review.createdAt)}</p>
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-3">
+                            <Rating value={review.rating} showValue={false} />
+                            <div className="flex flex-wrap gap-2 text-[11px] text-slate-600">
+                              <span className="bg-slate-100 px-2 py-0.5 rounded font-medium">Quality: {review.qualityRating}/5</span>
+                              <span className="bg-slate-100 px-2 py-0.5 rounded font-medium">Packaging: {review.packagingRating}/5</span>
+                              <span className="bg-slate-100 px-2 py-0.5 rounded font-medium">Delivery: {review.timelinessRating}/5</span>
+                            </div>
+                          </div>
+                          {review.comment ? (
+                            <p className="mt-2 text-sm text-ink leading-relaxed">{review.comment}</p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : company?.reviews?.length ? (
+                  <div>
+                    <p className="mb-4 rounded-lg bg-navy-50 px-4 py-3 text-[0.8125rem] text-navy-800">Verified buyer ratings will appear here after orders are delivered. Showing supplier benchmark feedback:</p>
+                    <ul className="divide-y">
+                      {company.reviews.map((review) => (
+                        <li key={review.id} className="py-4 first:pt-0 last:pb-0">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-ink">{review.author}</p>
+                            <p className="text-xs text-muted">{formatDate(review.date)}</p>
+                          </div>
+                          <Rating value={review.rating} showValue={false} className="mt-1" />
+                          <p className="mt-1.5 text-sm text-ink">{review.text}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted">No reviews for this listing yet. Be the first verified buyer to review after delivery!</p>
+                )}
               </div>
             ) : null}
           </TabPanel>

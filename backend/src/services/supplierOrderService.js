@@ -168,7 +168,10 @@ export async function updateSupplierOrderStatus(supplierUser, orderId, { status,
   const updated = await prisma.$transaction(async (tx) => {
     const res = await tx.order.update({
       where: { id: orderId },
-      data: { orderStatus: status },
+      data: {
+        orderStatus: status,
+        ...(status === 'DELIVERED' ? { deliveryAcceptedAt: new Date() } : {}),
+      },
       include: { items: true, statusHistory: { orderBy: { createdAt: 'desc' } } },
     });
 

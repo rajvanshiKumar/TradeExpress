@@ -7,16 +7,24 @@ import {
   Clock,
   ExternalLink,
   MapPin,
+  MessageSquare,
   Package,
   Printer,
   RotateCcw,
   Search,
+  Send,
+  ShieldAlert,
+  ShieldCheck,
+  Star,
   Truck,
+  Upload,
   XCircle,
 } from 'lucide-react';
 import PageHeader from '../components/common/PageHeader';
 import Button from '../components/common/Button';
 import Image from '../components/common/Image';
+import Modal from '../components/common/Modal';
+import Input, { Textarea } from '../components/common/Input';
 import { TableSkeleton } from '../components/common/Skeleton';
 import { StatusBadge } from '../components/common/Badge';
 import { apiGet, apiPost, isApiConfigured } from '../services/apiClient';
@@ -53,6 +61,30 @@ export default function OrderTracking() {
   const { money } = useCurrency();
   const { showToast } = useNotifications();
 
+  // Dispute & Inspection State
+  const [disputeDialogOpen, setDisputeDialogOpen] = useState(false);
+  const [submittingDispute, setSubmittingDispute] = useState(false);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const [disputeValues, setDisputeValues] = useState({
+    reason: 'QUALITY_MISMATCH',
+    description: '',
+    requestedResolution: 'FULL_REFUND',
+    photoProof: '',
+  });
+  const [disputeMessageText, setDisputeMessageText] = useState('');
+  const [sendingDisputeMsg, setSendingDisputeMsg] = useState(false);
+
+  // Review & Rating State
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewValues, setReviewValues] = useState({
+    rating: 5,
+    qualityRating: 5,
+    packagingRating: 5,
+    timelinessRating: 5,
+    comment: '',
+  });
+
   useDocumentTitle(activeNumber ? `Track Order ${activeNumber}` : 'Track My Order');
 
   const canCancel =
@@ -79,6 +111,91 @@ export default function OrderTracking() {
       showToast(err.message || 'Failed to cancel order.', 'error');
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleProofUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingProof(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await apiPost('upload', formData);
+      if (res && res.url) {
+        setDisputeValues((prev) => ({ ...prev, photoProof: res.url }));
+        showToast('Proof photo uploaded successfully.', 'success');
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to upload photo.', 'error');
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
+  const handleSubmitDispute = async (e) => {
+    e.preventDefault();
+    if (!disputeValues.description || disputeValues.description.trim().length < 10) {
+      showToast('Please provide a detailed description (at least 10 characters).', 'warning');
+      return;
+    }
+    setSubmittingDispute(true);
+    try {
+      const res = await apiPost(`disputes/${tracking.orderNumber}`, disputeValues);
+      setTracking((prev) => ({
+        ...prev,
+        dispute: res.data,
+        escrowLedger: prev.escrowLedger ? { ...prev.escrowLedger, status: 'FROZEN_DISPUTED' } : null,
+      }));
+      showToast('Inspection dispute submitted! Escrow payout has been frozen.', 'success');
+      setDisputeDialogOpen(false);
+    } catch (err) {
+      showToast(err.message || 'Failed to submit dispute.', 'error');
+    } finally {
+      setSubmittingDispute(false);
+    }
+  };
+
+  const handleSendDisputeMessage = async (e) => {
+    e.preventDefault();
+    if (!disputeMessageText.trim() || !tracking?.dispute?.id) return;
+    setSendingDisputeMsg(true);
+    try {
+      const res = await apiPost(`disputes/${tracking.dispute.id}/messages`, {
+        message: disputeMessageText,
+        senderRole: 'BUYER',
+      });
+      setTracking((prev) => ({
+        ...prev,
+        dispute: {
+          ...prev.dispute,
+          messages: [...(prev.dispute?.messages || []), res.data],
+        },
+      }));
+      setDisputeMessageText('');
+      showToast('Message sent to mediation thread.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to send message.', 'error');
+    } finally {
+      setSendingDisputeMsg(false);
+    }
+  };
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+    setSubmittingReview(true);
+    try {
+      const res = await apiPost(`reviews/${tracking.orderNumber}`, reviewValues);
+      setTracking((prev) => ({
+        ...prev,
+        review: res.data,
+      }));
+      showToast('Review submitted successfully! Thank you for rating this order.', 'success');
+      setReviewDialogOpen(false);
+    } catch (err) {
+      showToast(err.message || 'Failed to submit review.', 'error');
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
@@ -412,6 +529,29 @@ export default function OrderTracking() {
                   </span>
                 ) : null}
 
+                {tracking.orderStatus === 'DELIVERED' && !tracking.dispute && (
+                  <Button
+                    onClick={() => setDisputeDialogOpen(true)}
+                    variant="outline"
+                    size="sm"
+                    icon={ShieldAlert}
+                    className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                  >
+                    Report Issue / Dispute
+                  </Button>
+                )}
+
+                {tracking.orderStatus === 'DELIVERED' && !tracking.review && (
+                  <Button
+                    onClick={() => setReviewDialogOpen(true)}
+                    variant="secondary"
+                    size="sm"
+                    icon={Star}
+                  >
+                    Rate & Review
+                  </Button>
+                )}
+
                 <Button to="/buyer/orders" variant="outline" size="sm" icon={ArrowLeft}>
                   All Orders
                 </Button>
@@ -460,6 +600,195 @@ export default function OrderTracking() {
                   <h3 className="font-bold text-sm">Order Refunded</h3>
                   <p className="text-xs mt-0.5 text-amber-700">The payment for this order has been refunded to the original payment source.</p>
                 </div>
+              </div>
+            )}
+
+            {/* Escrow Protection & 5-Day Inspection Banner */}
+            <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="flex size-11 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                    <ShieldCheck className="size-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-navy-950">TradeSphere Escrow Secured</h3>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
+                        tracking.escrowLedger?.status === 'RELEASED'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : tracking.escrowLedger?.status === 'FROZEN_DISPUTED'
+                          ? 'bg-red-100 text-red-800'
+                          : tracking.escrowLedger?.status === 'REFUNDED'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {tracking.escrowLedger?.status || 'HELD IN ESCROW'}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted leading-relaxed">
+                      {tracking.escrowLedger?.status === 'RELEASED'
+                        ? 'Inspection period complete. Escrow payout has been safely settled to the supplier.'
+                        : tracking.escrowLedger?.status === 'FROZEN_DISPUTED'
+                        ? 'Escrow funds are temporarily frozen while our admin team mediates your open dispute.'
+                        : tracking.escrowLedger?.status === 'REFUNDED'
+                        ? 'Escrow funds have been refunded back to your account.'
+                        : `Funds (${money(tracking.totals.total)}) are secured in escrow. Supplier payout will only be released 5 days after delivery once inspection confirms satisfaction.`}
+                    </p>
+                  </div>
+                </div>
+
+                {tracking.orderStatus === 'DELIVERED' && !tracking.dispute && (
+                  <Button
+                    onClick={() => setDisputeDialogOpen(true)}
+                    variant="outline"
+                    size="sm"
+                    icon={ShieldAlert}
+                    className="border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100"
+                  >
+                    Open Inspection Dispute
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Active Dispute Section */}
+            {tracking.dispute && (
+              <div className="rounded-2xl border border-amber-300 bg-amber-50/60 p-5 sm:p-6 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-amber-200/80 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="size-5 text-amber-600" />
+                      <h3 className="text-base font-bold text-amber-950">
+                        Inspection Dispute Active · Reason: {tracking.dispute.reason.replace(/_/g, ' ')}
+                      </h3>
+                    </div>
+                    <p className="mt-1 text-xs text-amber-800">
+                      Filed on {formatDateTime(tracking.dispute.createdAt)} · Status:{' '}
+                      <span className="font-bold uppercase tracking-wider">{tracking.dispute.status}</span>
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-900">
+                    {tracking.dispute.status}
+                  </span>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs text-slate-700 sm:text-sm">
+                    <strong className="text-navy-950">Claim Description: </strong>
+                    {tracking.dispute.description}
+                  </p>
+
+                  {tracking.dispute.photoProof && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <strong className="text-navy-950">Inspection Proof: </strong>
+                      <a
+                        href={tracking.dispute.photoProof}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-semibold text-brand-700 underline hover:text-brand-800"
+                      >
+                        View Photo Evidence <ExternalLink className="size-3" />
+                      </a>
+                    </div>
+                  )}
+
+                  {tracking.dispute.resolution && (
+                    <div className="rounded-xl border border-amber-200 bg-white p-3 text-xs text-amber-950">
+                      <strong>Admin Mediation Note: </strong>
+                      {tracking.dispute.resolution}
+                      {tracking.dispute.refundAmount > 0 && (
+                        <p className="mt-1 font-bold text-emerald-700">Refund Approved: {money(tracking.dispute.refundAmount)}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Dispute Message Thread */}
+                  {tracking.dispute.messages && tracking.dispute.messages.length > 0 && (
+                    <div className="mt-4 rounded-xl border border-amber-200/80 bg-white p-4">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted">Mediation Discussion Thread</h4>
+                      <div className="mt-3 space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                        {tracking.dispute.messages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`rounded-lg p-2.5 text-xs ${
+                              msg.senderRole === 'ADMIN'
+                                ? 'bg-purple-50 text-purple-950 border border-purple-200'
+                                : msg.senderRole === 'BUYER'
+                                ? 'bg-blue-50 text-blue-950 border border-blue-100 ml-4'
+                                : 'bg-slate-50 text-slate-900 mr-4'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between font-bold text-[0.6875rem] uppercase tracking-wider mb-1">
+                              <span>{msg.senderRole}</span>
+                              <span className="font-normal text-muted lowercase">{formatDateTime(msg.createdAt)}</span>
+                            </div>
+                            <p>{msg.message}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add reply */}
+                      {tracking.dispute.status === 'OPEN' && (
+                        <form onSubmit={handleSendDisputeMessage} className="mt-3 flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Type a message to the mediation officer..."
+                            value={disputeMessageText}
+                            onChange={(e) => setDisputeMessageText(e.target.value)}
+                            className="ts-input flex-1 text-xs"
+                          />
+                          <Button type="submit" variant="primary" size="sm" icon={Send} disabled={sendingDisputeMsg}>
+                            Send
+                          </Button>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Verified Review Section */}
+            {tracking.review && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
+                <div className="flex items-center justify-between border-b border-emerald-200/60 pb-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="size-5 text-emerald-600" />
+                    <h3 className="font-bold text-navy-950">Your Verified Buyer Review</h3>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`size-4 ${
+                          star <= tracking.review.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'
+                        }`}
+                      />
+                    ))}
+                    <span className="ml-1 text-xs font-bold text-navy-900">{tracking.review.rating}.0 / 5</span>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                  <div className="rounded bg-white/80 p-2 text-center">
+                    <span className="text-muted block text-[0.6875rem]">Quality</span>
+                    <strong className="text-navy-900 font-bold">{tracking.review.qualityRating || 5}/5 ★</strong>
+                  </div>
+                  <div className="rounded bg-white/80 p-2 text-center">
+                    <span className="text-muted block text-[0.6875rem]">Packaging</span>
+                    <strong className="text-navy-900 font-bold">{tracking.review.packagingRating || 5}/5 ★</strong>
+                  </div>
+                  <div className="rounded bg-white/80 p-2 text-center">
+                    <span className="text-muted block text-[0.6875rem]">Timeliness</span>
+                    <strong className="text-navy-900 font-bold">{tracking.review.timelinessRating || 5}/5 ★</strong>
+                  </div>
+                </div>
+
+                {tracking.review.comment && (
+                  <p className="mt-3 text-xs italic text-slate-700 bg-white/60 p-2.5 rounded-lg border border-emerald-100">
+                    "{tracking.review.comment}"
+                  </p>
+                )}
               </div>
             )}
 
@@ -650,6 +979,184 @@ export default function OrderTracking() {
           </div>
         )}
       </div>
+
+      {/* Dispute Dialog Modal */}
+      <Modal
+        open={disputeDialogOpen}
+        onClose={() => setDisputeDialogOpen(false)}
+        title="Report Goods Issue / Open Inspection Dispute"
+        description={`Order #${tracking?.orderNumber} · 5-Day Inspection Period`}
+        size="md"
+      >
+        <form onSubmit={handleSubmitDispute} className="space-y-4">
+          <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900 border border-amber-200">
+            <strong>Escrow Protection Notice:</strong> Opening an inspection claim immediately freezes supplier payout. Our mediation team reviews evidence within 24-48 business hours.
+          </div>
+
+          <div>
+            <label htmlFor="dispute-reason" className="block text-xs font-semibold uppercase tracking-wider text-muted">
+              Primary Claim Reason
+            </label>
+            <select
+              id="dispute-reason"
+              value={disputeValues.reason}
+              onChange={(e) => setDisputeValues({ ...disputeValues, reason: e.target.value })}
+              className="ts-input mt-1"
+            >
+              <option value="QUALITY_MISMATCH">Quality Mismatch (Does not match sample/specifications)</option>
+              <option value="DAMAGED_GOODS">Damaged Goods in Transit</option>
+              <option value="SHORTAGE">Shortage / Quantity Less than Ordered</option>
+              <option value="INCORRECT_ITEMS">Incorrect Items Delivered</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="dispute-res" className="block text-xs font-semibold uppercase tracking-wider text-muted">
+              Requested Resolution
+            </label>
+            <select
+              id="dispute-res"
+              value={disputeValues.requestedResolution}
+              onChange={(e) => setDisputeValues({ ...disputeValues, requestedResolution: e.target.value })}
+              className="ts-input mt-1"
+            >
+              <option value="FULL_REFUND">Full Refund to Original Payment Source</option>
+              <option value="PARTIAL_REFUND">Partial Refund / Price Adjustment</option>
+              <option value="REPLACEMENT">Replacement of Defective Goods</option>
+            </select>
+          </div>
+
+          <Textarea
+            id="dispute-desc"
+            label="Detailed Description of Issue"
+            rows={4}
+            required
+            placeholder="Describe the defects, shortages, or discrepancies found during unboxing..."
+            value={disputeValues.description}
+            onChange={(e) => setDisputeValues({ ...disputeValues, description: e.target.value })}
+          />
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
+              Photo Evidence Attachment
+            </label>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleProofUpload}
+                className="text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-navy-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-navy-800"
+              />
+              {uploadingProof && <span className="text-xs text-muted">Uploading...</span>}
+            </div>
+            {disputeValues.photoProof && (
+              <p className="mt-1.5 text-xs text-emerald-700 font-medium">✓ Photo evidence attached</p>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+            <Button type="button" variant="outline" onClick={() => setDisputeDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="danger" loading={submittingDispute}>
+              Submit Dispute Claim
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Review Dialog Modal */}
+      <Modal
+        open={reviewDialogOpen}
+        onClose={() => setReviewDialogOpen(false)}
+        title="Rate & Review Wholesale Order"
+        description={`Order #${tracking?.orderNumber}`}
+        size="md"
+      >
+        <form onSubmit={handleSubmitReview} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
+              Overall Supplier & Product Rating
+            </label>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setReviewValues({ ...reviewValues, rating: star })}
+                  className="p-1 hover:scale-110 transition-transform"
+                >
+                  <Star
+                    className={`size-7 ${
+                      star <= reviewValues.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'
+                    }`}
+                  />
+                </button>
+              ))}
+              <span className="ml-2 font-bold text-navy-900">{reviewValues.rating} of 5 Stars</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+            <div>
+              <label className="block text-xs font-medium text-slate-700">Material Quality</label>
+              <select
+                value={reviewValues.qualityRating}
+                onChange={(e) => setReviewValues({ ...reviewValues, qualityRating: Number(e.target.value) })}
+                className="ts-input mt-1 text-xs"
+              >
+                {[5, 4, 3, 2, 1].map((r) => (
+                  <option key={r} value={r}>{r} Stars {r === 5 ? '(Excellent)' : ''}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700">Packaging Protection</label>
+              <select
+                value={reviewValues.packagingRating}
+                onChange={(e) => setReviewValues({ ...reviewValues, packagingRating: Number(e.target.value) })}
+                className="ts-input mt-1 text-xs"
+              >
+                {[5, 4, 3, 2, 1].map((r) => (
+                  <option key={r} value={r}>{r} Stars {r === 5 ? '(Secure)' : ''}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700">Delivery Timeliness</label>
+              <select
+                value={reviewValues.timelinessRating}
+                onChange={(e) => setReviewValues({ ...reviewValues, timelinessRating: Number(e.target.value) })}
+                className="ts-input mt-1 text-xs"
+              >
+                {[5, 4, 3, 2, 1].map((r) => (
+                  <option key={r} value={r}>{r} Stars {r === 5 ? '(On-Time)' : ''}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <Textarea
+            id="review-comment"
+            label="Review Feedback (Public)"
+            rows={3}
+            placeholder="Share feedback on bulk quality, packaging integrity, and accuracy of dimensions..."
+            value={reviewValues.comment}
+            onChange={(e) => setReviewValues({ ...reviewValues, comment: e.target.value })}
+          />
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+            <Button type="button" variant="outline" onClick={() => setReviewDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={submittingReview}>
+              Submit Review
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </>
   );
 }

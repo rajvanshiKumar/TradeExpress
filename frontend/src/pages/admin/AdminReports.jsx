@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Eye, FileText, Percent, RefreshCw, Save, Search } from 'lucide-react';
+import {
+  CheckCircle2,
+  ExternalLink,
+  Eye,
+  FileText,
+  Percent,
+  RefreshCw,
+  Save,
+  Scale,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+} from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Button from '../../components/common/Button';
 import { StatusBadge } from '../../components/common/Badge';
@@ -50,6 +62,21 @@ export default function AdminReports() {
   const [newCatRate, setNewCatRate] = useState('');
   const [savingCommission, setSavingCommission] = useState(false);
 
+  // Escrow state
+  const [escrowLedgers, setEscrowLedgers] = useState([]);
+  const [escrowSummary, setEscrowSummary] = useState(null);
+  const [escrowLoading, setEscrowLoading] = useState(false);
+  const [releasingPayout, setReleasingPayout] = useState('');
+
+  // Disputes state
+  const [disputes, setDisputes] = useState([]);
+  const [disputesLoading, setDisputesLoading] = useState(false);
+  const [selectedDispute, setSelectedDispute] = useState(null);
+  const [resolvingDispute, setResolvingDispute] = useState(false);
+  const [mediationAction, setMediationAction] = useState('APPROVE_FULL_REFUND');
+  const [mediationNote, setMediationNote] = useState('');
+  const [partialRefundAmt, setPartialRefundAmt] = useState('');
+
   const fetchCommissions = async () => {
     try {
       setCommissionLoading(true);
@@ -66,11 +93,74 @@ export default function AdminReports() {
     }
   };
 
-  useEffect(() => {
-    if (tab === 'commission') {
-      fetchCommissions();
+  const fetchEscrow = async () => {
+    try {
+      setEscrowLoading(true);
+      const [sumRes, ledgRes] = await Promise.all([
+        apiGet('escrow/summary').catch(() => null),
+        apiGet('escrow/ledgers').catch(() => null),
+      ]);
+      if (sumRes?.data) setEscrowSummary(sumRes.data);
+      if (ledgRes?.data) setEscrowLedgers(ledgRes.data);
+    } catch (err) {
+      console.warn('Failed to fetch escrow data:', err);
+    } finally {
+      setEscrowLoading(false);
     }
+  };
+
+  const fetchDisputes = async () => {
+    try {
+      setDisputesLoading(true);
+      const res = await apiGet('disputes');
+      if (res?.data) setDisputes(res.data);
+    } catch (err) {
+      console.warn('Failed to fetch disputes:', err);
+    } finally {
+      setDisputesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === 'commission') fetchCommissions();
+    if (tab === 'escrow') fetchEscrow();
+    if (tab === 'disputes') fetchDisputes();
   }, [tab]);
+
+  const handleReleasePayout = async (orderId) => {
+    setReleasingPayout(orderId);
+    try {
+      await apiPost(`escrow/${orderId}/release`, {});
+      showToast('Escrow payout released to supplier successfully!', 'success');
+      await fetchEscrow();
+    } catch (err) {
+      showToast(err.message || 'Failed to release payout', 'error');
+    } finally {
+      setReleasingPayout('');
+    }
+  };
+
+  const handleResolveDispute = async (e) => {
+    e.preventDefault();
+    if (!selectedDispute) return;
+    setResolvingDispute(true);
+    try {
+      await apiPost(`disputes/${selectedDispute.id}/resolve`, {
+        action: mediationAction,
+        resolutionNote: mediationNote,
+        refundAmount: Number(partialRefundAmt) || 0,
+      });
+      showToast('Dispute resolved successfully!', 'success');
+      setSelectedDispute(null);
+      setMediationNote('');
+      setPartialRefundAmt('');
+      await fetchDisputes();
+    } catch (err) {
+      showToast(err.message || 'Failed to resolve dispute', 'error');
+    } finally {
+      setResolvingDispute(false);
+    }
+  };
 
   const handleSaveGlobalRate = async () => {
     try {
@@ -158,6 +248,8 @@ export default function AdminReports() {
           tabs={[
             { id: 'inquiries', label: 'Inquiry monitoring', count: inquiries.length },
             { id: 'orders', label: 'Orders', count: orders.length },
+            { id: 'escrow', label: 'Escrow & Payouts', count: escrowLedgers.length },
+            { id: 'disputes', label: 'Buyer Disputes', count: disputes.filter((d) => d.status === 'OPEN').length },
             { id: 'commission', label: 'Platform Commission' },
           ]}
           active={tab}
@@ -165,7 +257,209 @@ export default function AdminReports() {
           idPrefix="reports"
         />
         <TabPanel id={tab} idPrefix="reports" className="pt-5">
-          {tab === 'commission' ? (
+          {tab === 'escrow' ? (
+            <div className="space-y-6">
+              {/* Escrow Summary Stats */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="ts-card p-5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Total Held in Escrow</span>
+                  <p className="mt-2 text-2xl font-black text-blue-700">{money(escrowSummary?.totalHeld || 0)}</p>
+                  <p className="mt-1 text-xs text-muted">Protected during inspection window</p>
+                </div>
+                <div className="ts-card p-5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Payouts Settled</span>
+                  <p className="mt-2 text-2xl font-black text-emerald-700">{money(escrowSummary?.totalReleased || 0)}</p>
+                  <p className="mt-1 text-xs text-muted">Released to suppliers post-delivery</p>
+                </div>
+                <div className="ts-card p-5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Platform Commission</span>
+                  <p className="mt-2 text-2xl font-black text-brand-600">{money(escrowSummary?.totalCommission || 0)}</p>
+                  <p className="mt-1 text-xs text-muted">Retained platform wholesale fee</p>
+                </div>
+                <div className="ts-card p-5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Total Refunded</span>
+                  <p className="mt-2 text-2xl font-black text-amber-700">{money(escrowSummary?.totalRefunded || 0)}</p>
+                  <p className="mt-1 text-xs text-muted">Refunded from approved disputes</p>
+                </div>
+              </div>
+
+              {/* Escrow Ledgers Table */}
+              <div className="ts-card overflow-hidden">
+                <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                  <h4 className="font-semibold text-navy-900">Wholesale Order Escrow Ledgers</h4>
+                  <Button variant="ghost" size="sm" icon={RefreshCw} onClick={fetchEscrow} loading={escrowLoading}>
+                    Refresh
+                  </Button>
+                </div>
+
+                {escrowLoading ? (
+                  <TableSkeleton />
+                ) : escrowLedgers.length === 0 ? (
+                  <EmptyState icon={ShieldCheck} title="No escrow records found" text="Escrow ledgers will appear automatically as orders are placed and paid." />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="ts-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Order Ref</th>
+                          <th scope="col">Buyer</th>
+                          <th scope="col">Supplier</th>
+                          <th scope="col">Amount Held</th>
+                          <th scope="col">Commission Fee</th>
+                          <th scope="col">Net Payout</th>
+                          <th scope="col">Escrow Status</th>
+                          <th scope="col">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {escrowLedgers.map((l) => (
+                          <tr key={l.id || l.orderId}>
+                            <td>
+                              <span className="font-mono font-bold text-navy-900">{l.order?.orderNumber || l.orderId}</span>
+                              <span className="block text-xs text-muted">{formatDate(l.createdAt)}</span>
+                            </td>
+                            <td>
+                              <span className="block font-medium text-navy-900">{l.order?.buyerName}</span>
+                              <span className="text-xs text-muted">{l.order?.buyerCompany || l.order?.buyerEmail}</span>
+                            </td>
+                            <td>
+                              <span className="font-medium text-navy-900">{l.order?.supplier?.company || l.order?.supplier?.name || 'Verified Supplier'}</span>
+                            </td>
+                            <td>
+                              <span className="font-bold text-navy-900">{money(l.amountHeld)}</span>
+                            </td>
+                            <td>
+                              <span className="text-xs font-semibold text-brand-700">
+                                {money(l.commissionFee)} ({l.commissionRate}%)
+                              </span>
+                            </td>
+                            <td>
+                              <span className="font-bold text-emerald-700">{money(l.payoutAmount)}</span>
+                            </td>
+                            <td>
+                              <span className={`inline-flex rounded px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${
+                                l.status === 'RELEASED'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : l.status === 'FROZEN_DISPUTED'
+                                  ? 'bg-red-100 text-red-800'
+                                  : l.status === 'REFUNDED'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {l.status}
+                              </span>
+                            </td>
+                            <td>
+                              {l.status === 'HELD' ? (
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  icon={CheckCircle2}
+                                  loading={releasingPayout === l.orderId}
+                                  onClick={() => handleReleasePayout(l.orderId)}
+                                >
+                                  Release Payout
+                                </Button>
+                              ) : l.status === 'FROZEN_DISPUTED' ? (
+                                <span className="text-xs font-semibold text-red-700">Dispute Active</span>
+                              ) : l.status === 'RELEASED' ? (
+                                <span className="text-xs font-semibold text-emerald-700">✓ Settled</span>
+                              ) : (
+                                <span className="text-xs text-muted">Refunded</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : tab === 'disputes' ? (
+            <div className="space-y-6">
+              <div className="ts-card overflow-hidden">
+                <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                  <div>
+                    <h4 className="font-semibold text-navy-900">Buyer Inspection Claims & Disputes</h4>
+                    <p className="text-xs text-muted">Mediate unboxing issues, damaged shipments, and quality discrepancies.</p>
+                  </div>
+                  <Button variant="ghost" size="sm" icon={RefreshCw} onClick={fetchDisputes} loading={disputesLoading}>
+                    Refresh
+                  </Button>
+                </div>
+
+                {disputesLoading ? (
+                  <TableSkeleton />
+                ) : disputes.length === 0 ? (
+                  <EmptyState icon={ShieldAlert} title="No disputes filed" text="No buyer inspection disputes have been raised." />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="ts-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Dispute Ref</th>
+                          <th scope="col">Order Ref</th>
+                          <th scope="col">Buyer</th>
+                          <th scope="col">Claim Reason</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {disputes.map((d) => (
+                          <tr key={d.id}>
+                            <td>
+                              <span className="font-mono text-xs font-bold text-navy-900">{d.id.slice(0, 8)}...</span>
+                              <span className="block text-xs text-muted">{formatDate(d.createdAt)}</span>
+                            </td>
+                            <td>
+                              <span className="font-mono font-semibold text-navy-900">{d.order?.orderNumber}</span>
+                              <span className="block text-xs text-muted">{money(d.order?.total || 0)}</span>
+                            </td>
+                            <td>
+                              <span className="font-medium text-navy-900">{d.order?.buyerName || d.buyerId}</span>
+                              <span className="block text-xs text-muted">{d.order?.buyerCompany}</span>
+                            </td>
+                            <td>
+                              <span className="font-semibold text-slate-800">{d.reason.replace(/_/g, ' ')}</span>
+                              <p className="mt-0.5 line-clamp-1 text-xs text-muted">{d.description}</p>
+                            </td>
+                            <td>
+                              <span className={`inline-flex rounded px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${
+                                d.status === 'OPEN'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : d.status === 'RESOLVED_REFUND'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-100 text-slate-800'
+                              }`}>
+                                {d.status}
+                              </span>
+                            </td>
+                            <td>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                icon={Scale}
+                                onClick={() => {
+                                  setSelectedDispute(d);
+                                  setMediationAction('APPROVE_FULL_REFUND');
+                                  setMediationNote('');
+                                  setPartialRefundAmt(String(d.order?.total || ''));
+                                }}
+                              >
+                                {d.status === 'OPEN' ? 'Mediate Claim' : 'View Decision'}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : tab === 'commission' ? (
             <div className="space-y-6">
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 {/* Global Default Commission Card */}
@@ -420,6 +714,162 @@ export default function AdminReports() {
 
       <Modal open={Boolean(selectedOrder)} onClose={() => setOpenOrder(null)} title="Order details" size="lg">
         {selectedOrder ? <OrderDetails order={selectedOrder} /> : null}
+      </Modal>
+
+      {/* Dispute Mediation Modal */}
+      <Modal
+        open={Boolean(selectedDispute)}
+        onClose={() => setSelectedDispute(null)}
+        title="Mediate Buyer Inspection Dispute"
+        description={`Order #${selectedDispute?.order?.orderNumber} · Claim: ${selectedDispute?.reason?.replace(/_/g, ' ')}`}
+        size="lg"
+      >
+        {selectedDispute && (
+          <form onSubmit={handleResolveDispute} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-xs sm:grid-cols-4">
+              <div>
+                <span className="text-muted block">Order Total</span>
+                <strong className="text-navy-900 text-sm">{money(selectedDispute.order?.total || 0)}</strong>
+              </div>
+              <div>
+                <span className="text-muted block">Buyer</span>
+                <strong className="text-navy-900 text-sm">{selectedDispute.order?.buyerName || selectedDispute.buyerId}</strong>
+              </div>
+              <div>
+                <span className="text-muted block">Supplier</span>
+                <strong className="text-navy-900 text-sm">{selectedDispute.order?.supplier?.company || selectedDispute.order?.supplier?.name || 'Verified Supplier'}</strong>
+              </div>
+              <div>
+                <span className="text-muted block">Current Status</span>
+                <strong className="text-navy-900 text-sm uppercase">{selectedDispute.status}</strong>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 p-4 text-xs">
+              <h5 className="font-bold text-navy-900 uppercase tracking-wider mb-1">Buyer Inspection Claim</h5>
+              <p className="text-slate-700 leading-relaxed">{selectedDispute.description}</p>
+              {selectedDispute.photoProof && (
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="font-semibold text-navy-900">Photo Proof:</span>
+                  <a
+                    href={selectedDispute.photoProof}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-brand-700 underline hover:text-brand-800"
+                  >
+                    Open Full Image Evidence <ExternalLink className="size-3" />
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {selectedDispute.status === 'OPEN' ? (
+              <div className="space-y-4 border-t border-slate-100 pt-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-2">
+                    Mediation Determination
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label className={`cursor-pointer rounded-xl border p-3 text-xs transition-colors ${
+                      mediationAction === 'APPROVE_FULL_REFUND' ? 'border-brand-600 bg-brand-50/50 font-bold text-brand-900' : 'border-slate-200'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="medAction"
+                        value="APPROVE_FULL_REFUND"
+                        checked={mediationAction === 'APPROVE_FULL_REFUND'}
+                        onChange={(e) => setMediationAction(e.target.value)}
+                        className="sr-only"
+                      />
+                      Approve Full Refund
+                      <span className="block text-[0.6875rem] font-normal text-muted mt-0.5">Refund 100% escrow to buyer</span>
+                    </label>
+
+                    <label className={`cursor-pointer rounded-xl border p-3 text-xs transition-colors ${
+                      mediationAction === 'APPROVE_PARTIAL_REFUND' ? 'border-brand-600 bg-brand-50/50 font-bold text-brand-900' : 'border-slate-200'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="medAction"
+                        value="APPROVE_PARTIAL_REFUND"
+                        checked={mediationAction === 'APPROVE_PARTIAL_REFUND'}
+                        onChange={(e) => setMediationAction(e.target.value)}
+                        className="sr-only"
+                      />
+                      Approve Partial Refund
+                      <span className="block text-[0.6875rem] font-normal text-muted mt-0.5">Custom refund amount, remainder to supplier</span>
+                    </label>
+
+                    <label className={`cursor-pointer rounded-xl border p-3 text-xs transition-colors ${
+                      mediationAction === 'REJECT' ? 'border-red-600 bg-red-50/50 font-bold text-red-900' : 'border-slate-200'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="medAction"
+                        value="REJECT"
+                        checked={mediationAction === 'REJECT'}
+                        onChange={(e) => setMediationAction(e.target.value)}
+                        className="sr-only"
+                      />
+                      Reject Dispute
+                      <span className="block text-[0.6875rem] font-normal text-muted mt-0.5">Deny claim, release escrow to supplier</span>
+                    </label>
+                  </div>
+                </div>
+
+                {mediationAction === 'APPROVE_PARTIAL_REFUND' && (
+                  <div>
+                    <label htmlFor="partialAmt" className="block text-xs font-semibold uppercase tracking-wider text-muted">
+                      Refund Amount to Buyer (₹)
+                    </label>
+                    <input
+                      id="partialAmt"
+                      type="number"
+                      min="1"
+                      max={selectedDispute.order?.total || 1000000}
+                      value={partialRefundAmt}
+                      onChange={(e) => setPartialRefundAmt(e.target.value)}
+                      className="ts-input mt-1"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label htmlFor="medNote" className="block text-xs font-semibold uppercase tracking-wider text-muted">
+                    Mediation Ruling & Explanation
+                  </label>
+                  <textarea
+                    id="medNote"
+                    rows={3}
+                    required
+                    placeholder="Enter ruling rationale for buyer and supplier records..."
+                    value={mediationNote}
+                    onChange={(e) => setMediationNote(e.target.value)}
+                    className="ts-input mt-1 text-xs"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3">
+                  <Button type="button" variant="outline" onClick={() => setSelectedDispute(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="primary" loading={resolvingDispute}>
+                    Record Ruling & Update Escrow
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-slate-50 p-4 text-xs text-slate-800">
+                <span className="font-bold">Ruling Recorded: </span>
+                {selectedDispute.resolution}
+                {selectedDispute.refundAmount > 0 && (
+                  <p className="mt-1 font-bold text-emerald-700">Refund Amount: {money(selectedDispute.refundAmount)}</p>
+                )}
+              </div>
+            )}
+          </form>
+        )}
       </Modal>
     </div>
   );

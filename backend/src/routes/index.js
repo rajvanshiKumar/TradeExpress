@@ -10,6 +10,10 @@ import uploadRoutes from './uploadRoutes.js';
 import supplierProductRoutes from './supplierProductRoutes.js';
 import supplierOrderRoutes from './supplierOrderRoutes.js';
 import adminRoutes from './adminRoutes.js';
+import rfqRoutes from './rfqRoutes.js';
+import escrowRoutes from './escrowRoutes.js';
+import disputeRoutes from './disputeRoutes.js';
+import reviewRoutes from './reviewRoutes.js';
 
 const router = Router();
 
@@ -24,6 +28,10 @@ router.use('/upload', uploadRoutes);
 router.use('/supplier/products', supplierProductRoutes);
 router.use('/supplier/orders', supplierOrderRoutes);
 router.use('/admin', adminRoutes);
+router.use('/rfq', rfqRoutes);
+router.use('/escrow', escrowRoutes);
+router.use('/disputes', disputeRoutes);
+router.use('/reviews', reviewRoutes);
 
 router.get('/health', (req, res) => {
   res.json({

@@ -1,6 +1,7 @@
 import prisma from '../config/db.js';
 import { generateOrderNumber } from '../utils/orderNumber.js';
 import { sendOrderConfirmationEmail } from './emailService.js';
+import { initiateEscrowForOrder } from './escrowService.js';
 
 export async function validateAndCalculateOrder({ lines, shippingMethod = 'standard' }) {
   if (!lines || !Array.isArray(lines) || lines.length === 0) {
@@ -285,6 +286,11 @@ export async function createOrder({
     return created;
   });
 
+  // Automatically initialize escrow ledger entry for wholesale order
+  initiateEscrowForOrder(order.id).catch((err) => {
+    console.error('[TradeSphere Escrow] Escrow init note:', err.message);
+  });
+
   // If COD, send confirmation email immediately since order is confirmed
   if (isCod) {
     sendOrderConfirmationEmail(order).catch((err) => {
@@ -304,6 +310,14 @@ export async function getOrderByIdOrNumber(identifier, userId = null) {
       items: true,
       payments: true,
       statusHistory: { orderBy: { createdAt: 'desc' } },
+      escrowLedger: true,
+      dispute: {
+        include: { messages: { orderBy: { createdAt: 'asc' } } },
+      },
+      review: true,
+      supplier: {
+        select: { id: true, name: true, company: true, email: true },
+      },
     },
   });
 
@@ -422,6 +436,13 @@ function formatOrder(order) {
     total: Number(order.total),
     advanceAmount: Number(order.advanceAmount || 0),
     balanceDue: Number(order.balanceDue || 0),
+    escrowLedger: order.escrowLedger ? {
+      ...order.escrowLedger,
+      amountHeld: Number(order.escrowLedger.amountHeld),
+      commissionRate: Number(order.escrowLedger.commissionRate),
+      commissionFee: Number(order.escrowLedger.commissionFee),
+      payoutAmount: Number(order.escrowLedger.payoutAmount),
+    } : null,
     items: (order.items || []).map((item) => ({
       ...item,
       unitPrice: Number(item.unitPrice),

@@ -17,6 +17,9 @@ export async function getOrderTracking({ orderNumber, email, userId }) {
     include: {
       items: true,
       statusHistory: { orderBy: { createdAt: 'asc' } },
+      escrowLedger: true,
+      dispute: { include: { messages: { orderBy: { createdAt: 'asc' } } } },
+      review: true,
     },
   });
 
@@ -90,6 +93,15 @@ export async function getOrderTracking({ orderNumber, email, userId }) {
       tax: Number(order.tax),
       total: Number(order.total),
     },
+    escrowLedger: order.escrowLedger ? {
+      ...order.escrowLedger,
+      amountHeld: Number(order.escrowLedger.amountHeld),
+      commissionRate: Number(order.escrowLedger.commissionRate),
+      commissionFee: Number(order.escrowLedger.commissionFee),
+      payoutAmount: Number(order.escrowLedger.payoutAmount),
+    } : null,
+    dispute: order.dispute || null,
+    review: order.review || null,
   };
 }
 
