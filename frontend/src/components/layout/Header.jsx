@@ -142,10 +142,10 @@ export default function Header() {
               .filter((item) => !item.highlight)
               .map((item) => {
                 const active = isActive(item.to, location);
-                const pillClass = `relative inline-flex h-10 items-center whitespace-nowrap rounded-full px-3.5 text-sm font-semibold transition-all ${
+                const pillClass = `relative inline-flex h-10 items-center whitespace-nowrap rounded-full px-3.5 text-sm font-medium transition-all ${
                   active
-                    ? "bg-navy-900 text-white shadow-xs"
-                    : "text-navy-800 hover:bg-navy-100/80 hover:text-navy-950"
+                    ? "bg-navy-900/[0.08] text-navy-900 font-semibold ring-1 ring-navy-900/10"
+                    : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-900"
                 }`;
 
                 if (item.megaMenu) {
@@ -157,10 +157,10 @@ export default function Header() {
                     >
                       <Link
                         to={item.to}
-                        className={`relative inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm font-semibold transition-all ${
+                        className={`relative inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm font-medium transition-all ${
                           active || megaOpen
-                            ? "bg-navy-900 text-white shadow-xs"
-                            : "text-navy-800 hover:bg-navy-100/80 hover:text-navy-950"
+                            ? "bg-navy-900/[0.08] text-navy-900 font-semibold ring-1 ring-navy-900/10"
+                            : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-900"
                         }`}
                         aria-current={active ? "page" : undefined}
                       >
