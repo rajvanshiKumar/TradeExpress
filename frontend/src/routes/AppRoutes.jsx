@@ -74,6 +74,7 @@ export default function AppRoutes() {
         <Route path="/info/:slug" element={<Info />} />
         <Route path="/track" element={<OrderTracking />} />
         <Route path="/track/:orderNumber" element={<OrderTracking />} />
+        <Route path="/compare-quotes" element={<QuoteComparison />} />
         <Route path="/compare-quotes/:rfqId" element={<QuoteComparison />} />
 
         {/* Signed-in pages that keep the marketplace layout */}
@@ -95,6 +96,7 @@ export default function AppRoutes() {
             <Route path="/buyer" element={<BuyerDashboard />} />
             <Route path="/buyer/orders" element={<BuyerOrders />} />
             <Route path="/buyer/quotes" element={<BuyerQuotes />} />
+            <Route path="/buyer/quotes/compare" element={<QuoteComparison />} />
             <Route path="/buyer/quotes/compare/:rfqId" element={<QuoteComparison />} />
             <Route path="/buyer/wishlist" element={<BuyerWishlist />} />
             <Route path="/buyer/addresses" element={<BuyerAddresses />} />

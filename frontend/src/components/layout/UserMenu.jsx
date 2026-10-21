@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, LayoutDashboard, LogOut, MessageSquare, Package, UserRound } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, LogOut, MessageSquare, Package, Scale, UserRound } from 'lucide-react';
 import Dropdown from '../common/Dropdown';
 import Button from '../common/Button';
 import useAuth from '../../hooks/useAuth';
@@ -71,6 +71,7 @@ export default function UserMenu() {
           </div>
           <Link to={ROLE_HOME[user.role]} onClick={close} className={item}><LayoutDashboard className="size-4 text-muted" aria-hidden="true" />Dashboard</Link>
           <Link to={ordersPathFor(user)} onClick={close} className={item}><Package className="size-4 text-muted" aria-hidden="true" />{user.role === 'admin' ? 'Reports' : 'Orders'}</Link>
+          {user.role === 'buyer' ? <Link to="/buyer/quotes/compare" onClick={close} className={item}><Scale className="size-4 text-muted" aria-hidden="true" />Smart Quote Comparison</Link> : null}
           <Link to="/messages" onClick={close} className={item}><MessageSquare className="size-4 text-muted" aria-hidden="true" />Messages</Link>
           {user.role === 'buyer' ? <Link to="/buyer/profile" onClick={close} className={item}><UserRound className="size-4 text-muted" aria-hidden="true" />Profile & settings</Link> : null}
           <button type="button" onClick={() => signOut(close)} className={`${item} border-t text-danger`}><LogOut className="size-4" aria-hidden="true" />Sign out</button>

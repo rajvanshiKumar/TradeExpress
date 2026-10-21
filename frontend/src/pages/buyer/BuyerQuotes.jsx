@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FileText, Plus } from 'lucide-react';
+import { FileText, Plus, Scale } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Button from '../../components/common/Button';
 import Tabs, { TabPanel } from '../../components/common/Tabs';
@@ -33,7 +33,20 @@ export default function BuyerQuotes() {
 
   return (
     <div>
-      <SectionHeading title="Quotes" description="Quote requests you have submitted and their current status." actions={<Button to="/rfq" size="sm" icon={Plus}>New request</Button>} />
+      <SectionHeading
+        title="Quotes"
+        description="Quote requests you have submitted and their current status."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button to="/buyer/quotes/compare" variant="outline" size="sm" icon={Scale}>
+              Smart Comparison
+            </Button>
+            <Button to="/rfq" size="sm" icon={Plus}>
+              New request
+            </Button>
+          </div>
+        }
+      />
       {error ? <div className="ts-card"><ErrorState text={error} onRetry={reload} /></div> : loading ? <div className="ts-card"><TableSkeleton /></div> : mine.length === 0 ? (
         <div className="ts-card"><EmptyState icon={FileText} title="No quote requests yet" text="Send a request to a supplier and follow its status here." action={<Button to="/rfq" variant="navy">Request a Quote</Button>} /></div>
       ) : (

@@ -65,6 +65,8 @@ export default function QuoteComparison() {
   useDocumentTitle('Smart Quote Comparison');
 
   const [comparisonData, setComparisonData] = useState(null);
+  const [rfqList, setRfqList] = useState([]);
+  const [activeRfqId, setActiveRfqId] = useState(rfqId || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -91,12 +93,54 @@ export default function QuoteComparison() {
   const [historyModalQuote, setHistoryModalQuote] = useState(null);
 
   // Fetch comparison data from backend or fallback to local
-  const loadComparison = async () => {
+  const loadComparison = async (targetIdOverride) => {
     setLoading(true);
     setError(null);
+
+    // 1. Fetch available RFQs if not already loaded
+    let available = rfqList;
+    if (available.length === 0) {
+      try {
+        if (isApiConfigured) {
+          const rfqsRes = await apiGet('rfq?scope=buyer');
+          if (rfqsRes && rfqsRes.success && Array.isArray(rfqsRes.data)) {
+            available = rfqsRes.data;
+            setRfqList(available);
+          }
+        }
+      } catch (err) {
+        console.warn('[TradeSphere] Could not list RFQs:', err.message);
+      }
+
+      if (available.length === 0 && inquiries?.length > 0) {
+        const localList = inquiries.map((inq) => ({
+          id: inq.id,
+          rfqNumber: inq.id,
+          title: inq.productName || 'Quote Request',
+          quantity: inq.quantity || 1,
+          unit: inq.unit || 'piece',
+          status: inq.status || 'OPEN',
+          createdAt: inq.createdAt,
+          hasQuote: Boolean(inq.quote),
+        }));
+        available = localList;
+        setRfqList(localList);
+      }
+    }
+
+    const currentId = targetIdOverride || rfqId || activeRfqId || (available.length > 0 ? available[0].id : null);
+
+    if (!currentId) {
+      setComparisonData(null);
+      setLoading(false);
+      return;
+    }
+
+    setActiveRfqId(currentId);
+
     try {
       if (isApiConfigured) {
-        const res = await apiGet(`rfq/${encodeURIComponent(rfqId)}/comparison`);
+        const res = await apiGet(`rfq/${encodeURIComponent(currentId)}/comparison`);
         if (res && res.success && res.data) {
           setComparisonData(res.data);
           if (res.data.rfq?.savedComparison?.shortlistedQuoteIds) {
@@ -117,7 +161,7 @@ export default function QuoteComparison() {
     }
 
     // Fallback: build comparison from local InquiryContext
-    const localInquiry = inquiries.find((i) => i.id === rfqId);
+    const localInquiry = inquiries.find((i) => i.id === currentId);
     if (localInquiry) {
       const q = localInquiry.quote;
       const company = localInquiry.companyId ? getCompany(localInquiry.companyId) : null;
@@ -219,12 +263,12 @@ export default function QuoteComparison() {
       return;
     }
 
-    setError(`Quotation comparison for RFQ '${rfqId}' could not be loaded.`);
+    setError(`Quotation comparison for RFQ '${currentId || 'unknown'}' could not be loaded.`);
     setLoading(false);
   };
 
   useEffect(() => {
-    loadComparison();
+    loadComparison(rfqId);
   }, [rfqId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter & Sort quotations
@@ -265,10 +309,11 @@ export default function QuoteComparison() {
   };
 
   const handleSavePreferences = async () => {
+    const targetRfqId = comparisonData?.rfq?.id || activeRfqId || rfqId;
     setSavingPreferences(true);
     try {
-      if (isApiConfigured) {
-        await apiPut(`rfq/${encodeURIComponent(rfqId)}/comparison`, {
+      if (isApiConfigured && targetRfqId) {
+        await apiPut(`rfq/${encodeURIComponent(targetRfqId)}/comparison`, {
           shortlistedQuoteIds: Array.from(shortlistedQuoteIds),
           preferredSort: sortBy,
           buyerNotes,
@@ -286,11 +331,14 @@ export default function QuoteComparison() {
 
   // Accept quote
   const handleAcceptQuote = async (quote) => {
+    const targetRfqId = comparisonData?.rfq?.id || activeRfqId || rfqId;
     try {
       if (isApiConfigured) {
         await apiPost(`rfq/quotes/${encodeURIComponent(quote.id)}/accept`);
       }
-      acceptInquiryQuote(rfqId);
+      if (targetRfqId) {
+        acceptInquiryQuote(targetRfqId);
+      }
 
       // Add to cart at negotiated price
       const rfq = comparisonData?.rfq;
@@ -331,6 +379,7 @@ export default function QuoteComparison() {
       return;
     }
 
+    const targetRfqId = comparisonData?.rfq?.id || activeRfqId || rfqId;
     setSubmittingCounter(true);
     try {
       if (isApiConfigured) {
@@ -340,8 +389,8 @@ export default function QuoteComparison() {
           notes: counterNotes.trim(),
           role: 'BUYER',
         });
-      } else {
-        counterInquiry(rfqId, {
+      } else if (targetRfqId) {
+        counterInquiry(targetRfqId, {
           unitPrice: Number(counterUnitPrice),
           leadTimeDays: Number(counterLeadTime || 14),
           note: counterNotes.trim(),
@@ -351,7 +400,7 @@ export default function QuoteComparison() {
 
       showToast(`Counter-offer sent to ${counterTargetQuote.supplier.company}!`, 'success');
       setCounterModalOpen(false);
-      loadComparison();
+      loadComparison(targetRfqId);
     } catch (err) {
       showToast(err.message || 'Failed to send counter-offer.', 'error');
     } finally {
@@ -367,11 +416,35 @@ export default function QuoteComparison() {
     );
   }
 
-  if (error || !comparisonData) {
+  if (error && !comparisonData) {
     return (
       <div className="ts-container py-8">
         <div className="ts-card">
-          <ErrorState text={error || 'Quotation comparison not available.'} onRetry={loadComparison} />
+          <ErrorState text={error} onRetry={() => loadComparison(activeRfqId)} />
+        </div>
+      </div>
+    );
+  }
+
+  if (!comparisonData) {
+    return (
+      <div className="ts-container py-12">
+        <div className="ts-card p-10 text-center max-w-2xl mx-auto rounded-3xl shadow-sm border border-navy-100 bg-white">
+          <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 mb-4">
+            <Scale className="size-8" />
+          </div>
+          <h2 className="text-2xl font-black text-navy-900">Smart Quote Comparison</h2>
+          <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+            Compare quotations from multiple verified suppliers side-by-side with full landed cost calculations (effective unit price, GST, freight, and custom charges), delivery lead times, and 3-round counter-offer negotiation.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Button to="/products" variant="navy" icon={Package}>
+              Explore Products & Suppliers
+            </Button>
+            <Button to="/rfq" variant="outline" icon={Send}>
+              Submit a Quote Request (RFQ)
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -383,20 +456,43 @@ export default function QuoteComparison() {
   return (
     <div className="ts-container py-6 sm:py-8">
       {/* Top Navigation */}
-      <div className="mb-4 flex items-center justify-between">
-        <Link
-          to="/buyer/quotes"
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-navy-700 hover:text-brand-600 transition-colors"
-        >
-          <ArrowLeft className="size-4" /> Back to My Quotes
-        </Link>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-4">
+          <Link
+            to="/buyer/quotes"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-navy-700 hover:text-brand-600 transition-colors"
+          >
+            <ArrowLeft className="size-4" /> Back to My Quotes
+          </Link>
+
+          {rfqList.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-navy-700">Compare RFQ:</span>
+              <select
+                value={rfq.id}
+                onChange={(e) => {
+                  const newId = e.target.value;
+                  navigate(`/buyer/quotes/compare/${newId}`);
+                  loadComparison(newId);
+                }}
+                className="ts-input !py-1 !px-2.5 !text-xs font-semibold max-w-[280px] truncate"
+              >
+                {rfqList.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    #{item.rfqNumber || item.id.slice(0, 8)}: {item.title || item.productName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
           <Button
             size="sm"
             variant="outline"
             icon={RotateCcw}
-            onClick={loadComparison}
+            onClick={() => loadComparison(activeRfqId || rfq.id)}
             className="!text-xs"
           >
             Refresh
