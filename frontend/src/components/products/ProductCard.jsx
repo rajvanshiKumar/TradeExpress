@@ -113,6 +113,16 @@ export default function ProductCard({ product, layout = 'grid' }) {
         <Rating value={product.rating} count={product.reviewCount} className="mb-1.5 mt-2" />
         <Availability product={product} />
 
+        {product.specifications && Object.keys(product.specifications).length > 0 ? (
+          <div className="mt-1.5 flex flex-wrap gap-1 text-[11px] text-muted">
+            {Object.entries(product.specifications).slice(0, 2).map(([key, val]) => (
+              <span key={key} className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 font-medium text-slate-700">
+                {key}: {Array.isArray(val) ? val.join(', ') : String(val)}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
         <div className="mt-3 flex items-end justify-between gap-3">
           <div className="min-w-0">
             <PriceRange product={product} />

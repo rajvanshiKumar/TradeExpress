@@ -134,6 +134,7 @@ export default function ProductFilters({ filters, onChange, categories, countrie
 
       <Group title="Delivery & availability">
         <div className="space-y-2">
+          <Checkbox id={`${idPrefix}-verified`} label="Verified suppliers only" description="KYC & identity verified factories" checked={filters.verifiedOnly} onChange={(value) => onChange({ verifiedOnly: value })} />
           <Checkbox id={`${idPrefix}-ready`} label="Ready to ship" description="Dispatches from stock in days" checked={filters.ready} onChange={(value) => onChange({ ready: value })} />
           <Checkbox id={`${idPrefix}-stock`} label="In stock" checked={filters.inStock} onChange={(value) => onChange({ inStock: value })} />
           <Checkbox id={`${idPrefix}-sample`} label="Sample available" checked={filters.sample} onChange={(value) => onChange({ sample: value })} />

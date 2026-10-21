@@ -18,6 +18,8 @@ router.post(
 );
 
 router.get('/:id', optionalAuth, rfqController.getRfq);
+router.get('/:id/comparison', optionalAuth, rfqController.getRfqComparison);
+router.put('/:id/comparison', authenticateJWT, rfqController.saveComparison);
 
 router.post(
   '/:id/quote',

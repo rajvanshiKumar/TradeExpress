@@ -2,8 +2,36 @@ import * as productService from '../services/productService.js';
 
 export async function getProducts(req, res, next) {
   try {
-    const { category, search, sort, page, limit } = req.query;
-    const result = await productService.listProducts({ category, search, sort, page, limit });
+    const {
+      category,
+      search,
+      minPrice,
+      maxPrice,
+      maxMoq,
+      readyToShip,
+      sampleAvailable,
+      isNew,
+      deal,
+      verifiedOnly,
+      sort,
+      page,
+      limit,
+    } = req.query;
+    const result = await productService.listProducts({
+      category,
+      search,
+      minPrice,
+      maxPrice,
+      maxMoq,
+      readyToShip,
+      sampleAvailable,
+      isNew,
+      deal,
+      verifiedOnly,
+      sort,
+      page,
+      limit,
+    });
     res.json({
       success: true,
       data: result.products,
@@ -12,6 +40,18 @@ export async function getProducts(req, res, next) {
         page: result.page,
         totalPages: result.totalPages,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getProductSuppliers(req, res, next) {
+  try {
+    const result = await productService.getProductSuppliers(req.params.slug);
+    res.json({
+      success: true,
+      data: result,
     });
   } catch (error) {
     next(error);
@@ -41,3 +81,4 @@ export async function getProductById(req, res, next) {
     next(error);
   }
 }
+

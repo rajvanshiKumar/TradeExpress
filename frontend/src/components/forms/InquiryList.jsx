@@ -6,6 +6,7 @@ import {
   Clock,
   History,
   MessageSquare,
+  Scale,
   Send,
   ShoppingCart,
   XCircle,
@@ -285,6 +286,14 @@ export default function InquiryList({ inquiries }) {
                           Counter-Offer (Round {currentRound + 1} of 3)
                         </Button>
                       )}
+
+                      <Button
+                        to={`/buyer/quotes/compare/${inquiry.id}`}
+                        variant="outline"
+                        icon={Scale}
+                      >
+                        Smart Comparison
+                      </Button>
 
                       <Button
                         variant="ghost"

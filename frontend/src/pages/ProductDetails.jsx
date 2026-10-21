@@ -20,6 +20,7 @@ import BuyNowButton from '../components/products/BuyNowButton';
 import VerificationBadge from '../components/common/VerificationBadge';
 import SupplierGrid from '../components/suppliers/SupplierGrid';
 import InquiryForm from '../components/forms/InquiryForm';
+import ProductSupplierListing from '../components/products/ProductSupplierListing';
 import useProducts from '../hooks/useProducts';
 import useCart from '../hooks/useCart';
 import useCurrency from '../hooks/useCurrency';
@@ -414,7 +415,10 @@ export default function ProductDetails() {
         ) : null}
       </div>
 
-      <section aria-labelledby="inquiry-title" className="ts-card mt-8 p-5 sm:p-7">
+      {/* Relevant Suppliers Offering This Product */}
+      <ProductSupplierListing product={product} />
+
+      <section aria-labelledby="inquiry-title" className="ts-card mt-12 p-5 sm:p-7">
         <h2 id="inquiry-title" className="text-xl font-extrabold">Send an inquiry</h2>
         <p className="mb-5 mt-1 text-sm text-muted">Ask for a quote on your exact quantity and specifications.</p>
         <InquiryForm product={product} idPrefix="pd-rfq-" />

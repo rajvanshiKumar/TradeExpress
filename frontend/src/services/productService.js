@@ -77,7 +77,8 @@ export function filterProducts(products, companies, filters = {}) {
     const company = companyById.get(product.companyId);
     if (company && company.status === 'Suspended') return false;
     if (q) {
-      const haystack = `${product.name} ${product.summary} ${product.subcategory} ${product.category} ${company?.name ?? ''}`.toLowerCase();
+      const specsString = product.specifications ? JSON.stringify(product.specifications).toLowerCase() : '';
+      const haystack = `${product.name} ${product.summary || ''} ${product.description || ''} ${product.subcategory || ''} ${product.category || ''} ${company?.name ?? ''} ${specsString}`.toLowerCase();
       if (!q.split(/\s+/).every((word) => haystack.includes(word))) return false;
     }
     if (filters.category && product.category !== filters.category) return false;
@@ -95,6 +96,10 @@ export function filterProducts(products, companies, filters = {}) {
     if (filters.inStock && product.stock <= 0) return false;
     if (filters.deal && !product.deal) return false;
     if (filters.isNew && !product.isNew) return false;
+    if (filters.verifiedOnly) {
+      const isVer = Boolean(company?.isVerified || company?.kycStatus === 'VERIFIED' || company?.verification?.status === 'reviewed');
+      if (!isVer) return false;
+    }
     return true;
   });
 

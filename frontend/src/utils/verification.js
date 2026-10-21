@@ -17,8 +17,18 @@ export const DOCUMENT_TYPES = [
 ];
 
 export function getVerification(company) {
+  if (company?.isVerified || company?.kycStatus === 'VERIFIED') {
+    return {
+      status: 'reviewed',
+      label: 'Verified Supplier',
+      tone: 'verified',
+      description: 'Business identity and KYC documents verified by TradeSphere.',
+      documents: company?.kycDocuments || [],
+    };
+  }
   const verification = company?.verification ?? { status: 'not-submitted', documents: [] };
   return { ...verification, ...(VERIFICATION[verification.status] ?? VERIFICATION['not-submitted']) };
 }
 
-export const isReviewed = (company) => company?.verification?.status === 'reviewed';
+export const isReviewed = (company) => Boolean(company?.isVerified || company?.kycStatus === 'VERIFIED' || company?.verification?.status === 'reviewed');
+

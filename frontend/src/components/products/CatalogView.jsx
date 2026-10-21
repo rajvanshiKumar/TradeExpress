@@ -31,6 +31,7 @@ function buildChips(filters, categories, lockedCategory) {
   if (filters.sample) add('Sample available', { sample: false });
   if (filters.deal) add('Wholesale deals', { deal: false });
   if (filters.isNew) add('New arrivals', { isNew: false });
+  if (filters.verifiedOnly) add('Verified suppliers only', { verifiedOnly: false });
   return chips;
 }
 

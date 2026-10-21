@@ -126,3 +126,29 @@ export async function rejectQuote(req, res, next) {
     next(error);
   }
 }
+
+export async function getRfqComparison(req, res, next) {
+  try {
+    const comparison = await rfqService.getRfqComparison(req.params.id, req.user);
+    res.json({
+      success: true,
+      data: comparison,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function saveComparison(req, res, next) {
+  try {
+    const saved = await rfqService.saveComparisonPreferences(req.params.id, req.user?.id, req.body);
+    res.json({
+      success: true,
+      message: 'Comparison preferences saved.',
+      data: saved,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
