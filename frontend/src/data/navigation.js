@@ -6,6 +6,7 @@ export const mainNav = [
   { label: 'Find Suppliers', to: '/suppliers' },
   { label: 'Exporters', to: '/exporters' },
   { label: 'Request For Quotation', to: '/rfq' },
+  { label: 'Compare Quotes', to: '/compare-quotes' },
   { label: 'Help', to: '/help' },
   { label: 'About Us', to: '/info/about' },
   { label: 'Become a Supplier', to: '/register?role=supplier', highlight: true },

@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, Heart, LayoutDashboard, LogOut, MessageSquare, Package } from 'lucide-react';
+import { ChevronDown, Heart, LayoutDashboard, LogOut, MessageSquare, Package, Scale } from 'lucide-react';
 import Drawer from '../common/Drawer';
 import Button from '../common/Button';
 import { PreferenceFields } from './PreferencesMenu';
-import { ordersPathFor } from './UserMenu';
 import useAuth from '../../hooks/useAuth';
 import useProducts from '../../hooks/useProducts';
 import useMessages from '../../hooks/useMessages';
 import useWishlist from '../../hooks/useWishlist';
 import { mainNav, quickLinks } from '../../data/navigation';
-import { ROLE_HOME } from '../../utils/constants';
+import { ordersPathFor, ROLE_HOME } from '../../utils/constants';
 
 export default function MobileMenu({ open, onClose }) {
   const { user, logout } = useAuth();
@@ -72,6 +71,14 @@ export default function MobileMenu({ open, onClose }) {
         </ul>
 
         <ul className="mt-2 divide-y border-t">
+          <li>
+            <Link to="/compare-quotes" onClick={onClose} className={row}>
+              <span className="flex items-center gap-2.5">
+                <Scale className="size-4 text-brand-600" aria-hidden="true" />
+                Smart Quote Comparison
+              </span>
+            </Link>
+          </li>
           <li><Link to="/messages" onClick={onClose} className={row}><span className="flex items-center gap-2.5"><MessageSquare className="size-4 text-muted" aria-hidden="true" />Messages</span>{unreadCount ? <span className="rounded-full bg-brand-500 px-2 text-xs font-bold text-navy-900">{unreadCount}</span> : null}</Link></li>
           <li><Link to={ordersPathFor(user)} onClick={onClose} className={row}><span className="flex items-center gap-2.5"><Package className="size-4 text-muted" aria-hidden="true" />Orders</span></Link></li>
           <li><Link to="/wishlist" onClick={onClose} className={row}><span className="flex items-center gap-2.5"><Heart className="size-4 text-muted" aria-hidden="true" />Saved products</span>{wishlistCount ? <span className="rounded-full bg-navy-50 px-2 text-xs font-bold text-navy-900">{wishlistCount}</span> : null}</Link></li>

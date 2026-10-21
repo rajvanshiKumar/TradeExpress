@@ -118,6 +118,7 @@ export const SIMULATED_DELAY_MS = 0;
 
 export const ROLES = { buyer: 'buyer', supplier: 'supplier', admin: 'admin' };
 export const ROLE_HOME = { buyer: '/buyer', supplier: '/supplier', admin: '/admin' };
+export const ordersPathFor = (user) => (!user ? '/buyer/orders' : user.role === 'supplier' ? '/supplier/orders' : user.role === 'admin' ? '/admin/reports' : '/buyer/orders');
 
 // A product is flagged as "low stock" when fewer than this many minimum orders are left.
 export const LOW_STOCK_FACTOR = 2;

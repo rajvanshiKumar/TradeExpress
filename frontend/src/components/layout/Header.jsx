@@ -5,6 +5,7 @@ import {
   Heart,
   Menu,
   MessageSquare,
+  Scale,
   Search,
   ShoppingCart,
   X,
@@ -145,8 +146,9 @@ export default function Header() {
               .map((item) => {
                 const active = isActive(item.to, location);
                 const isAbout = item.to === "/info/about";
+                const isHelp = item.to === "/help";
                 const pillClass = `relative inline-flex h-8.5 xl:h-9 items-center whitespace-nowrap rounded-full px-2 xl:px-2.5 2xl:px-2.5 text-xs xl:text-[13px] font-medium transition-all ${
-                  isAbout ? "hidden 2xl:inline-flex " : ""
+                  isAbout || isHelp ? "hidden 2xl:inline-flex " : ""
                 }${
                   active
                     ? "bg-navy-900/[0.08] text-navy-900 font-semibold ring-1 ring-navy-900/10"
@@ -161,6 +163,16 @@ export default function Header() {
                         <span className="hidden xl:inline min-[1680px]:hidden">Request Quote</span>
                         <span className="xl:hidden">RFQ</span>
                       </>
+                    );
+                  }
+                  if (label === "Compare Quotes" || label === "Smart Quote Comparison") {
+                    return (
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-brand-600">
+                        <Scale className="size-3.5 text-brand-600 shrink-0" aria-hidden="true" />
+                        <span className="hidden min-[1680px]:inline">Compare Quotes</span>
+                        <span className="hidden xl:inline min-[1680px]:hidden">Compare Quotes</span>
+                        <span className="xl:hidden">Compare</span>
+                      </span>
                     );
                   }
                   if (label === "Find Suppliers") {
@@ -255,6 +267,12 @@ export default function Header() {
               className="hidden xl:inline-flex"
             />
             <NotificationsMenu />
+            <IconLink
+              to="/compare-quotes"
+              icon={Scale}
+              label="Smart Quote Comparison"
+              className="inline-flex text-navy-800 hover:text-brand-600"
+            />
             <IconLink
               to="/wishlist"
               icon={Heart}

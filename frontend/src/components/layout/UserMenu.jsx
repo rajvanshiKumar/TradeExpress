@@ -4,9 +4,7 @@ import Dropdown from '../common/Dropdown';
 import Button from '../common/Button';
 import useAuth from '../../hooks/useAuth';
 import useNotifications from '../../hooks/useNotifications';
-import { ROLE_HOME } from '../../utils/constants';
-
-export const ordersPathFor = (user) => (!user ? '/buyer/orders' : user.role === 'supplier' ? '/supplier/orders' : user.role === 'admin' ? '/admin/reports' : '/buyer/orders');
+import { ordersPathFor, ROLE_HOME } from '../../utils/constants';
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
