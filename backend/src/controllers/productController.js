@@ -58,6 +58,19 @@ export async function getProductSuppliers(req, res, next) {
   }
 }
 
+export async function compareProductSuppliers(req, res, next) {
+  try {
+    const supplierIds = req.body?.supplierIds || (req.query?.supplierIds ? req.query.supplierIds.split(',') : []);
+    const result = await productService.compareProductSuppliers(req.params.slug, supplierIds);
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getProductBySlug(req, res, next) {
   try {
     const product = await productService.getProductBySlug(req.params.slug);

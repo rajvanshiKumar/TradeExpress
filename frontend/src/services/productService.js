@@ -13,11 +13,12 @@ const categories = createCollection(STORAGE_KEYS.categories, seedCategories);
 const REMOTE_PRODUCTS_PATH = (import.meta.env.VITE_PUBLIC_API_PRODUCTS_PATH ?? '').trim();
 
 async function fetchRemoteProducts() {
-  const data = await apiGet(REMOTE_PRODUCTS_PATH);
-  if (!Array.isArray(data) || !data.every((item) => item && item.id && item.name && item.slug)) {
+  const res = await apiGet(`${REMOTE_PRODUCTS_PATH}?limit=100`);
+  const items = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+  if (!Array.isArray(items) || items.length === 0 || !items.every((item) => item && item.id && item.name && item.slug)) {
     throw new Error('The public API did not return products in the expected format.');
   }
-  return data;
+  return items;
 }
 
 const productService = {

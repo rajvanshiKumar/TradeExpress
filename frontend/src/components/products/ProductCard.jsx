@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, FileText, Heart, Layers, Plus, Zap } from 'lucide-react';
+import { ArrowUpRight, FileText, Heart, Layers, Plus, Scale, ShieldCheck, Users, Zap } from 'lucide-react';
 import Image from '../common/Image';
 import Rating from '../common/Rating';
 import VerificationBadge from '../common/VerificationBadge';
@@ -79,6 +79,11 @@ export default function ProductCard({ product, layout = 'grid' }) {
   const outOfStock = product.stock <= 0;
   const bestTier = [...(product.priceTiers ?? [])].sort((a, b) => b.minQty - a.minQty)[0];
 
+  const supplierName = product.supplier?.company || product.supplier?.name || company?.name;
+  const supplierSlug = company?.slug || (supplierName ? supplierName.toLowerCase().replace(/[^a-z0-9]+/g, '-') : '');
+  const isVerified = Boolean(product.supplier?.isVerified || company?.verification?.status === 'reviewed');
+  const supplierCount = product.supplierCount || (product.supplier ? 1 : 0);
+
   return (
     <article className={`group relative flex overflow-hidden rounded-[1.75rem] bg-white p-2 shadow-card ring-1 ring-navy-900/[0.05] transition-all duration-300 hover:-translate-y-1 hover:shadow-lift ${isList ? 'flex-col sm:flex-row' : 'flex-col'}`}>
       <div className={`ts-photo-stage relative shrink-0 overflow-hidden rounded-[1.35rem] ${isList ? 'sm:w-64' : ''}`}>
@@ -90,21 +95,39 @@ export default function ProductCard({ product, layout = 'grid' }) {
         </Link>
         <div className="absolute left-3 top-3"><StatusChip product={product} /></div>
         <WishlistButton product={product} className="absolute right-3 top-3" />
-        {company ? (
+        {company || product.supplier ? (
           <span className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-[0.6875rem] font-semibold text-navy-900 shadow-sm backdrop-blur">
-            <span aria-hidden="true">{company.flag}</span><span className="sr-only">Origin: </span>{company.country}
+            <span aria-hidden="true">{company?.flag || '🇮🇳'}</span><span className="sr-only">Origin: </span>{product.supplier?.country || company?.country || 'India'}
           </span>
         ) : null}
         {outOfStock ? <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 bg-navy-950/80 py-1.5 text-center text-xs font-semibold text-white">Out of stock</span> : null}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col px-2.5 pb-2.5 pt-3.5 sm:px-3.5">
-        {company ? (
-          <p className="flex min-w-0 items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-muted">
-            <Link to={`/suppliers/${company.slug}`} className="truncate hover:text-brand-600">{company.name}</Link>
-            <VerificationBadge company={company} iconOnly />
-          </p>
-        ) : null}
+        <div className="flex items-center justify-between gap-1.5">
+          {supplierName ? (
+            <p className="flex min-w-0 items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-muted truncate">
+              <Link to={`/suppliers/${supplierSlug}`} className="truncate hover:text-brand-600">{supplierName}</Link>
+              {isVerified && (
+                <span title="TradeSphere Verified Supplier" className="inline-flex items-center text-emerald-600">
+                  <ShieldCheck className="size-3.5" />
+                </span>
+              )}
+            </p>
+          ) : <span />}
+
+          {supplierCount > 1 && (
+            <Link
+              to={`${href}#suppliers-listing`}
+              className="inline-flex items-center gap-1 shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[0.6875rem] font-bold text-brand-700 hover:bg-brand-100 transition-colors border border-brand-200/60"
+              title={`Compare ${supplierCount} TradeSphere suppliers offering this product`}
+            >
+              <Scale className="size-3 text-brand-600" />
+              {supplierCount} Suppliers
+            </Link>
+          )}
+        </div>
+
         <h3 className="mt-1.5 line-clamp-2 min-h-[2.7em] font-display text-[1rem] font-bold leading-snug tracking-[-0.01em] text-navy-900">
           <Link to={href} className="transition-colors hover:text-brand-600">{product.name}</Link>
         </h3>
@@ -141,7 +164,14 @@ export default function ProductCard({ product, layout = 'grid' }) {
           <BuyNowButton product={product} className="w-full !px-3" />
           <div className="mt-3 flex items-center justify-between gap-2 border-t border-navy-900/[0.06] pt-3 text-[0.8125rem] font-semibold">
             <Link to={href} className="inline-flex items-center gap-1 text-navy-900 hover:text-brand-600">View product <ArrowUpRight className="size-3.5" aria-hidden="true" /></Link>
-            <Link to={`/rfq?product=${product.id}`} aria-label={`Request a quote for ${product.name}`} className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700"><FileText className="size-3.5" aria-hidden="true" />Request quote</Link>
+            <Link
+              to={`${href}#suppliers-listing`}
+              aria-label={`Compare TradeSphere suppliers for ${product.name}`}
+              className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700"
+            >
+              <Scale className="size-3.5" aria-hidden="true" />
+              {supplierCount > 1 ? `Compare ${supplierCount} Suppliers` : 'Compare Offers'}
+            </Link>
           </div>
         </div>
       </div>
