@@ -68,7 +68,7 @@ const rows = [
   ['Cotton Bed Linen Set', 8, 'home-kitchen', 'Bedding', 1040, 'set', 100, 8000, 22, 'D', 'photo-1606855637183-ea2a00b6f15f', '200-thread-count cotton percale set: duvet cover, fitted sheet and two pillowcases.', { Size: ['Single', 'Double', 'King'], Colour: ['White', 'Grey'] }],
 
   // 9 — Milan Living & Furniture
-  ['Three-Seat Fabric Sofa', 9, 'furniture', 'Living Room', 34900, 'piece', 5, 300, 40, 'FT', 'photo-1555041469-a586c61ea9bc', 'Three-seat sofa on a kiln-dried beech frame with removable, woven-fabric covers.', { Fabric: ['Forest Green', 'Stone', 'Navy'] }],
+  ['Modern Fabric Sofa', 9, 'furniture', 'Living Room', 54995, 'piece', 5, 300, 40, 'FT', '/images/modern-fabric-sofa.jpg', 'Modern cream fabric sofa with plush green accent cushions on a solid beech frame.', { Fabric: ['Cream', 'Forest Green', 'Stone'] }],
   ['Upholstered Accent Armchair', 9, 'furniture', 'Living Room', 13700, 'piece', 10, 500, 35, 'F', 'photo-1586023492125-27b2c045efd7', 'Compact armchair with solid-ash legs and high-resilience foam seat.', { Fabric: ['Mustard', 'Grey', 'Teal'] }],
   ['Arc Floor Lamp', 9, 'furniture', 'Lighting', 4810, 'piece', 20, 900, 25, 'N', 'photo-1494438639946-1ebd1d20bf85', 'Steel arc floor lamp with a weighted base and E27 holder, flat-packed.', { Finish: ['Matte Black', 'Brass'] }],
   ['Chesterfield Leather Sofa', 9, 'furniture', 'Living Room', 64700, 'piece', 2, 120, 45, '', 'photo-1573866926487-a1865558a9cf', 'Hand-tufted two-seat Chesterfield in top-grain leather with rolled arms.', { Leather: ['Cognac', 'Oxblood', 'Black'] }],
@@ -127,7 +127,7 @@ const products = rows.map(([name, companyNumber, category, subcategory, price, u
     subcategory,
     summary,
     description: `${summary} Specifications, packaging and branding can be discussed with the supplier through a quote request, and a pre-production sample can be arranged before a bulk order.`,
-    photo: isPhoto ? image : (image?.startsWith('photo-') ? image : 'photo-1586528116311-ad8dd3c8310d'),
+    photo: isPhoto || image?.startsWith('/') || image?.startsWith('http') ? image : 'photo-1586528116311-ad8dd3c8310d',
     illustration: isPhoto ? image : 'photo-1586528116311-ad8dd3c8310d',
     currency: 'INR',
     price,

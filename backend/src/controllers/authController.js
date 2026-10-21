@@ -1,4 +1,35 @@
 import * as authService from '../services/authService.js';
+import * as otpService from '../services/otpService.js';
+
+export async function sendMobileOtp(req, res, next) {
+  try {
+    const { phone, country } = req.body;
+    const result = await otpService.requestMobileOtp({ phone, country });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function verifyMobileOtp(req, res, next) {
+  try {
+    const { phone, country, otp } = req.body;
+    const result = await otpService.verifyMobileOtp({ phone, country, otp });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function resendMobileOtp(req, res, next) {
+  try {
+    const { phone, country } = req.body;
+    const result = await otpService.resendMobileOtp({ phone, country });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
 
 export async function register(req, res, next) {
   try {

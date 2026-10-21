@@ -8,11 +8,30 @@ import useBuyNow from '../../hooks/useBuyNow';
  */
 export default function BuyNowButton({ product, quantity, variant, size = 'sm', className = '', full = false }) {
   const buyNow = useBuyNow();
-  const outOfStock = product.stock <= 0;
+
+  if (!product) {
+    return (
+      <Button variant="primary" size={size} icon={Zap} full={full} className={className} disabled>
+        Buy Now
+      </Button>
+    );
+  }
+
+  const outOfStock = (product.stock ?? 0) <= 0;
   return (
     <Button
-      variant="primary" size={size} icon={Zap} full={full} className={className} disabled={outOfStock}
-      onClick={() => buyNow(product, { quantity, variant })} aria-label={`Buy ${product.name} now`}
+      variant="primary"
+      size={size}
+      icon={Zap}
+      full={full}
+      className={className}
+      disabled={outOfStock}
+      onClick={(e) => {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+        buyNow(product, { quantity, variant });
+      }}
+      aria-label={`Buy ${product.name} now`}
     >
       {outOfStock ? 'Out of stock' : 'Buy Now'}
     </Button>

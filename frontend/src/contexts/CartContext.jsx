@@ -3,9 +3,16 @@ import useLocalStorage from '../hooks/useLocalStorage';
 import { BUY_NOW_TTL_MS, STORAGE_KEYS } from '../utils/constants';
 import { calculateCartTotals, getLineTotal, getUnitPrice } from '../utils/calculateTotals';
 import { ProductContext } from './ProductContext';
+import seedProducts from '../data/products';
 import { NotificationContext } from './NotificationContext';
 
 export const CartContext = createContext(null);
+
+function getDefaultVariant(product) {
+  if (!product) return null;
+  const entries = Object.entries(product.variants ?? {}).filter(([, options]) => Array.isArray(options) && options.length);
+  return entries.length ? Object.fromEntries(entries.map(([name, options]) => [name, options[0]])) : null;
+}
 
 /** Keeps a quantity between the product's MOQ and its stock. */
 export function clampQuantity(product, quantity) {
@@ -25,7 +32,20 @@ export function CartProvider({ children }) {
   const [buyNowIntent, setBuyNowIntent] = useLocalStorage(STORAGE_KEYS.buyNow, { productId: null });
 
   const startBuyNow = useCallback((product, quantity, variant = null) => {
-    setBuyNowIntent({ productId: product.id, quantity, variant, createdAt: Date.now() });
+    if (!product) return;
+    const minQty = product.moq || 1;
+    const maxQty = Math.max(product.stock || minQty, minQty);
+    const parsedQty = Math.round(Number(quantity)) || minQty;
+    const validQty = Math.min(Math.max(parsedQty, minQty), maxQty);
+    const defVariant = getDefaultVariant(product);
+    const validVariant = (variant && Object.keys(variant).length > 0) ? { ...defVariant, ...variant } : defVariant;
+    setBuyNowIntent({
+      productId: product.id,
+      productSlug: product.slug,
+      quantity: validQty,
+      variant: validVariant,
+      createdAt: Date.now(),
+    });
   }, [setBuyNowIntent]);
 
   const clearBuyNow = useCallback(() => setBuyNowIntent({ productId: null }), [setBuyNowIntent]);
@@ -37,18 +57,21 @@ export function CartProvider({ children }) {
    */
   const buyNow = useMemo(() => {
     const intent = buyNowIntent;
-    if (!intent?.productId) return { status: 'none', line: null, product: null };
-    const product = products.find((entry) => entry.id === intent.productId) ?? null;
+    if (!intent?.productId && !intent?.productSlug) return { status: 'none', line: null, product: null };
+    let product = products.find((entry) => entry.id === intent.productId || entry.slug === intent.productId || (intent.productSlug && entry.slug === intent.productSlug)) ?? null;
+    if (!product) {
+      product = seedProducts.find((entry) => entry.id === intent.productId || entry.slug === intent.productId || (intent.productSlug && entry.slug === intent.productSlug)) ?? null;
+    }
     if (!product) return { status: loading ? 'loading' : 'missing', line: null, product: null };
     if (Date.now() - (intent.createdAt ?? 0) > BUY_NOW_TTL_MS) return { status: 'expired', line: null, product };
     if (product.status !== 'Active') return { status: 'unavailable', line: null, product };
     if (product.stock <= 0) return { status: 'out-of-stock', line: null, product };
-    const quantity = Math.round(Number(intent.quantity));
-    if (!quantity || quantity < product.moq) return { status: 'below-moq', line: null, product };
+    const quantity = Math.round(Number(intent.quantity)) || product.moq || 1;
+    if (quantity < product.moq) return { status: 'below-moq', line: null, product };
     if (quantity > product.stock) return { status: 'above-stock', line: null, product };
     const options = product.variants ?? {};
     const variant = intent.variant ?? null;
-    if (variant && Object.entries(variant).some(([name, value]) => !options[name]?.includes(value))) return { status: 'bad-variant', line: null, product };
+    if (variant && Object.entries(variant).some(([name, value]) => options[name] && !options[name]?.includes(value))) return { status: 'bad-variant', line: null, product };
     const line = { productId: product.id, quantity, variant, product, unitPrice: getUnitPrice(product, quantity), lineTotal: getLineTotal(product, quantity) };
     return { status: 'ready', line, product };
   }, [buyNowIntent, products, loading]);

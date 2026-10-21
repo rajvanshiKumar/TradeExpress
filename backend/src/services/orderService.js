@@ -4,7 +4,7 @@ import { sendOrderConfirmationEmail } from './emailService.js';
 import { initiateEscrowForOrder } from './escrowService.js';
 import { createNotification } from './notificationService.js';
 
-export async function validateAndCalculateOrder({ lines, shippingMethod = 'standard' }) {
+export async function validateAndCalculateOrder({ lines, shippingMethod = 'standard', deliveryAddress = null }) {
   if (!lines || !Array.isArray(lines) || lines.length === 0) {
     const error = new Error('Order must contain at least one item.');
     error.statusCode = 400;
@@ -115,7 +115,15 @@ export async function validateAndCalculateOrder({ lines, shippingMethod = 'stand
 
   // GST Calculation: Intra-state (CGST 9% + SGST 9%) vs Inter-state (IGST 18%)
   // Default supplier state is Maharashtra if not specified
-  const buyerState = (deliveryAddress?.state || '').trim().toLowerCase();
+  let buyerState = '';
+  if (deliveryAddress) {
+    try {
+      const parsed = typeof deliveryAddress === 'object' ? deliveryAddress : JSON.parse(deliveryAddress || '{}');
+      buyerState = (parsed?.state || '').trim().toLowerCase();
+    } catch {
+      buyerState = '';
+    }
+  }
   const supplierState = (validatedItems[0]?.companyId ? 'maharashtra' : 'maharashtra').toLowerCase();
   const isInterState = buyerState ? buyerState !== supplierState : false;
 
@@ -185,7 +193,7 @@ export async function createOrder({
   }
 
   // Strictly validate prices, quantities, and totals against MySQL
-  const calculation = await validateAndCalculateOrder({ lines, shippingMethod });
+  const calculation = await validateAndCalculateOrder({ lines, shippingMethod, deliveryAddress });
   const orderNumber = generateOrderNumber();
 
   const isCod = paymentMethod === 'cod';

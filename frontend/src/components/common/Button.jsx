@@ -62,7 +62,7 @@ export const IconButton = forwardRef(function IconButton({ icon: Icon, label, cl
   };
   return (
     <button ref={ref} type="button" aria-label={label} title={label} className={`inline-flex ${dimension} shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50 ${tones[tone]} ${className}`} {...rest}>
-      <Icon className="size-5" aria-hidden="true" />
+      <Icon className={size === 'sm' ? 'size-4 sm:size-[1.05rem]' : 'size-5'} aria-hidden="true" />
     </button>
   );
 });

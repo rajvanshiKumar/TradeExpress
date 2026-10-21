@@ -3,12 +3,18 @@
 export const mainNav = [
   { label: 'Explore Products', to: '/products' },
   { label: 'Categories', to: '/categories', megaMenu: true },
+  { label: 'Find Suppliers', to: '/suppliers' },
+  { label: 'Exporters', to: '/exporters' },
+  { label: 'Request For Quotation', to: '/rfq' },
+  { label: 'Help', to: '/help' },
   { label: 'About Us', to: '/info/about' },
   { label: 'Become a Supplier', to: '/register?role=supplier', highlight: true },
 ];
 
 // Secondary shortcuts shown in the mobile menu and footer.
 export const quickLinks = [
+  { label: 'Help Center', to: '/help' },
+  { label: 'Verified Exporters', to: '/exporters' },
   { label: 'Find Suppliers', to: '/suppliers' },
   { label: 'Request for Quotation (RFQ)', to: '/rfq' },
   { label: 'Ready to Ship', to: '/products?ready=1' },
@@ -22,7 +28,7 @@ export const footerColumns = [
     links: [
       { label: 'About us', to: '/info/about' },
       { label: 'How it works', to: '/info/about#how-it-works' },
-      { label: 'Help Center', to: '/info/help' },
+      { label: 'Help Center', to: '/help' },
       { label: 'Contact', to: '/info/contact' },
     ],
   },
@@ -32,6 +38,7 @@ export const footerColumns = [
       { label: 'Explore products', to: '/products' },
       { label: 'All categories', to: '/categories' },
       { label: 'Find verified suppliers', to: '/suppliers' },
+      { label: 'Verified Indian exporters', to: '/exporters' },
       { label: 'Request for quotation (RFQ)', to: '/rfq' },
       { label: 'Ready to ship', to: '/products?ready=1' },
       { label: 'Buyer protection guide', to: '/info/buyer-protection' },

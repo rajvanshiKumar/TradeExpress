@@ -1,9 +1,17 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { signJwt } from '../utils/jwt.js';
+import { normalizeMobile, validateVerifiedMobile } from './otpService.js';
 
-export async function registerUser({ email, password, name, role = 'BUYER', company, companyName, phone, city, country }) {
-  const normalizedEmail = email.toLowerCase().trim();
+export async function registerUser({ email, password, name, role = 'BUYER', company, companyName, phone, city, country, verificationToken }) {
+  const upperRole = (role || 'BUYER').toUpperCase();
+  if (!['BUYER', 'SUPPLIER'].includes(upperRole)) {
+    const error = new Error('Invalid account type. Only Buyer and Supplier accounts can be created.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalizedEmail = (email || '').toLowerCase().trim();
   const existing = await prisma.user.findUnique({
     where: { email: normalizedEmail },
   });
@@ -14,17 +22,46 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
     throw error;
   }
 
+  if (!phone) {
+    const error = new Error('Mobile number is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalized = normalizeMobile(phone, country || 'India');
+  const storedPhone = normalized.ok ? normalized.formattedPhone : phone;
+
+  // Verify that this mobile number was verified with OTP
+  await validateVerifiedMobile({ phone: storedPhone, country: country || 'India', verificationToken });
+
+  // Double check mobile uniqueness
+  const existingPhone = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { phone: storedPhone },
+        ...(normalized.msg91Mobile ? [{ phone: normalized.msg91Mobile }, { phone: `+${normalized.msg91Mobile}` }] : []),
+      ],
+    },
+  });
+
+  if (existingPhone) {
+    const error = new Error('An account with this mobile number already exists.');
+    error.statusCode = 409;
+    throw error;
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
     data: {
       email: normalizedEmail,
       passwordHash,
       name,
-      role: role.toUpperCase(),
+      role: upperRole,
       company: company || companyName || '',
-      phone: phone || '',
+      phone: storedPhone,
       city: city || '',
       country: country || 'India',
+      isPhoneVerified: true,
     },
     select: {
       id: true,
@@ -35,6 +72,7 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
       phone: true,
       city: true,
       country: true,
+      isPhoneVerified: true,
       createdAt: true,
     },
   });

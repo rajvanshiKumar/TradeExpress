@@ -15,12 +15,28 @@ export default function UserMenu() {
 
   if (!user) {
     return (
-      <div className="flex shrink-0 items-center gap-2">
-        <Button to="/login" variant="ghost" size="sm" className="hidden lg:inline-flex whitespace-nowrap">Sign In</Button>
-        <Button to="/register" variant="navy" size="sm" className="whitespace-nowrap shadow-sm">Get Started</Button>
+      <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+        <Button
+          to="/login"
+          variant="ghost"
+          size="sm"
+          className="hidden md:inline-flex whitespace-nowrap shrink-0 !min-h-8 sm:!min-h-8.5 xl:!min-h-9 !h-8 sm:!h-8.5 xl:!h-9 !px-2 xl:!px-2.5 2xl:!px-3 text-xs xl:text-[13px] font-semibold text-navy-800 hover:text-navy-950 hover:bg-navy-900/5 transition-colors"
+        >
+          Sign In
+        </Button>
+        <Button
+          to="/register"
+          variant="navy"
+          size="sm"
+          className="whitespace-nowrap shadow-sm shrink-0 !min-h-8 sm:!min-h-8.5 xl:!min-h-9 !h-8 sm:!h-8.5 xl:!h-9 !px-2.5 sm:!px-3.5 xl:!px-4 text-xs xl:text-[13px] font-semibold tracking-tight !bg-navy-900 !text-white hover:!bg-navy-800 active:!bg-navy-950 transition-all hover:shadow hover:-translate-y-px"
+        >
+          Get Started
+        </Button>
       </div>
     );
   }
+
+  const initial = (user.name || user.email || 'U').trim().charAt(0).toUpperCase();
 
   const signOut = (close) => {
     close();
@@ -29,18 +45,21 @@ export default function UserMenu() {
     navigate('/');
   };
 
-  const item = 'flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-ink hover:bg-navy-50';
+  const item = 'flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-ink hover:bg-navy-50 transition-colors';
   return (
     <Dropdown
       panelClassName="w-64 overflow-hidden"
       trigger={({ props }) => (
-        <button type="button" {...props} aria-label={`Account menu for ${user.name}`} className="inline-flex h-11 items-center gap-2 rounded-full py-1 pl-1 pr-2 hover:bg-navy-900/5">
-          <span className="inline-flex size-9 items-center justify-center rounded-full bg-navy-900 text-xs font-bold text-brand-400 ring-2 ring-brand-500/40">{user.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span>
-          <span className="hidden text-left leading-tight xl:block">
-            <span className="block max-w-28 truncate text-[0.8125rem] font-semibold text-navy-900">{user.name}</span>
-            <span className="block text-[0.6875rem] capitalize text-muted">{user.role}</span>
+        <button
+          type="button"
+          {...props}
+          aria-label={`Account menu for ${user.name}`}
+          title={`${user.name} (${user.role})`}
+          className="inline-flex size-8 sm:size-8.5 xl:size-9 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        >
+          <span className="inline-flex size-8 sm:size-8.5 xl:size-9 items-center justify-center rounded-full bg-navy-900 text-xs sm:text-sm font-bold text-brand-400 ring-2 ring-brand-500/40 shadow-sm hover:ring-brand-500 select-none">
+            {initial}
           </span>
-          <ChevronDown className="hidden size-4 text-muted xl:block" aria-hidden="true" />
         </button>
       )}
     >

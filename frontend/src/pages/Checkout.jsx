@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Pencil, Plus, ShoppingBag, Zap } from 'lucide-react';
 import PageHeader from '../components/common/PageHeader';
@@ -53,9 +53,29 @@ export default function Checkout() {
   useDocumentTitle('Checkout');
 
   const [step, setStep] = useState(1);
-  const [contact, setContact] = useState({ name: user.name, email: user.email, country: user.country || 'India', phone: user.phone || addresses.find((item) => item.isDefault)?.phone || '', company: user.company ?? '', gstin: user.gstin || '' });
-  const [addressId, setAddressId] = useState(() => addresses.find((item) => item.isDefault)?.id ?? addresses[0]?.id ?? '');
-  const [addingAddress, setAddingAddress] = useState(addresses.length === 0);
+  const [contact, setContact] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+    country: user?.country || 'India',
+    phone: user?.phone || addresses?.find((item) => item.isDefault)?.phone || '',
+    company: user?.company || '',
+    gstin: user?.gstin || ''
+  });
+  const [addressId, setAddressId] = useState(() => addresses?.find((item) => item.isDefault)?.id ?? addresses?.[0]?.id ?? '');
+  const [addingAddress, setAddingAddress] = useState(!addresses || addresses.length === 0);
+
+  useEffect(() => {
+    if (user) {
+      setContact((prev) => ({
+        ...prev,
+        name: prev.name || user.name || '',
+        email: prev.email || user.email || '',
+        phone: prev.phone || user.phone || '',
+        company: prev.company || user.company || '',
+        gstin: prev.gstin || user.gstin || '',
+      }));
+    }
+  }, [user]);
   const [addressError, setAddressError] = useState('');
   const [shippingMethod, setShippingMethod] = useState(DEFAULT_SHIPPING_METHOD);
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -470,8 +490,8 @@ export default function Checkout() {
                   {paymentMethod === 'cod'
                     ? 'Your order will be placed with Cash on Delivery. Payment is made when the goods are delivered.'
                     : isPartialPayment
-                    ? `20% advance of ${money(advanceAmount)} will be processed now. Remaining balance of ${money(balanceDue)} will be payable on delivery.`
-                    : 'Online payment is processed securely via payment gateway sandbox with cryptographic signature verification.'}
+                      ? `20% advance of ${money(advanceAmount)} will be processed now. Remaining balance of ${money(balanceDue)} will be payable on delivery.`
+                      : 'Online payment is processed securely via payment gateway sandbox with cryptographic signature verification.'}
                 </p>
 
                 {notice ? <p role="alert" className="rounded-lg bg-warning-50 px-4 py-3 text-sm font-medium text-warning">{notice}</p> : null}
@@ -482,8 +502,8 @@ export default function Checkout() {
                     {paymentMethod === 'cod'
                       ? (placing ? 'Placing order…' : 'Place order (Cash on Delivery)')
                       : isPartialPayment
-                      ? `Pay Advance ${money(advanceAmount)}`
-                      : `Pay Total ${money(totals.total)}`}
+                        ? `Pay Advance ${money(advanceAmount)}`
+                        : `Pay Total ${money(totals.total)}`}
                   </Button>
                 </div>
               </div>

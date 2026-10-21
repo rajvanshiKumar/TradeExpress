@@ -8,7 +8,7 @@ import { formatMessageTime } from "../../utils/formatDate";
 export function CountDot({ count }) {
   if (!count) return null;
   return (
-    <span className="absolute right-0.5 top-0.5 inline-flex min-w-[1.125rem] items-center justify-center rounded-full bg-brand-500 px-1 text-[0.625rem] font-bold leading-[1.125rem] text-navy-900 ring-2 ring-white">
+    <span className="absolute -top-0.5 -right-0.5 inline-flex min-w-[0.95rem] h-3.5 items-center justify-center rounded-full bg-brand-500 px-1 text-[0.5625rem] font-bold leading-none text-navy-950 ring-2 ring-white">
       {count > 99 ? "99+" : count}
     </span>
   );
@@ -33,9 +33,9 @@ export default function NotificationsMenu() {
           {...props}
           aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
           title="Notifications"
-          className="relative inline-flex size-11 items-center justify-center rounded-[0.625rem] text-navy-900 hover:bg-navy-50"
+          className="relative inline-flex size-8 sm:size-8.5 xl:size-9 items-center justify-center rounded-full text-navy-800 hover:bg-navy-900/5 hover:text-navy-950 transition-colors"
         >
-          <Bell className="size-5" aria-hidden="true" />
+          <Bell className="size-4 sm:size-[1.05rem]" aria-hidden="true" />
           <CountDot count={unreadCount} />
         </button>
       )}

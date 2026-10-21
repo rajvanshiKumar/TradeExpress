@@ -54,6 +54,7 @@ model User {
   kycStatus           String?              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED
   kycRejectionReason  String?              @db.Text
   isVerified          Boolean              @default(false)
+  isPhoneVerified     Boolean              @default(false)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
@@ -344,6 +345,26 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+model MobileVerification {
+  id             String    @id @default(uuid())
+  phone          String    @unique
+  otpHash        String?
+  token          String?   @unique
+  verified       Boolean   @default(false)
+  verifiedAt     DateTime?
+  attempts       Int       @default(0)
+  resendCount    Int       @default(0)
+  lastSentAt     DateTime  @default(now())
+  expiresAt      DateTime
+  tokenExpiresAt DateTime?
+  used           Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([phone])
+  @@map("mobile_verifications")
 }
 
 model CommissionSetting {

@@ -2,23 +2,16 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
-  ArrowUpRight,
   Boxes,
   Building2,
   Globe,
   LayoutGrid,
-  Sofa,
-  Star,
-  Zap,
 } from "lucide-react";
 
 import Button from "../common/Button";
-import Image from "../common/Image";
 import Skeleton from "../common/Skeleton";
 import SearchForm from "../forms/SearchForm";
 import useProducts from "../../hooks/useProducts";
-import useCurrency from "../../hooks/useCurrency";
-import { getPriceRange } from "../../utils/calculateTotals";
 
 /* Decorative botanical accent */
 export function BotanicalAccent({ className = "", opacity = 0.18 }) {
@@ -91,40 +84,66 @@ export function useCatalogueFigures() {
   }, [products, companies, categories, loading]);
 }
 
-/* Picks the hero product from the live catalogue: an active furniture listing with a
-   photo (living-room seating first, then highest rated), falling back to any active
-   listing with a photo. */
+const DEFAULT_HERO_PRODUCT = {
+  id: "TS-P-1040",
+  sku: "TS-FUR-1040",
+  name: "Modern Fabric Sofa",
+  slug: "modern-fabric-sofa",
+  category: "furniture",
+  photo: "/images/modern-fabric-sofa.jpg",
+  rating: 4.8,
+  reviewCount: 126,
+  price: 54995,
+  unit: "piece",
+  moq: 5,
+  stock: 300,
+  variants: {
+    Fabric: ["Cream", "Forest Green", "Stone"],
+  },
+};
+
+/* Picks the hero product: Modern Fabric Sofa matching the user's reference design */
 function pickFeatured(products) {
   const active = products.filter((product) => product.status === "Active");
-  const seating = (product) => (product.subcategory === "Living Room" ? 1 : 0);
-  const byRating = (a, b) => seating(b) - seating(a) || (b.rating ?? 0) - (a.rating ?? 0);
-  const furniture = active
-    .filter((product) => product.category === "furniture" && product.photo)
-    .sort(byRating);
-  const featured = furniture[0] ?? active.find((product) => product.photo) ?? active[0] ?? null;
-  const more = (furniture.length > 1 ? furniture : active.filter((product) => product.photo))
-    .filter((product) => product.id !== featured?.id)
+  const sofa = active.find(
+    (product) =>
+      product.name?.toLowerCase().includes("fabric sofa") ||
+      product.name?.toLowerCase().includes("modern fabric sofa") ||
+      product.slug?.includes("fabric-sofa") ||
+      product.slug?.includes("modern-fabric-sofa")
+  );
+  const more = active
+    .filter((product) => product.id !== (sofa?.id ?? DEFAULT_HERO_PRODUCT.id) && product.category === "furniture")
     .slice(0, 3);
-  return { featured, more };
+
+  return {
+    featured: sofa
+      ? {
+          ...sofa,
+          name: "Modern Fabric Sofa",
+          slug: "modern-fabric-sofa",
+          photo: "/images/modern-fabric-sofa.jpg",
+          price: 54995,
+          rating: 4.8,
+          reviewCount: 126,
+        }
+      : DEFAULT_HERO_PRODUCT,
+    more,
+  };
 }
 
 export default function HeroSection() {
   const { products, categories, loading } = useProducts();
-  const { money } = useCurrency();
   const figures = useCatalogueFigures();
 
   const { featured, more } = useMemo(() => pickFeatured(products), [products]);
-  const featuredCategory = featured
-    ? categories.find((category) => category.slug === featured.category)
+  const heroFeatured = featured || DEFAULT_HERO_PRODUCT;
+  const featuredCategory = heroFeatured
+    ? categories.find((category) => category.slug === heroFeatured.category)
     : null;
   const shopCategoryHref = featuredCategory
     ? `/categories/${featuredCategory.slug}`
     : "/categories";
-  const highlight = featured?.readyToShip
-    ? { icon: Zap, label: "Ready to ship" }
-    : featured?.deal
-      ? { icon: null, label: "Volume pricing" }
-      : null;
 
   return (
     <section
@@ -145,17 +164,21 @@ export default function HeroSection() {
         opacity={0.09}
       />
 
+      {/* SVG Definitions for the exact organic leaf curve matching user reference */}
+      <svg width="0" height="0" className="absolute -z-50 pointer-events-none" aria-hidden="true">
+        <defs>
+          <clipPath id="hero-leaf-curve" clipPathUnits="objectBoundingBox">
+            <path d="M 0.02,0.50 C 0.02,0.25 0.15,0.08 0.36,0.09 C 0.50,0.09 0.58,0.06 0.70,0.01 C 0.84,-0.04 0.97,0.01 1.00,0.15 C 1.02,0.30 1.01,0.70 0.99,0.86 C 0.96,0.97 0.82,0.94 0.66,0.91 C 0.54,0.88 0.43,0.78 0.30,0.90 C 0.16,1.01 0.01,0.74 0.02,0.50 Z" />
+          </clipPath>
+        </defs>
+      </svg>
+
       <div className="ts-container relative z-10 grid grid-cols-1 items-center gap-8 py-8 sm:py-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-8 lg:py-6 xl:gap-14 xl:py-8 2xl:gap-16">
         {/* LEFT: copy, CTAs and search */}
         <div className="ts-page-enter relative z-10 flex flex-col justify-center">
-          <p className="inline-flex w-fit items-center gap-2 rounded-full bg-white/70 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-navy-900 ring-1 ring-navy-900/10 backdrop-blur-xl sm:text-xs">
-            <Sofa className="size-3.5 text-accent-600 sm:size-4" aria-hidden="true" />
-            Furniture, décor &amp; wholesale essentials
-          </p>
-
           <h1
             id="hero-title"
-            className="mt-3.5 text-3xl font-extrabold !leading-[1.08] tracking-[-0.04em] sm:text-4xl lg:text-[2.6rem] xl:text-[3.25rem] 2xl:text-[3.75rem]"
+            className="mt-0 text-3xl font-extrabold !leading-[1.08] tracking-[-0.04em] sm:text-4xl lg:text-[2.6rem] xl:text-[3.25rem] 2xl:text-[3.75rem]"
           >
             One Platform.
             <br />
@@ -212,109 +235,66 @@ export default function HeroSection() {
           </dl>
         </div>
 
-        {/* RIGHT: featured product */}
+        {/* RIGHT: featured product with organic curved frame matching user design */}
         <div className="relative mx-auto flex w-full items-center justify-center lg:justify-end">
-          {loading && !featured ? (
-            <Skeleton className="mx-auto aspect-square w-full max-w-[18rem] rounded-full opacity-40 sm:max-w-[21rem] lg:max-w-[24rem] xl:max-w-[27rem]" />
-          ) : featured ? (
-            <div className="relative w-full max-w-[18rem] sm:max-w-[21rem] md:max-w-[23rem] lg:max-w-[24rem] xl:max-w-[27rem] 2xl:max-w-[29rem]">
-              <div className="relative aspect-square w-full">
-                {/* Organic blob and white disc */}
-                <div
-                  aria-hidden="true"
-                  className="ts-hero-blob absolute inset-[4%] bg-navy-900/90 shadow-pop"
+          <div className="relative w-full max-w-[22rem] sm:max-w-[26rem] md:max-w-[30rem] lg:max-w-[34rem] xl:max-w-[38rem] 2xl:max-w-[41rem]">
+            <div className="relative aspect-[1.32/1] w-full drop-shadow-[0_20px_35px_rgba(11,39,22,0.18)]">
+              {/* Product photo inside organic curved frame without any green border */}
+              <Link
+                to={`/products/${heroFeatured.slug}`}
+                className="group absolute inset-0 overflow-hidden bg-[#f4f0e8] transition-transform duration-700"
+                style={{
+                  clipPath: "url(#hero-leaf-curve)",
+                  WebkitClipPath: "url(#hero-leaf-curve)",
+                }}
+                aria-label={`View ${heroFeatured.name}`}
+              >
+                <img
+                  src={heroFeatured.photo?.startsWith('/') ? heroFeatured.photo : "/images/modern-fabric-sofa.jpg"}
+                  alt={heroFeatured.name}
+                  className="size-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-105"
+                  onError={(e) => {
+                    e.currentTarget.src = "/images/modern-fabric-sofa.jpg";
+                  }}
                 />
-                <div
-                  aria-hidden="true"
-                  className="absolute inset-[9%] rounded-full bg-white/95 shadow-[0_30px_80px_-30px_rgb(11_39_22/0.55)]"
-                />
+              </Link>
 
-                {/* Product photo */}
-                <Link
-                  to={`/products/${featured.slug}`}
-                  className="group absolute inset-[13%] overflow-hidden rounded-full ring-4 ring-white sm:ring-8"
-                  aria-label={`View ${featured.name}`}
-                >
-                  <Image
-                    photo={featured.photo}
-                    illustration={featured.illustration}
-                    width={720}
-                    height={720}
-                    eager
-                    alt={featured.name}
-                    className="size-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-                  />
-                </Link>
-
-                {/* Highlight chip (only when the listing actually has the flag) */}
-                {highlight ? (
-                  <span className="ts-hero-float-slow absolute right-[2%] top-[8%] z-10 inline-flex items-center gap-1.5 rounded-full bg-accent-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg sm:px-3.5 sm:py-2 sm:text-sm">
-                    {highlight.icon ? <highlight.icon className="size-3.5" aria-hidden="true" /> : null}
-                    {highlight.label}
-                  </span>
-                ) : null}
-
-                {/* More from the same category */}
-                {more.length ? (
-                  <Link
-                    to={shopCategoryHref}
-                    className="ts-hero-float-slow absolute right-0 bottom-[14%] z-10 hidden items-center gap-2.5 rounded-full bg-white/95 py-1.5 pl-2 pr-3.5 shadow-lift ring-1 ring-navy-900/5 backdrop-blur sm:flex"
-                  >
-                    <span className="flex -space-x-2.5">
-                      {more.map((product) => (
-                        <Image
-                          key={product.id}
-                          photo={product.photo}
-                          illustration={product.illustration}
-                          width={96}
-                          height={96}
-                          alt=""
-                          className="size-8 rounded-full object-cover ring-2 ring-white"
-                        />
-                      ))}
-                    </span>
-                    <span className="text-[11px] font-bold text-navy-900 sm:text-xs">
-                      More {featuredCategory ? featuredCategory.name.toLowerCase() : "products"}
-                    </span>
-                  </Link>
-                ) : null}
+              {/* Slogan badge at top of the image */}
+              <div className="ts-hero-float-slow absolute top-3 sm:top-5 left-8 sm:left-12 z-20">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/95 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-navy-900 shadow-lift ring-1 ring-navy-900/10 backdrop-blur-md sm:px-4 sm:py-2 sm:text-xs">
+                  <span className="size-2 rounded-full bg-accent-500 animate-pulse" aria-hidden="true" />
+                  Buy Smarter. Trade Better. Grow Bigger.
+                </span>
               </div>
-
-              {/* Featured product card */}
-              <div className="ts-hero-float relative z-10 mx-auto -mt-6 w-[min(18rem,94%)] rounded-2xl bg-white p-3.5 shadow-lift ring-1 ring-navy-900/5 sm:absolute sm:-bottom-2 sm:-left-3 sm:mx-0 sm:mt-0 sm:w-[15rem] sm:p-4 xl:w-[16.5rem]">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-600 sm:text-[11px]">
-                  Featured {featuredCategory ? featuredCategory.name.toLowerCase() : "listing"}
-                </p>
-                <p className="mt-0.5 truncate font-display text-sm font-extrabold text-navy-900 sm:text-base">
-                  {featured.name}
-                </p>
-                {featured.rating ? (
-                  <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-muted sm:text-xs">
-                    <Star className="size-3 fill-amber-400 text-amber-400 sm:size-3.5" aria-hidden="true" />
-                    <span className="font-semibold text-ink">{Number(featured.rating).toFixed(1)}</span>
-                    <span className="sr-only">out of 5</span>
-                    {featured.reviewCount !== undefined ? <span>({featured.reviewCount})</span> : null}
-                  </p>
-                ) : null}
-                <div className="mt-2.5 flex items-end justify-between gap-2 sm:mt-3">
-                  <p className="min-w-0">
-                    <span className="font-display text-lg font-extrabold text-navy-900 sm:text-xl">
-                      {money(getPriceRange(featured).min)}
-                    </span>
-                    <span className="text-[11px] text-muted sm:text-xs"> / {featured.unit}</span>
-                  </p>
-                  <Link
-                    to={`/products/${featured.slug}`}
-                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-navy-900 text-white shadow-[var(--shadow-gold)] transition-transform hover:-translate-y-0.5 hover:bg-navy-800 sm:size-10"
-                    aria-label={`View ${featured.name}`}
-                  >
-                    <ArrowUpRight className="size-4 sm:size-4.5" aria-hidden="true" />
-                  </Link>
-                </div>
-              </div>
-
             </div>
-          ) : null}
+
+            {/* More furniture pill floating in corner */}
+            <Link
+              to={shopCategoryHref}
+              className="ts-hero-float-slow absolute -right-2 bottom-3 z-20 hidden items-center gap-2 rounded-full bg-white/95 py-1.5 pl-2 pr-3.5 shadow-lift ring-1 ring-navy-900/5 backdrop-blur transition-transform hover:-translate-y-0.5 hover:bg-white sm:flex"
+            >
+              <span className="flex -space-x-2">
+                <img
+                  src="/images/furniture-thumb-1.jpg"
+                  alt=""
+                  className="size-7 rounded-full object-cover ring-2 ring-white"
+                />
+                <img
+                  src="/images/furniture-thumb-2.jpg"
+                  alt=""
+                  className="size-7 rounded-full object-cover ring-2 ring-white"
+                />
+                <img
+                  src="/images/furniture-thumb-3.jpg"
+                  alt=""
+                  className="size-7 rounded-full object-cover ring-2 ring-white"
+                />
+              </span>
+              <span className="text-[11px] font-bold text-navy-900 sm:text-xs">
+                More furniture
+              </span>
+            </Link>
+          </div>
         </div>
       </div>
 

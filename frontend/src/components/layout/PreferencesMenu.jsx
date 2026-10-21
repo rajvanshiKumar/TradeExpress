@@ -63,14 +63,12 @@ export default function PreferencesMenu() {
           type="button"
           {...props}
           aria-label={`Region and language: ${preferences.country}, English, ${activeCur.code}`}
-          className="inline-flex h-11 items-center gap-1.5 rounded-[0.625rem] px-2.5 text-left hover:bg-navy-50"
+          title={`Preferences: ${preferences.country} · ${activeCur.code}`}
+          className="inline-flex h-8 sm:h-8.5 xl:h-9 items-center gap-1 sm:gap-1.5 rounded-full px-2 text-left hover:bg-navy-900/5 transition-colors text-navy-800"
         >
-          <Globe className="size-5 text-navy-900" aria-hidden="true" />
-          <span className="leading-tight">
-            <span className="block max-w-24 truncate text-[0.6875rem] text-muted">{preferences.country}</span>
-            <span className="block text-[0.8125rem] font-semibold text-navy-900">
-              EN · {activeCur.symbol} {activeCur.code}
-            </span>
+          <Globe className="size-3.5 sm:size-4" aria-hidden="true" />
+          <span className="text-xs font-bold text-navy-900">
+            {activeCur.code}
           </span>
         </button>
       )}

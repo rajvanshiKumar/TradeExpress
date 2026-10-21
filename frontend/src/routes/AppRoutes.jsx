@@ -11,6 +11,8 @@ import Categories from '../pages/Categories';
 import CategoryDetails from '../pages/CategoryDetails';
 import Suppliers from '../pages/Suppliers';
 import SupplierDetails from '../pages/SupplierDetails';
+import Exporters from '../pages/Exporters';
+import Help from '../pages/Help';
 import RequestQuote from '../pages/RequestQuote';
 import Cart from '../pages/Cart';
 import Login from '../pages/Login';
@@ -59,6 +61,8 @@ export default function AppRoutes() {
         <Route path="/categories/:slug" element={<CategoryDetails />} />
         <Route path="/suppliers" element={<Suppliers />} />
         <Route path="/suppliers/:slug" element={<SupplierDetails />} />
+        <Route path="/exporters" element={<Exporters />} />
+        <Route path="/help" element={<Help />} />
         <Route path="/rfq" element={<RequestQuote />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/wishlist" element={<BuyerWishlist standalone />} />

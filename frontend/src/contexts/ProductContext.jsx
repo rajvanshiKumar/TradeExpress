@@ -3,7 +3,7 @@ import useCollection from '../hooks/useCollection';
 import useLocalStorage from '../hooks/useLocalStorage';
 import productService from '../services/productService';
 import supplierService from '../services/supplierService';
-import { buildPriceTiers } from '../data/products';
+import seedProducts, { buildPriceTiers } from '../data/products';
 import { MAX_RECENTLY_VIEWED, STORAGE_KEYS } from '../utils/constants';
 import { slugify } from '../utils/validators';
 import makeId from '../utils/ids';
@@ -33,7 +33,12 @@ export function ProductProvider({ children }) {
   const setCompanies = companyState.setItems;
   const setCategories = categoryState.setItems;
 
-  const getProduct = useCallback((idOrSlug) => products.find((item) => item.id === idOrSlug || item.slug === idOrSlug) ?? null, [products]);
+  const getProduct = useCallback((idOrSlug) => {
+    if (!idOrSlug) return null;
+    return products.find((item) => item.id === idOrSlug || item.slug === idOrSlug)
+      || seedProducts.find((item) => item.id === idOrSlug || item.slug === idOrSlug)
+      || null;
+  }, [products]);
   const getCompany = useCallback((idOrSlug) => companies.find((item) => item.id === idOrSlug || item.slug === idOrSlug) ?? null, [companies]);
   const getCategory = useCallback((slug) => categories.find((item) => item.slug === slug || item.id === slug) ?? null, [categories]);
 

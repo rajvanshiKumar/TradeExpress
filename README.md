@@ -10,6 +10,7 @@ TradeSphere is a full-stack, enterprise-grade B2B marketplace platform for manuf
 - **Backend**: Node.js + Express.js modular REST API with route controllers, services, middleware, and centralized error handling.
 - **Database**: MySQL 8.0 with **Prisma ORM** (models, relations, migrations, seeding, atomic transactions).
 - **Payment Gateway**: Razorpay in **Sandbox Mode** with cryptographic HMAC SHA-256 signature verification and Cash on Delivery (COD) support.
+- **SMS & Mobile OTP**: MSG91 OTP API (API v5) with rate limiting, resend cooldown, country dialing rules, single-use verification tokens, and tamper-proof signup validation.
 - **Email System**: Nodemailer with SMTP configuration and automatic fallback to Ethereal Email test sandbox with preview URLs.
 - **Images**: High-Definition (HD) uncompressed verified photography from Unsplash with multi-tier image fallback handling.
 
@@ -103,15 +104,34 @@ TradeSphere is a full-stack, enterprise-grade B2B marketplace platform for manuf
    ```env
    DATABASE_URL="mysql://root:YOUR_PASSWORD@localhost:3306/tradesphere_db"
    ```
-3. Generate Prisma client:
+3. **Database Migration & Backup Notice**:
+   > [!IMPORTANT]
+   > **Backup First**: Before applying any database schema migration or running `prisma db push`, always back up your existing database (e.g. `mysqldump -u root -p tradesphere_db > tradesphere_backup.sql`).
    ```bash
    cd backend
+   npx prisma db push
    npx prisma generate
    ```
 
 ---
 
-### 3. Backend Setup
+### 3. MSG91 SMS OTP Configuration
+In `backend/.env`, set your MSG91 credentials:
+```env
+MSG91_AUTH_KEY="your_msg91_authkey_here"
+MSG91_TEMPLATE_ID="your_msg91_otp_template_id_here"
+MSG91_OTP_EXPIRY_MINUTES=10
+MSG91_OTP_LENGTH=6
+```
+> [!NOTE]
+> In your MSG91 account dashboard:
+> 1. Create an SMS OTP Template (e.g. `##OTP## is your verification code for TradeSphere. Valid for 10 minutes.`).
+> 2. Copy the Template ID into `MSG91_TEMPLATE_ID`.
+> 3. Generate an AuthKey in MSG91 settings and set it in `MSG91_AUTH_KEY`.
+
+---
+
+### 4. Backend Setup
 1. Open a terminal and navigate to `backend/`:
    ```bash
    cd backend
@@ -122,7 +142,7 @@ TradeSphere is a full-stack, enterprise-grade B2B marketplace platform for manuf
 
 ---
 
-### 4. Frontend Setup
+### 5. Frontend Setup
 1. Open a new terminal and navigate to `frontend/`:
    ```bash
    cd frontend
@@ -130,6 +150,50 @@ TradeSphere is a full-stack, enterprise-grade B2B marketplace platform for manuf
    npm run dev
    ```
    The frontend runs on `http://localhost:5173`.
+
+
+---
+
+## Public Deployment & Hosting Guide
+
+TradeSphere is architected as a decoupled client-server application:
+1. **Frontend (Vercel / Netlify / Cloudflare Pages / Render)**
+2. **Backend (Render / Railway / Fly.io / DigitalOcean / VPS)**
+3. **Database (Aiven MySQL / Railway MySQL / PlanetScale / TiDB Serverless)**
+
+### Option 1: Frontend on Vercel
+1. Import the GitHub repository into [Vercel](https://vercel.com).
+2. Set **Root Directory** to `frontend`.
+3. Framework Preset: **Vite**.
+4. Build Command: `npm run build`.
+5. Output Directory: `dist`.
+6. Add Environment Variable:
+   - `VITE_PUBLIC_API_BASE_URL`: `https://your-backend-domain.com/api`
+7. Click **Deploy**. (SPA rewrites are pre-configured via `frontend/vercel.json`).
+
+### Option 2: Backend on Render
+1. Create a new **Web Service** on [Render](https://render.com) from your GitHub repo.
+2. Set **Root Directory** to `backend`.
+3. Runtime: **Node**.
+4. Build Command: `npm install && npx prisma generate`.
+5. Start Command: `npm start`.
+6. Add Environment Variables:
+   - `NODE_ENV`: `production`
+   - `PORT`: `5000` (or leave default assigned by Render)
+   - `DATABASE_URL`: `mysql://<user>:<password>@<host>:<port>/<db_name>`
+   - `FRONTEND_URL`: `https://your-frontend-domain.vercel.app`
+   - `JWT_SECRET`: A long random secret string
+   - `RAZORPAY_KEY_ID`: Your Razorpay Key ID
+   - `RAZORPAY_KEY_SECRET`: Your Razorpay Key Secret
+   - (Optional) `SMS_AUTH_KEY`, `SMS_TEMPLATE_ID`, `SMTP_USER`, etc.
+7. Click **Create Web Service**.
+
+### Option 3: Backend on Railway
+1. Create a **New Project** in [Railway](https://railway.app).
+2. Add a **MySQL** database service (Railway provisions a managed MySQL database with instant connection URL).
+3. Add a **GitHub Repo** service pointing to the repo, Root Directory `backend`.
+4. Set `DATABASE_URL` reference variable to the MySQL service's `MYSQL_URL`.
+5. Run migration: `npx prisma db push` or `npx prisma migrate deploy`.
 
 ---
 
@@ -146,8 +210,11 @@ TradeSphere is a full-stack, enterprise-grade B2B marketplace platform for manuf
 
 ## API Endpoints Reference
 
-### Authentication & KYC
-- `POST /api/auth/register` — Register Buyer or Supplier
+### Authentication & Mobile OTP Verification
+- `POST /api/auth/send-mobile-otp` — Request mobile OTP via MSG91 (rate-limited, duplicate checked)
+- `POST /api/auth/verify-mobile-otp` — Verify OTP with MSG91 and receive a 15-minute single-use verification token
+- `POST /api/auth/resend-mobile-otp` — Resend OTP via MSG91 after 60-second cooldown
+- `POST /api/auth/register` — Register Buyer or Supplier (requires valid `verificationToken` and verified phone)
 - `POST /api/auth/login` — Sign in and receive JWT token
 - `POST /api/auth/kyc/submit` — Submit statutory KYC (GSTIN, PAN, bank IFSC)
 - `POST /api/auth/kyc/documents` — Upload KYC verification documents

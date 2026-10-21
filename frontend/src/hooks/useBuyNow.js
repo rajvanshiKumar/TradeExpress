@@ -8,7 +8,8 @@ export const BUY_NOW_CHECKOUT_PATH = '/checkout?mode=buynow';
 
 /** First option of every variant group, or null when the product has no variants. */
 export function defaultVariant(product) {
-  const entries = Object.entries(product.variants ?? {}).filter(([, options]) => options?.length);
+  if (!product) return null;
+  const entries = Object.entries(product.variants ?? {}).filter(([, options]) => Array.isArray(options) && options.length);
   return entries.length ? Object.fromEntries(entries.map(([name, options]) => [name, options[0]])) : null;
 }
 
@@ -24,26 +25,30 @@ export default function useBuyNow() {
   const navigate = useNavigate();
 
   return useCallback((product, { quantity, variant } = {}) => {
-    if (!product || product.status !== 'Active') {
+    if (!product || (product.status && product.status !== 'Active')) {
       showToast('This product is no longer available.', 'error');
       return false;
     }
-    if (product.stock <= 0) {
+    if ((product.stock ?? 0) <= 0) {
       showToast('This product is out of stock.', 'error');
       return false;
     }
-    const wanted = quantity === undefined ? Math.max(1, product.moq) : Math.round(Number(quantity));
-    if (!wanted || wanted < product.moq) {
-      showToast(`The minimum order for this product is ${quantityLabel(product.moq, product.unit)}.`, 'error');
-      return false;
-    }
+    const minMoq = product.moq || 1;
+    const parsedQty = Number(quantity);
+    const wanted = (!parsedQty || isNaN(parsedQty) || parsedQty < minMoq) ? minMoq : Math.round(parsedQty);
+
     if (wanted > product.stock) {
+      if (product.stock < minMoq) {
+        showToast(`This product only has ${quantityLabel(product.stock, product.unit)} in stock (MOQ is ${quantityLabel(minMoq, product.unit)}).`, 'error');
+        return false;
+      }
       showToast(`Only ${quantityLabel(product.stock, product.unit)} are in stock.`, 'error');
       return false;
     }
     const options = product.variants ?? {};
-    const chosen = variant ?? defaultVariant(product);
-    if (chosen && Object.entries(chosen).some(([name, value]) => !options[name]?.includes(value))) {
+    const def = defaultVariant(product);
+    const chosen = (variant && Object.keys(variant).length > 0) ? { ...def, ...variant } : def;
+    if (chosen && Object.entries(chosen).some(([name, value]) => options[name] && !options[name]?.includes(value))) {
       showToast('Please choose a valid product option.', 'error');
       return false;
     }

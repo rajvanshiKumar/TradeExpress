@@ -2,8 +2,8 @@ import * as orderService from '../services/orderService.js';
 
 export async function calculateTotals(req, res, next) {
   try {
-    const { lines, shippingMethod } = req.body;
-    const calculation = await orderService.validateAndCalculateOrder({ lines, shippingMethod });
+    const { lines, shippingMethod, deliveryAddress } = req.body;
+    const calculation = await orderService.validateAndCalculateOrder({ lines, shippingMethod, deliveryAddress });
     res.json({
       success: true,
       data: calculation,

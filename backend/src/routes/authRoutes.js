@@ -1,17 +1,74 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
+import rateLimit from 'express-rate-limit';
 import * as authController from '../controllers/authController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
+import { authRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
+const isDev = process.env.NODE_ENV !== 'production';
+
+const otpSendLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: isDev ? 100 : 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many OTP requests from this connection. Please try again after 10 minutes.',
+  },
+});
+
+const otpVerifyLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: isDev ? 200 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many OTP verification attempts. Please wait 10 minutes before retrying.',
+  },
+});
+
+router.post(
+  '/send-mobile-otp',
+  otpSendLimiter,
+  validate([
+    body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
+  ]),
+  authController.sendMobileOtp
+);
+
+router.post(
+  '/verify-mobile-otp',
+  otpVerifyLimiter,
+  validate([
+    body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
+    body('otp').trim().notEmpty().withMessage('OTP is required.').isLength({ min: 4, max: 9 }).withMessage('Valid OTP code is required.'),
+  ]),
+  authController.verifyMobileOtp
+);
+
+router.post(
+  '/resend-mobile-otp',
+  otpSendLimiter,
+  validate([
+    body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
+  ]),
+  authController.resendMobileOtp
+);
+
 router.post(
   '/register',
+  authRateLimiter,
   validate([
     body('email').isEmail().withMessage('Valid email is required.'),
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters.'),
     body('name').trim().notEmpty().withMessage('Name is required.'),
+    body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
+    body('verificationToken').trim().notEmpty().withMessage('Mobile verification is required. Please verify via OTP.'),
   ]),
   authController.register
 );

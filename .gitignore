@@ -9,14 +9,22 @@ dist/
 # Local environment variables
 .env
 .env.*
-.env.example
-.env.examples
+.env.local
+.env.development
+.env.production
 *.env
 *.env.*
 */.env
 */.env.*
-*/.env.example
-*/.env.examples
+# Retain template example configs
+!.env.example
+!*/.env.example
+
+# Runtime uploads
+uploads/*
+!uploads/.gitkeep
+*/uploads/*
+!*/uploads/.gitkeep
 
 # Editor & OS files
 .DS_Store
@@ -24,3 +32,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

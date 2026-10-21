@@ -15,7 +15,17 @@ export function createCollection(key, seed) {
       return clone(seed);
     }
     // Malformed or wrong-shaped data falls back to the seed inside readStorage.
-    return readStorage(key, clone(seed));
+    const stored = readStorage(key, clone(seed));
+    if (Array.isArray(seed) && Array.isArray(stored)) {
+      const storedKeys = new Set(stored.map((item) => item?.id || item?.slug).filter(Boolean));
+      const missing = seed.filter((item) => item && (item.id || item.slug) && !storedKeys.has(item.id) && !storedKeys.has(item.slug));
+      if (missing.length > 0) {
+        const merged = [...stored, ...clone(missing)];
+        writeStorage(key, merged);
+        return merged;
+      }
+    }
+    return stored;
   };
 
   return {

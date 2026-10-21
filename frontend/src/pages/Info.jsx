@@ -5,6 +5,7 @@ import PageHeader from '../components/common/PageHeader';
 import Input, { Textarea } from '../components/common/Input';
 import Button from '../components/common/Button';
 import NotFound from './NotFound';
+import Help from './Help';
 import infoPages from '../data/infoPages';
 import useLocalStorage from '../hooks/useLocalStorage';
 import useDocumentTitle from '../hooks/useDocumentTitle';
@@ -79,6 +80,9 @@ function Faq({ items }) {
 
 export default function Info() {
   const { slug } = useParams();
+  if (slug === 'help') {
+    return <Help />;
+  }
   const page = infoPages[slug];
   useDocumentTitle(page?.title ?? 'Page not found');
   if (!page) return <NotFound />;

@@ -237,7 +237,7 @@ export function AuthProvider({ children }) {
   }, [accounts, attempts, setSession, loginAdmin, setAccounts]);
 
   /** Registers a Buyer or Supplier. Only a password hash is saved. Admin can never be chosen here. */
-  const register = useCallback(async ({ name, email, password, company, country, city, phone, role }) => {
+  const register = useCallback(async ({ name, email, password, company, country, city, phone, role, verificationToken }) => {
     if (!PUBLIC_ROLES.includes(role)) return { ok: false, error: 'Please choose Buyer or Supplier.' };
     if (!isCryptoAvailable()) return { ok: false, error: 'Registration needs a secure connection (https or localhost).' };
     const clean = normalizeEmail(email);
@@ -260,6 +260,7 @@ export function AuthProvider({ children }) {
             phone: phone || '',
             city: city?.trim() || '',
             country: country || 'India',
+            verificationToken: verificationToken || '',
           }),
         });
         const data = await response.json();
@@ -317,27 +318,27 @@ export function AuthProvider({ children }) {
   // Public view of accounts for the admin lists: password hashes are left out.
   const publicAccounts = useMemo(() => accounts.map(({ passwordHash, ...rest }) => ({ ...rest, canSignIn: Boolean(passwordHash) })), [accounts]); // eslint-disable-line no-unused-vars
 
-  const addresses = useMemo(() => (user ? addressBook[user.id] ?? [] : []), [addressBook, user]);
+  const addresses = useMemo(() => (user ? addressBook[user.id] ?? [] : addressBook['guest'] ?? []), [addressBook, user]);
 
   const saveAddress = useCallback((address) => {
-    if (!user) return null;
+    const key = user ? user.id : 'guest';
     const saved = { ...address, id: address.id ?? makeId('TS-A') };
     setAddressBook((previous) => {
-      const list = previous[user.id] ?? [];
+      const list = previous[key] ?? [];
       let next = list.some((item) => item.id === saved.id) ? list.map((item) => (item.id === saved.id ? saved : item)) : [...list, saved];
       if (saved.isDefault) next = next.map((item) => ({ ...item, isDefault: item.id === saved.id }));
       if (!next.some((item) => item.isDefault)) next = next.map((item, index) => ({ ...item, isDefault: index === 0 }));
-      return { ...previous, [user.id]: next };
+      return { ...previous, [key]: next };
     });
     return saved;
   }, [user, setAddressBook]);
 
   const deleteAddress = useCallback((id) => {
-    if (!user) return;
+    const key = user ? user.id : 'guest';
     setAddressBook((previous) => {
-      let next = (previous[user.id] ?? []).filter((item) => item.id !== id);
+      let next = (previous[key] ?? []).filter((item) => item.id !== id);
       if (next.length && !next.some((item) => item.isDefault)) next = next.map((item, index) => ({ ...item, isDefault: index === 0 }));
-      return { ...previous, [user.id]: next };
+      return { ...previous, [key]: next };
     });
   }, [user, setAddressBook]);
 

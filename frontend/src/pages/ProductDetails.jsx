@@ -49,8 +49,8 @@ export default function ProductDetails() {
   const product = getProduct(slug);
   const company = product ? getCompany(product.companyId) : null;
   const category = product ? getCategory(product.category) : null;
-  const [quantity, setQuantity] = useState(1);
-  const [variant, setVariant] = useState({});
+  const [quantity, setQuantity] = useState(() => product?.moq || 1);
+  const [variant, setVariant] = useState(() => (product?.variants ? Object.fromEntries(Object.entries(product.variants).map(([name, options]) => [name, options[0]])) : {}));
   const [tab, setTab] = useState('description');
   const [sampleModalOpen, setSampleModalOpen] = useState(false);
   const [sampleQuantity, setSampleQuantity] = useState(1);
@@ -82,7 +82,7 @@ export default function ProductDetails() {
 
   useEffect(() => {
     if (!product) return;
-    setQuantity(product.moq);
+    setQuantity(product.moq || 1);
     setVariant(Object.fromEntries(Object.entries(product.variants ?? {}).map(([name, options]) => [name, options[0]])));
     setTab('description');
     trackView(product.id);
