@@ -20,10 +20,6 @@ export const sendOtpSms = async ({ mobile, otp, expiryMinutes = 10 }) => {
   const smsTemplateId = process.env.SMS_TEMPLATE_ID;
 
   if (!smsApiUrl || !smsAuthKey || !smsSenderId || !smsTemplateId) {
-    if (process.env.NODE_ENV !== 'production' || smsAuthKey === 'YOUR_ROTATED_POWERSTEXT_AUTH_KEY') {
-      console.log(`[DEV SMS SERVICE] Fallback console OTP for mobile (ending ${String(mobile).slice(-4)}): ${otp}`);
-      return { success: true, delivered: false, devOtp: otp };
-    }
     const err = new Error('SMS service is not fully configured.');
     err.statusCode = 503;
     throw err;
@@ -34,7 +30,7 @@ export const sendOtpSms = async ({ mobile, otp, expiryMinutes = 10 }) => {
   if (cleanMobile.startsWith('91') && cleanMobile.length === 12) {
     cleanMobile = cleanMobile.slice(2);
   } else if (cleanMobile.length === 11 && cleanMobile.startsWith('1') && /^[6-9]\d{9}$/.test(cleanMobile.slice(1))) {
-    // Accidental US dial code (+1) on an Indian mobile number (e.g. 19608819167 -> 9608819167)
+    // Auto-heal accidental US country code (+1) on 10-digit Indian numbers (e.g. 19608819167 -> 9608819167)
     cleanMobile = cleanMobile.slice(1);
   } else if (cleanMobile.length > 10) {
     cleanMobile = cleanMobile.replace(/^0+/, '');
@@ -58,7 +54,7 @@ export const sendOtpSms = async ({ mobile, otp, expiryMinutes = 10 }) => {
   }
 
   const mobileEnding = cleanMobile.slice(-4);
-  console.log(`[SMS GATEWAY] Dispatching OTP to mobile ending in: ...${mobileEnding} (number: ${cleanMobile})`);
+  console.log(`[SMS GATEWAY] Dispatching live OTP SMS to: ...${mobileEnding} (${cleanMobile})`);
 
   try {
     const response = await axios.get(smsApiUrl, {
@@ -81,7 +77,7 @@ export const sendOtpSms = async ({ mobile, otp, expiryMinutes = 10 }) => {
       const logLine = `[${new Date().toISOString()}] inputMobile=${mobile} cleanMobile=${cleanMobile} data=${JSON.stringify(data)}\n`;
       fs.appendFileSync(logPath, logLine);
     } catch {
-      // Ignore log write error
+      // Ignore
     }
 
     // Check for success condition from PowersText gateway
@@ -90,23 +86,15 @@ export const sendOtpSms = async ({ mobile, otp, expiryMinutes = 10 }) => {
       (typeof data === 'string' && dataStr.includes('success'));
 
     if (isSuccess) {
-      console.log(`✓ [SMS GATEWAY SUCCESS] Powerstext SMS delivered to gateway (Message-Id: ${data?.['Message-Id'] || 'N/A'}, ending ...${mobileEnding})`);
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`🔑 [DEV OTP CODE] Mobile: ...${mobileEnding} | Code: ${otp}`);
-      }
-      return { success: true, delivered: true, messageId: data?.['Message-Id'], devOtp: otp };
+      console.log(`✓ [SMS GATEWAY SUCCESS] Real SMS delivered to carrier gateway (Message-Id: ${data?.['Message-Id'] || 'N/A'}, to ...${mobileEnding})`);
+      return { success: true, delivered: true, messageId: data?.['Message-Id'] };
     }
 
     // Provider rejected request
-    const desc = data?.Description || (typeof data === 'string' ? data : 'Gateway rejected request');
+    const desc = data?.Description || (typeof data === 'string' ? data : 'Invalid mobile number or carrier rejection');
     console.error(`[SMS GATEWAY REJECTION] Powerstext rejected SMS to ...${mobileEnding}:`, data);
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn(`⚠️ [DEV OTP FALLBACK] Gateway rejected (${desc}). Providing dev fallback OTP for testing.`);
-      return { success: true, delivered: false, gatewayDescription: desc, devOtp: otp };
-    }
-
-    const err = new Error(`SMS delivery failed: ${desc}. Please check your 10-digit mobile number.`);
+    const err = new Error(`SMS delivery rejected by carrier: ${desc}. Please check that you entered a valid 10-digit mobile number.`);
     err.statusCode = 400;
     throw err;
   } catch (error) {
@@ -120,12 +108,7 @@ export const sendOtpSms = async ({ mobile, otp, expiryMinutes = 10 }) => {
       // Ignore
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn(`⚠️ [DEV OTP FALLBACK] Gateway error (${error.message}). Providing dev fallback OTP for testing.`);
-      return { success: true, delivered: false, gatewayDescription: error.message, devOtp: otp };
-    }
-
-    const err = new Error('OTP SMS transmission failed. Please try again.');
+    const err = new Error('SMS gateway timed out or failed to reach carrier network. Please try again.');
     err.statusCode = 502;
     throw err;
   }

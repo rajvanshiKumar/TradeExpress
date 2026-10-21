@@ -170,18 +170,9 @@ export async function requestMobileOtp({ phone, country = 'India' }) {
     },
   });
 
-  const isDev = process.env.NODE_ENV !== 'production';
-  const effectiveDevOtp = isDev ? (smsResult?.devOtp || generatedOtp) : undefined;
-
-  let message = 'OTP has been sent to your mobile number via SMS.';
-  if (isDev && smsResult && !smsResult.delivered) {
-    message = `[Dev Mode] Gateway: ${smsResult.gatewayDescription || 'carrier delay'}. Test OTP: ${effectiveDevOtp}`;
-  }
-
   return {
     success: true,
-    message,
-    devOtp: effectiveDevOtp,
+    message: 'OTP has been sent to your mobile number via SMS.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     phone: formattedPhone,
   };
@@ -350,18 +341,9 @@ export async function resendMobileOtp({ phone, country = 'India' }) {
     },
   });
 
-  const isDev = process.env.NODE_ENV !== 'production';
-  const effectiveDevOtp = isDev ? (smsResult?.devOtp || generatedOtp) : undefined;
-
-  let message = 'OTP has been resent to your mobile number.';
-  if (isDev && smsResult && !smsResult.delivered) {
-    message = `[Dev Mode] Gateway: ${smsResult.gatewayDescription || 'carrier delay'}. Test OTP: ${effectiveDevOtp}`;
-  }
-
   return {
     success: true,
-    message,
-    devOtp: effectiveDevOtp,
+    message: 'OTP has been resent to your mobile number via SMS.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     phone: formattedPhone,
   };

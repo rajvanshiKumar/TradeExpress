@@ -62,7 +62,6 @@ export default function RegisterForm() {
   const [verifiedPhone, setVerifiedPhone] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const [otpFeedback, setOtpFeedback] = useState({ type: '', message: '' });
-  const [devOtp, setDevOtp] = useState('');
 
   // Countdown timer for OTP resend cooldown
   useEffect(() => {
@@ -139,9 +138,6 @@ export default function RegisterForm() {
       if (res.ok && data.success) {
         setOtpSent(true);
         setCooldown(data.cooldownSeconds || 60);
-        if (data.devOtp) {
-          setDevOtp(data.devOtp);
-        }
         setOtpFeedback({
           type: 'success',
           message: data.message || `OTP sent via SMS to ${parsed.international}.`,
@@ -442,21 +438,6 @@ export default function RegisterForm() {
                 className="w-full rounded-xl border-2 border-navy-200 px-4 py-3 font-mono text-center text-2xl font-bold tracking-[0.4em] text-navy-950 placeholder:text-navy-300 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
-
-            {devOtp ? (
-              <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900 shadow-xs">
-                <span>
-                  <strong>Dev Mode Code:</strong> <code className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 font-mono font-bold text-amber-950">{devOtp}</code>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setOtpValue(devOtp)}
-                  className="rounded-md bg-amber-200/80 px-2 py-1 font-bold text-amber-900 transition-colors hover:bg-amber-300"
-                >
-                  Insert Code
-                </button>
-              </div>
-            ) : null}
 
             {otpFeedback.message ? (
               <div
