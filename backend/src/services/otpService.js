@@ -129,14 +129,16 @@ export async function requestMobileOtp({ phone, country = 'India' }) {
   // 3. Dispatch OTP through configured provider (PowersText or MSG91)
   const isPowersText = Boolean(process.env.SMS_API_URL || process.env.SMS_SENDER_ID);
   let sessionToken = null;
+  let smsResult = null;
+  let generatedOtp = null;
 
   if (isPowersText) {
-    const otpCode = String(Math.floor(100000 + Math.random() * 900000));
-    const otpHash = crypto.createHash('sha256').update(otpCode).digest('hex');
+    generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = crypto.createHash('sha256').update(generatedOtp).digest('hex');
     sessionToken = `otp_${otpHash}`;
-    await powerstextService.sendOtpSms({
+    smsResult = await powerstextService.sendOtpSms({
       mobile: msg91Mobile,
-      otp: otpCode,
+      otp: generatedOtp,
       expiryMinutes: Number(process.env.MSG91_OTP_EXPIRY_MINUTES) || 10,
     });
   } else {
@@ -168,9 +170,18 @@ export async function requestMobileOtp({ phone, country = 'India' }) {
     },
   });
 
+  const isDev = process.env.NODE_ENV !== 'production';
+  const effectiveDevOtp = isDev ? (smsResult?.devOtp || generatedOtp) : undefined;
+
+  let message = 'OTP has been sent to your mobile number via SMS.';
+  if (isDev && smsResult && !smsResult.delivered) {
+    message = `[Dev Mode] Gateway: ${smsResult.gatewayDescription || 'carrier delay'}. Test OTP: ${effectiveDevOtp}`;
+  }
+
   return {
     success: true,
-    message: 'OTP has been sent to your mobile number via SMS.',
+    message,
+    devOtp: effectiveDevOtp,
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     phone: formattedPhone,
   };
@@ -311,14 +322,16 @@ export async function resendMobileOtp({ phone, country = 'India' }) {
   // Retry through PowersText or MSG91
   const isPowersText = Boolean(process.env.SMS_API_URL || process.env.SMS_SENDER_ID);
   let sessionToken = verification.token;
+  let smsResult = null;
+  let generatedOtp = null;
 
   if (isPowersText) {
-    const otpCode = String(Math.floor(100000 + Math.random() * 900000));
-    const otpHash = crypto.createHash('sha256').update(otpCode).digest('hex');
+    generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = crypto.createHash('sha256').update(generatedOtp).digest('hex');
     sessionToken = `otp_${otpHash}`;
-    await powerstextService.sendOtpSms({
+    smsResult = await powerstextService.sendOtpSms({
       mobile: msg91Mobile,
-      otp: otpCode,
+      otp: generatedOtp,
       expiryMinutes: Number(process.env.MSG91_OTP_EXPIRY_MINUTES) || 10,
     });
   } else {
@@ -337,9 +350,18 @@ export async function resendMobileOtp({ phone, country = 'India' }) {
     },
   });
 
+  const isDev = process.env.NODE_ENV !== 'production';
+  const effectiveDevOtp = isDev ? (smsResult?.devOtp || generatedOtp) : undefined;
+
+  let message = 'OTP has been resent to your mobile number.';
+  if (isDev && smsResult && !smsResult.delivered) {
+    message = `[Dev Mode] Gateway: ${smsResult.gatewayDescription || 'carrier delay'}. Test OTP: ${effectiveDevOtp}`;
+  }
+
   return {
     success: true,
-    message: 'OTP has been resent to your mobile number.',
+    message,
+    devOtp: effectiveDevOtp,
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     phone: formattedPhone,
   };
