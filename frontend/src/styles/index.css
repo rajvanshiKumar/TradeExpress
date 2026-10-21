@@ -172,6 +172,21 @@
 }
 
 /* Section backgrounds */
+.ts-hero-trending-banner {
+  background: linear-gradient(
+    180deg,
+    #1c683e 0%,
+    #217446 16%,
+    #2a8451 32%,
+    #389c65 48%,
+    #4eaf7a 62%,
+    #6ec392 74%,
+    #98d9b3 84%,
+    #c2ecd3 91%,
+    #daf3e5 96%,
+    #eef8f2 100%
+  );
+}
 .ts-sage {
   background-color: #a8c494;
   background-image: linear-gradient(180deg, #b3cca1 0%, #a8c494 55%, #9dbb88 100%);

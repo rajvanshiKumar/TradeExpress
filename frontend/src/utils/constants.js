@@ -1,9 +1,9 @@
 // App-wide constants. Sample values (shipping, tax) are easy to change here.
 
 export const BRAND = {
-  name: 'TradeSphere',
-  tagline: 'Your World of Business',
-  supportEmail: 'support@tradesphere.example',
+  name: 'TradeExpress',
+  tagline: 'India’s Premier B2B Marketplace',
+  supportEmail: 'support@tradeexpress.com',
 };
 
 // Every browser-storage key lives under this prefix, so "Reset sample data" can clear them all.

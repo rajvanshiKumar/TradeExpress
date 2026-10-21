@@ -32,7 +32,7 @@ export default function FeaturedProducts() {
     <Section
       id="home-featured"
       tone="white"
-      className="!bg-white"
+      className="!pt-2 sm:!pt-3 !bg-gradient-to-b !from-[#eef8f2] !via-[#f7fbf8] !to-white"
       eyebrow="Featured wholesale"
       title="Products buyers are"
       accent="sourcing now."

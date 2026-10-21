@@ -1,119 +1,164 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
-import Section from "./Section";
-import Image from "../common/Image";
-import Skeleton from "../common/Skeleton";
+import { ArrowRight, Sparkles } from "lucide-react";
 import useProducts from "../../hooks/useProducts";
+import { photoUrl, FALLBACK_IMAGE, REAL_HD_IMAGES } from "../../utils/images";
 
-export function CategoryCard({
-  category,
-  count,
-  large = false,
-  className = "",
-}) {
-  return (
-    <Link
-      to={`/categories/${category.slug}`}
-      className={`group relative isolate block overflow-hidden rounded-[1.75rem] bg-[#e7efe0] shadow-card ring-1 ring-navy-900/5 ${className}`}
-    >
-      <Image
-        photo={category.photo}
-        illustration={category.illustration}
-        width={large ? 900 : 480}
-        height={large ? 900 : 480}
-        eager={large}
-        alt=""
-        className="absolute inset-0 -z-10 size-full object-cover transition-transform duration-[900ms] ease-out group-hover:scale-[1.07]"
-      />
-      <div
-        className="absolute inset-0 -z-10 bg-gradient-to-t from-navy-950/85 via-navy-950/15 to-transparent"
-        aria-hidden="true"
-      />
-      <div
-        className={`flex h-full flex-col justify-end ${large ? "p-7" : "p-4 sm:p-5"}`}
-      >
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#d6e6c8]">
-          {count} {count === 1 ? "listing" : "listings"}
-        </p>
-        <h3
-          className={`mt-1 font-display font-bold !text-white ${large ? "text-2xl sm:text-3xl" : "text-base sm:text-lg"}`}
-        >
-          {category.name}
-        </h3>
-        {large ? (
-          <p className="mt-2 max-w-sm text-sm text-white/70">
-            {category.description}
-          </p>
-        ) : null}
-      </div>
-      <span
-        className="absolute right-4 top-4 inline-flex size-9 items-center justify-center rounded-full bg-white/15 text-white opacity-0 backdrop-blur transition-all duration-300 group-hover:opacity-100"
-        aria-hidden="true"
-      >
-        <ArrowUpRight className="size-4" />
-      </span>
-    </Link>
-  );
-}
+// Curated high-definition photographs for every B2B category & specialty (genuine photography, no cartoons)
+const HD_CATEGORY_PHOTOS = {
+  electronics: "photo-1498049794561-7780e7231661", // Audio, laptops, smart electronics & accessories
+  "fashion-apparel": "photo-1567401893414-76b7b1e5a7a5", // Fashion, textiles & apparel
+  "home-kitchen": "photo-1600210492493-0946911123ea", // Premium home & kitchen supplies
+  machinery: "photo-1566930665082-4ae9dbbb5b6b", // CNC machinery & industrial manufacturing
+  "beauty-personal-care": "photo-1522335789203-aabd1fc54bc9", // Cosmetics & personal care
+  packaging: "photo-1534452203293-494d7ddbf7e0", // Packaging boxes & shipping materials
+  furniture: "photo-1628744876497-eb30460be9f6", // Commercial & living space furniture
+  automotive: "photo-1580273916550-e323be2ae537", // Automotive garage tools & components
+  "sports-outdoors": "photo-1575987116913-e96e7d490b8a", // Sports goods & athletic gear
+  "toys-games": "photo-1618397360795-952a13220a66", // Wooden toys & games
+  agriculture: "photo-1527847263472-aa5338d178b8", // Fresh agricultural harvest & produce
+  "industrial-supplies": "photo-1581092921461-eab62e97a780", // Industrial safety gear & plant supplies
+  "spec-tools": "photo-1504917599217-d4dc5ebe6122", // Power tools & precision instruments
+  "spec-safety": "photo-1581092921461-eab62e97a780", // Safety helmet & PPE equipment
+  "spec-packaging": "photo-1513672494107-cd9d848a383e", // Corrugated packaging boxes
+  "spec-handtools": "photo-1613206485381-b028e578e791", // Chrome steel hand tools
+  "spec-agriculture": "photo-1635574901622-8014a3ddead5", // Agricultural seedlings & farm equipment
+  "spec-automotive": "photo-1649136378672-b965cb9935d5", // Auto garage spares & accessories
+};
 
-/** Popular wholesale categories as an editorial bento grid. */
+const POPULAR_SPECIALTIES = [
+  {
+    id: "spec-tools",
+    name: "Power Tools & CNC",
+    slug: "machinery",
+    to: "/products?category=machinery",
+    photo: "photo-1504917599217-d4dc5ebe6122",
+  },
+  {
+    id: "spec-safety",
+    name: "Safety & PPE Equipment",
+    slug: "industrial-supplies",
+    to: "/products?category=industrial-supplies",
+    photo: "photo-1581092921461-eab62e97a780",
+  },
+  {
+    id: "spec-packaging",
+    name: "Corrugated Packaging",
+    slug: "packaging",
+    to: "/products?category=packaging",
+    photo: "photo-1513672494107-cd9d848a383e",
+  },
+  {
+    id: "spec-handtools",
+    name: "Hand Tools & Hardware",
+    slug: "industrial-supplies",
+    to: "/products?category=industrial-supplies",
+    photo: "photo-1613206485381-b028e578e791",
+  },
+  {
+    id: "spec-agriculture",
+    name: "Agricultural Supplies",
+    slug: "agriculture",
+    to: "/products?category=agriculture",
+    photo: "photo-1635574901622-8014a3ddead5",
+  },
+  {
+    id: "spec-automotive",
+    name: "Auto Garage Spares",
+    slug: "automotive",
+    to: "/products?category=automotive",
+    photo: "photo-1649136378672-b965cb9935d5",
+  },
+];
+
 export default function CategoryGrid() {
   const { categories, products, loading } = useProducts();
-  const count = (slug) =>
-    products.filter(
-      (product) => product.category === slug && product.status === "Active",
-    ).length;
-  const sorted = [...categories].sort((a, b) => count(b.slug) - count(a.slug));
+
+  // Combine standard 12 categories with 6 high-demand specialties for an 18-card grid (6x3)
+  const allCards = useMemo(() => {
+    const mainList = categories.map((cat) => ({
+      id: cat.id || cat.slug,
+      name: cat.name,
+      slug: cat.slug,
+      to: `/categories/${cat.slug}`,
+      photo: cat.photo || HD_CATEGORY_PHOTOS[cat.slug],
+    }));
+
+    return [...mainList, ...POPULAR_SPECIALTIES].slice(0, 18);
+  }, [categories]);
 
   return (
-    <Section
-      id="home-categories"
-      className="ts-post-banner relative isolate overflow-hidden"
-      eyebrow="Category discovery"
-      title="Shop wholesale"
-      accent="by category."
-      description="Sourcing categories with subcategories, minimum order quantities and tiered pricing, all from the live catalogue."
-      linkTo="/categories"
-      linkLabel="All categories"
+    <section
+      aria-labelledby="trending-categories-title"
+      className="relative z-10 w-full pt-4 sm:pt-6 pb-2"
     >
-      <div
-        aria-hidden="true"
-        className="ts-grid-pattern absolute inset-0 -z-10 pointer-events-none opacity-40"
-      />
-      {loading && sorted.length === 0 ? (
-        <div
-          className="grid grid-cols-2 gap-4 md:grid-cols-4"
-          role="status"
-          aria-label="Loading categories"
-        >
-          {Array.from({ length: 8 }, (_, index) => (
-            <Skeleton
-              key={index}
-              className="aspect-square w-full rounded-3xl"
-            />
-          ))}
+      <div className="ts-container">
+        {/* Section Heading over dark-to-light green background */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+          <div className="flex items-center gap-2">
+            <h2
+              id="trending-categories-title"
+              className="font-display text-lg sm:text-xl lg:text-2xl font-black tracking-tight text-white"
+            >
+              Trending on TradeExpress
+            </h2>
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-bold text-white border border-white/20 backdrop-blur-xs">
+              <Sparkles className="size-3 text-brand-300" />
+              Popular B2B Sectors
+            </span>
+          </div>
+
+          <Link
+            to="/categories"
+            className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold text-white/90 hover:text-white transition-colors"
+          >
+            <span>View All Categories</span>
+            <ArrowRight className="size-3.5" />
+          </Link>
         </div>
-      ) : (
-        <div className="grid auto-rows-[10.5rem] grid-cols-2 gap-3 sm:auto-rows-[12rem] sm:gap-4 md:grid-cols-4 lg:auto-rows-[13.5rem]">
-          {sorted.slice(0, 12).map((category, index) => (
-            <CategoryCard
-              key={category.id}
-              category={category}
-              count={count(category.slug)}
-              large={index === 0}
-              className={
-                index === 0
-                  ? "col-span-2 row-span-2"
-                  : index === 3
-                    ? "md:col-span-2"
-                    : index === 11
-                      ? "max-md:col-span-2"
-                      : ""
-              }
-            />
-          ))}
+
+        {/* 6-Column Responsive Grid of White Cards with Real HD Photos (No cartoons) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-3.5 md:gap-4">
+          {allCards.map((card) => {
+            const photoId =
+              card.photo ||
+              HD_CATEGORY_PHOTOS[card.id] ||
+              HD_CATEGORY_PHOTOS[card.slug] ||
+              REAL_HD_IMAGES[card.illustration] ||
+              "photo-1498049794561-7780e7231661";
+
+            const photoSrc = photoUrl(photoId, 320, 320);
+
+            return (
+              <Link
+                key={card.id}
+                to={card.to}
+                className="group flex flex-col items-center justify-center rounded-2xl border border-white/30 bg-white p-3 sm:p-4 text-center shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+              >
+                {/* Category Real HD Photograph (No cartoons) */}
+                <div className="flex size-14 sm:size-16 shrink-0 items-center justify-center rounded-xl overflow-hidden bg-slate-100 group-hover:scale-105 transition-transform duration-200 shadow-2xs border border-slate-100">
+                  <img
+                    src={photoSrc}
+                    alt={card.name}
+                    width="80"
+                    height="80"
+                    loading="lazy"
+                    className="size-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = FALLBACK_IMAGE;
+                    }}
+                  />
+                </div>
+
+                {/* Centered Category Name */}
+                <span className="mt-2.5 text-xs sm:text-[13px] font-semibold text-navy-900 group-hover:text-brand-700 transition-colors line-clamp-2 leading-tight">
+                  {card.name}
+                </span>
+              </Link>
+            );
+          })}
         </div>
-      )}
-    </Section>
+      </div>
+    </section>
   );
 }

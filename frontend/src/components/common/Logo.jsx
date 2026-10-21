@@ -16,7 +16,7 @@ export default function Logo({ light = false, showTagline = true, className = ''
       />
       <span className="leading-none">
         <span className={`block font-display font-extrabold tracking-[-0.03em] ${isSm ? 'text-[0.95rem] sm:text-base xl:text-[1.125rem]' : 'text-xl sm:text-[1.4rem]'} ${light ? 'text-white' : 'text-navy-900'}`}>
-          Trade<span className={light ? 'text-brand-500' : 'text-brand-600'}>Sphere</span>
+          Trade<span className={light ? 'text-brand-500' : 'text-brand-600'}>Express</span>
         </span>
         {showTagline && !isSm ? (
           <span className={`mt-0.5 hidden text-[0.5625rem] font-semibold uppercase tracking-[0.24em] xs:block ${light ? 'text-navy-200' : 'text-muted'}`}>
