@@ -56,7 +56,7 @@ export default function SuperAdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f7f5] text-slate-900 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#f4f7f5] text-slate-900 flex flex-col font-sans w-full overflow-x-hidden">
       {/* Top Enterprise Banner */}
       <header className="sticky top-0 z-40 bg-[#0b2716] border-b border-[#185331] text-white shadow-md">
         <div className="flex items-center justify-between px-4 lg:px-6 h-16">
@@ -134,7 +134,7 @@ export default function SuperAdminLayout() {
         </div>
       </header>
 
-      <div className="flex flex-1 relative">
+      <div className="flex flex-1 min-w-0 w-full relative">
         {/* Mobile Backdrop */}
         {sidebarOpen && (
           <div
@@ -145,7 +145,7 @@ export default function SuperAdminLayout() {
 
         {/* Sidebar */}
         <aside
-          className={`fixed inset-y-0 left-0 pt-16 z-30 w-64 bg-[#081d11] border-r border-[#154629] flex flex-col transition-transform duration-200 lg:static lg:pt-0 lg:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 pt-16 z-30 w-64 shrink-0 bg-[#081d11] border-r border-[#154629] flex flex-col transition-transform duration-200 lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:pt-0 lg:translate-x-0 ${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -187,10 +187,12 @@ export default function SuperAdminLayout() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
-          <Suspense fallback={<PageSkeleton />}>
-            <Outlet />
-          </Suspense>
+        <main className="flex-1 min-w-0 overflow-x-hidden">
+          <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+            <Suspense fallback={<PageSkeleton />}>
+              <Outlet />
+            </Suspense>
+          </div>
         </main>
       </div>
     </div>
