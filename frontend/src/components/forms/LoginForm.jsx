@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, startTransition } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, LogIn, ShieldCheck } from "lucide-react";
 import Input from "../common/Input";
@@ -19,13 +19,13 @@ const schema = {
   password: [rules.required("Password")],
 };
 
-const ROLE_NAMES = { buyer: "Buyer", supplier: "Supplier", admin: "Admin" };
+const ROLE_NAMES = { buyer: "Buyer", supplier: "Supplier", admin: "Admin", super_admin: "Super Admin" };
 
 /**
  * Sign-in form. `mode="admin"` signs in against the separately configured admin account;
  * the default mode signs in Buyers and Suppliers.
  */
-export default function LoginForm({ mode = "member", role = null }) {
+export default function LoginForm({ mode = "member", role = null, adminType = "admin" }) {
   const isAdmin = mode === "admin";
   const { login, loginAdmin, isAdminConfigured } = useAuth();
   const { showToast } = useNotifications();
@@ -64,7 +64,7 @@ export default function LoginForm({ mode = "member", role = null }) {
       return;
     }
     showToast(
-      `Signed in as ${result.user.name} (${ROLE_NAMES[result.user.role]}).`,
+      `Signed in as ${result.user.name} (${ROLE_NAMES[result.user.role] || result.user.role}).`,
     );
     const from = location.state?.from;
     const allowed =
@@ -73,8 +73,12 @@ export default function LoginForm({ mode = "member", role = null }) {
       from !== "/admin/login" &&
       (result.user.role === "admin"
         ? from.startsWith("/admin") || from === "/messages"
-        : !from.startsWith("/admin"));
-    navigate(allowed ? from : ROLE_HOME[result.user.role], { replace: true });
+        : result.user.role === "super_admin"
+        ? from.startsWith("/super-admin") || from.startsWith("/admin") || from === "/messages"
+        : !from.startsWith("/admin") && !from.startsWith("/super-admin"));
+    startTransition(() => {
+      navigate(allowed ? from : (ROLE_HOME[result.user.role] || "/"), { replace: true });
+    });
   };
 
   return (
@@ -101,6 +105,48 @@ export default function LoginForm({ mode = "member", role = null }) {
         >
           {formError}
         </p>
+      ) : null}
+      {isAdmin ? (
+        <div className="rounded-xl border border-navy-900/10 bg-surface/90 p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-navy-800">
+            <span>One-Click Demo Credentials:</span>
+            <span className="text-[10px] text-muted font-normal">Click to auto-fill</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setValues({ email: "krajvanshi244@gmail.com", password: "super-raj@12345" });
+                setErrors({});
+                setFormError("");
+              }}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-bold transition-all ${
+                adminType === "super_admin"
+                  ? "bg-emerald-950 text-emerald-300 ring-2 ring-emerald-500 shadow-xs"
+                  : "bg-emerald-950/10 text-emerald-800 hover:bg-emerald-950/20"
+              }`}
+            >
+              <ShieldCheck className="size-3.5 text-emerald-400" />
+              <span>👑 Super Admin Demo</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setValues({ email: "krajvanshi244@gmail.com", password: "modiji@12345" });
+                setErrors({});
+                setFormError("");
+              }}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-bold transition-all ${
+                adminType !== "super_admin"
+                  ? "bg-navy-900 text-white ring-2 ring-brand-400 shadow-xs"
+                  : "bg-navy-100 text-navy-800 hover:bg-navy-200"
+              }`}
+            >
+              <ShieldCheck className="size-3.5 text-brand-400" />
+              <span>🛡️ Staff Admin Demo</span>
+            </button>
+          </div>
+        </div>
       ) : null}
       <Input
         id={`${prefix}email`}
@@ -155,11 +201,14 @@ export default function LoginForm({ mode = "member", role = null }) {
         size="lg"
         icon={isAdmin ? ShieldCheck : LogIn}
         loading={busy}
+        className={isAdmin && adminType === "super_admin" ? "!bg-emerald-950 !text-emerald-300 hover:!bg-emerald-900 border border-emerald-500/40" : ""}
       >
         {busy
           ? "Signing in…"
           : isAdmin
-            ? "Sign in as Admin"
+            ? adminType === "super_admin"
+              ? "Sign in as Super Admin"
+              : "Sign in as Admin"
             : role
               ? `Sign in as ${ROLE_NAMES[role]}`
               : "Sign In"}

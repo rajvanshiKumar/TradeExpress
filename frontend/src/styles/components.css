@@ -292,3 +292,28 @@
     transform: none;
   }
 }
+
+/* Prominent, smooth horizontal scrollbar for admin tables */
+.custom-table-scrollbar {
+  overflow-x: auto;
+  scrollbar-width: auto;
+  scrollbar-color: #10b981 #e2e8f0;
+}
+.custom-table-scrollbar::-webkit-scrollbar {
+  height: 12px;
+  background-color: #f1f5f9;
+}
+.custom-table-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-top: 1px solid #e2e8f0;
+  border-radius: 0 0 0.75rem 0.75rem;
+}
+.custom-table-scrollbar::-webkit-scrollbar-thumb {
+  background: #10b981;
+  border-radius: 9999px;
+  border: 2px solid #f1f5f9;
+}
+.custom-table-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #059669;
+}
+

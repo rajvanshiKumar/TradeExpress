@@ -21,6 +21,11 @@ export async function authenticateJWT(req, res, next) {
         email: true,
         name: true,
         role: true,
+        adminRole: true,
+        adminPermissions: true,
+        isActive: true,
+        status: true,
+        statusReason: true,
         company: true,
         phone: true,
         city: true,
@@ -30,6 +35,13 @@ export async function authenticateJWT(req, res, next) {
 
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found.' });
+    }
+
+    if (user.isActive === false || user.status === 'SUSPENDED') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account is suspended. Reason: ' + (user.statusReason || 'Violation of terms.'),
+      });
     }
 
     req.user = user;
@@ -56,9 +68,19 @@ export async function optionalAuth(req, res, next) {
   try {
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, name: true, role: true, company: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        adminRole: true,
+        adminPermissions: true,
+        isActive: true,
+        status: true,
+        company: true,
+      },
     });
-    req.user = user || null;
+    req.user = (user && user.isActive !== false && user.status !== 'SUSPENDED') ? user : null;
   } catch {
     req.user = null;
   }
@@ -70,9 +92,48 @@ export function requireRole(...roles) {
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'Authentication required.' });
     }
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ success: false, message: 'Forbidden. Insufficient permissions.' });
+    // SUPER_ADMIN has platform-wide authority
+    if (req.user.role === 'SUPER_ADMIN' || roles.includes(req.user.role)) {
+      return next();
     }
-    next();
+    return res.status(403).json({ success: false, message: 'Forbidden. Insufficient permissions.' });
+  };
+}
+
+export function requireSuperAdmin(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Authentication required.' });
+  }
+  if (req.user.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Forbidden. Super Admin access required.' });
+  }
+  next();
+}
+
+export function requirePermission(permissionCode) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Authentication required.' });
+    }
+    // SUPER_ADMIN has universal access
+    if (req.user.role === 'SUPER_ADMIN') {
+      return next();
+    }
+    if (req.user.role === 'ADMIN') {
+      const perms = Array.isArray(req.user.adminPermissions) ? req.user.adminPermissions : [];
+      const domain = permissionCode.includes('.') ? permissionCode.split('.')[0] : permissionCode;
+      if (
+        perms.includes('*') ||
+        perms.includes(permissionCode) ||
+        perms.includes(`${domain}.*`) ||
+        perms.includes(`${domain}.manage`)
+      ) {
+        return next();
+      }
+    }
+    return res.status(403).json({
+      success: false,
+      message: `Forbidden. Missing required permission: ${permissionCode}`,
+    });
   };
 }

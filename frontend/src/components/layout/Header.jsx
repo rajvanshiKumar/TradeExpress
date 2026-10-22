@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
+  BadgePercent,
   ChevronDown,
   Heart,
+  HelpCircle,
   Menu,
   MessageSquare,
   Scale,
   Search,
+  ShieldCheck,
   ShoppingCart,
   X,
 } from "lucide-react";
@@ -27,14 +30,15 @@ import useScrolled from "../../hooks/useScrolled";
 import { mainNav } from "../../data/navigation";
 
 function IconLink({ to, icon: Icon, label, count, className = "" }) {
+  const displayClass = className.includes("hidden") ? "" : "inline-flex ";
   return (
     <Link
       to={to}
       aria-label={`${label}${count ? `, ${count}` : ""}`}
       title={label}
-      className={`relative inline-flex size-8 sm:size-8.5 xl:size-9 shrink-0 items-center justify-center rounded-full text-navy-800 transition-colors hover:bg-navy-900/5 hover:text-navy-950 ${className}`}
+      className={`relative ${displayClass}size-7.5 sm:size-8 xl:size-8.5 shrink-0 items-center justify-center rounded-full text-navy-800 transition-colors hover:bg-navy-900/5 hover:text-navy-950 ${className}`}
     >
-      <Icon className="size-4 sm:size-[1.05rem]" strokeWidth={1.75} aria-hidden="true" />
+      <Icon className="size-4" strokeWidth={1.75} aria-hidden="true" />
       <CountDot count={count} />
     </Link>
   );
@@ -45,6 +49,12 @@ function isActive(to, location) {
   const [path] = to.split("?");
   if (to.includes("role=supplier")) return false;
   if (to === "/help" && (location.pathname === "/help" || location.pathname === "/info/help")) return true;
+  if (to.includes("deal=1")) {
+    return location.pathname === "/products" && location.search.includes("deal=1");
+  }
+  if (path === "/products" && to === "/products") {
+    return location.pathname === "/products" && !location.search.includes("deal=1");
+  }
   return (
     path === location.pathname ||
     (path !== "/" && location.pathname.startsWith(`${path}/`))
@@ -119,16 +129,16 @@ export default function Header() {
         </a>
 
         <div
-          className={`w-full max-w-[98rem] mx-auto px-2.5 xs:px-3 sm:px-4 lg:px-4 xl:px-6 2xl:px-8 flex items-center justify-between gap-1.5 sm:gap-2 lg:gap-3 transition-[padding] duration-300 ${scrolled ? "py-1.5 sm:py-2" : "py-2 sm:py-2.5 lg:py-3"}`}
+          className={`w-full max-w-[105rem] mx-auto px-3 sm:px-4 lg:px-5 xl:px-6 flex items-center justify-between gap-3 lg:gap-4 transition-[padding] duration-300 ${scrolled ? "py-1.5 sm:py-2" : "py-2 sm:py-2.5"}`}
         >
           {/* Left: Mobile menu button & Brand Logo */}
-          <div className="flex shrink-0 items-center gap-1 sm:gap-1.5 mr-1 sm:mr-2 lg:mr-3">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <IconButton
               icon={Menu}
               label="Open menu"
               size="sm"
               onClick={mobileMenu.onOpen}
-              className="lg:hidden shrink-0 !size-8 sm:!size-8.5"
+              className="lg:hidden shrink-0 !size-8 sm:!size-8.5 rounded-xl hover:bg-navy-900/5 text-navy-800"
               aria-expanded={mobileMenu.open}
             />
             <Logo size="sm" />
@@ -139,55 +149,103 @@ export default function Header() {
             aria-label="Main"
             ref={megaRef}
             onMouseLeave={scheduleClose}
-            className="relative hidden shrink-0 items-center gap-0.5 lg:flex xl:gap-1 min-w-0"
+            className="relative hidden items-center gap-0.5 xl:gap-1 lg:flex shrink-0"
           >
-            {mainNav
-              .filter((item) => !item.highlight)
-              .map((item) => {
-                const active = isActive(item.to, location);
-                const isAbout = item.to === "/info/about";
-                const isHelp = item.to === "/help";
-                const pillClass = `relative inline-flex h-8.5 xl:h-9 items-center whitespace-nowrap rounded-full px-2 xl:px-2.5 2xl:px-2.5 text-xs xl:text-[13px] font-medium transition-all ${
-                  isAbout || isHelp ? "hidden 2xl:inline-flex " : ""
-                }${
-                  active
-                    ? "bg-navy-900/[0.08] text-navy-900 font-semibold ring-1 ring-navy-900/10"
-                    : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-900"
-                }`;
+            {[
+              { label: "Products", to: "/products" },
+              { label: "Categories", to: "/categories", megaMenu: true },
+              { label: "Suppliers", to: "/suppliers" },
+              { label: "Exporters", to: "/exporters" },
+              { label: "Post RFQ", to: "/rfq" },
+              { label: "Compare Quotes", to: "/compare-quotes" },
+              { label: "Wishlist", to: "/wishlist" },
+              ...(user
+                ? [
+                    { label: "Deals", to: "/products?deal=1" },
+                    { label: "Help Center", to: "/help" },
+                  ]
+                : []),
+              { label: "About Us", to: "/info/about" },
+            ].map((item) => {
+              const active = isActive(item.to, location);
+              const isAbout = item.to === "/info/about";
+              const isExporters = item.to === "/exporters";
+              const isWishlist = item.to === "/wishlist";
+              const isDeals = item.to.includes("deal=1");
+              const isHelp = item.to === "/help";
+
+              // Responsive tiering:
+              // - Categories, Products, Suppliers, Post RFQ, Compare Quotes: visible on lg+ (1024px+)
+              // - Deals: visible on lg+ (1024px+)
+              // - Wishlist (with Heart symbol): visible on min-[1180px]+
+              // - Help Center: visible on xl+ (1280px+)
+              // - Exporters: visible on xl+ (1280px+)
+              // - About Us: visible on min-[1420px]+ when logged in, or min-[1360px]+ when guest
+              const hideClass = isAbout
+                ? user
+                  ? "hidden min-[1420px]:inline-flex "
+                  : "hidden min-[1360px]:inline-flex "
+                : isExporters
+                  ? "hidden xl:inline-flex "
+                  : isHelp
+                    ? "hidden xl:inline-flex "
+                    : isWishlist
+                      ? "hidden min-[1180px]:inline-flex "
+                      : "";
+
+              const displayClass = hideClass ? hideClass : "inline-flex ";
+
+                const pillClass = `relative ${displayClass}h-8 xl:h-8.5 items-center whitespace-nowrap rounded-full px-2 xl:px-2.5 text-xs xl:text-[13px] font-medium transition-all ${active
+                    ? "bg-navy-900/[0.08] text-navy-950 font-bold ring-1 ring-navy-900/10"
+                    : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-950"
+                  }`;
 
                 const renderLabel = (label) => {
-                  if (label === "Request For Quotation") {
-                    return (
-                      <>
-                        <span className="hidden min-[1680px]:inline">Request For Quotation</span>
-                        <span className="hidden xl:inline min-[1680px]:hidden">Request Quote</span>
-                        <span className="xl:hidden">RFQ</span>
-                      </>
-                    );
+                  if (label === "Request For Quotation" || label === "RFQ") {
+                    return "Post RFQ";
                   }
                   if (label === "Compare Quotes" || label === "Smart Quote Comparison") {
                     return (
-                      <span className="inline-flex items-center gap-1.5 font-semibold text-brand-600">
-                        <Scale className="size-3.5 text-brand-600 shrink-0" aria-hidden="true" />
-                        <span className="hidden min-[1680px]:inline">Compare Quotes</span>
-                        <span className="hidden xl:inline min-[1680px]:hidden">Compare Quotes</span>
-                        <span className="xl:hidden">Compare</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Scale className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                        <span>Compare Quotes</span>
+                      </span>
+                    );
+                  }
+                  if (label === "Wishlist" || label === "Saved") {
+                    return (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Heart className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                        <span>Wishlist</span>
+                        {wishlistCount > 0 ? (
+                          <span className="ml-0.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-navy-900/10 px-1 text-[10px] font-bold text-navy-950">
+                            {wishlistCount}
+                          </span>
+                        ) : null}
+                      </span>
+                    );
+                  }
+                  if (label === "Deals" || label === "Wholesale Deals") {
+                    return (
+                      <span className="inline-flex items-center gap-1.5">
+                        <BadgePercent className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                        <span>Deals</span>
+                      </span>
+                    );
+                  }
+                  if (label === "Help Center" || label === "Help") {
+                    return (
+                      <span className="inline-flex items-center gap-1.5">
+                        <HelpCircle className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                        <span>Help Center</span>
                       </span>
                     );
                   }
                   if (label === "Find Suppliers") {
-                    return (
-                      <>
-                        <span className="hidden min-[1600px]:inline">Find </span>Suppliers
-                      </>
-                    );
+                    return "Suppliers";
                   }
                   if (label === "Explore Products") {
-                    return (
-                      <>
-                        <span className="hidden min-[1600px]:inline">Explore </span>Products
-                      </>
-                    );
+                    return "Products";
                   }
                   return label;
                 };
@@ -201,11 +259,10 @@ export default function Header() {
                     >
                       <Link
                         to={item.to}
-                        className={`relative inline-flex h-8.5 xl:h-9 items-center gap-1 whitespace-nowrap rounded-full px-2 xl:px-2.5 2xl:px-2.5 text-xs xl:text-[13px] font-medium transition-all ${
-                          active || megaOpen
-                            ? "bg-navy-900/[0.08] text-navy-900 font-semibold ring-1 ring-navy-900/10"
-                            : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-900"
-                        }`}
+                        className={`relative inline-flex h-8 xl:h-8.5 items-center gap-1 whitespace-nowrap rounded-full px-2 xl:px-2.5 text-xs xl:text-[13px] font-medium transition-all ${active || megaOpen
+                            ? "bg-navy-900/[0.08] text-navy-950 font-bold ring-1 ring-navy-900/10"
+                            : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-950"
+                          }`}
                         aria-current={active ? "page" : undefined}
                       >
                         <span>{renderLabel(item.label)}</span>
@@ -214,9 +271,8 @@ export default function Header() {
                             e.preventDefault();
                             toggleMega();
                           }}
-                          className={`size-3 transition-transform duration-200 ${
-                            megaOpen ? "rotate-180" : ""
-                          }`}
+                          className={`size-3 transition-transform duration-200 ${megaOpen ? "rotate-180" : ""
+                            }`}
                           aria-hidden="true"
                         />
                       </Link>
@@ -245,8 +301,8 @@ export default function Header() {
             ) : null}
           </nav>
 
-          {/* Right Action Icons & User Account with compact gaps and safe spacing */}
-          <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1 lg:gap-1 xl:gap-1.5 pl-2 sm:pl-3">
+          {/* Right Action Icons & User Account */}
+          <div className="flex shrink-0 items-center gap-1 sm:gap-1.5 lg:gap-1.5 xl:gap-2 pr-1 sm:pr-2">
             <IconButton
               icon={searchOpen ? X : Search}
               label={searchOpen ? "Close search" : "Search"}
@@ -254,9 +310,9 @@ export default function Header() {
               aria-expanded={searchOpen}
               aria-controls="header-search"
               size="sm"
-              className={`!size-8 sm:!size-8.5 xl:!size-9 shrink-0 ${scrolled ? "" : "max-lg:hidden"}`}
+              className={`!size-7.5 sm:!size-8 xl:!size-8.5 shrink-0 ${scrolled ? "" : "max-lg:hidden"}`}
             />
-            <div className="hidden xl:block">
+            <div className="hidden min-[1680px]:block">
               <PreferencesMenu />
             </div>
             <IconLink
@@ -264,29 +320,41 @@ export default function Header() {
               icon={MessageSquare}
               label="Messages"
               count={messageCount}
-              className="hidden xl:inline-flex"
+              className="hidden min-[1680px]:inline-flex"
             />
-            <NotificationsMenu />
-            <IconLink
-              to="/compare-quotes"
-              icon={Scale}
-              label="Smart Quote Comparison"
-              className="inline-flex text-navy-800 hover:text-brand-600"
-            />
-            <IconLink
-              to="/wishlist"
-              icon={Heart}
-              label="Saved items"
-              count={wishlistCount}
-              className="hidden md:inline-flex"
-            />
+            <NotificationsMenu className="hidden sm:inline-flex" />
             <IconLink
               to="/cart"
               icon={ShoppingCart}
               label="Cart"
               count={cartCount}
             />
-            <div className="ml-0.5 sm:ml-1 shrink-0">
+
+            {/* Direct Super Admin / Admin quick pill if logged in */}
+            {user?.role === "super_admin" ? (
+              <Link
+                to="/super-admin"
+                className="inline-flex items-center gap-1.5 rounded-full bg-[#0b2716] px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/50 hover:bg-[#123f25] hover:text-white transition-all shadow-xs"
+                title="Open Super Admin Enterprise Portal"
+              >
+                <ShieldCheck className="size-3.5 text-emerald-400" aria-hidden="true" />
+                <span>👑 Super Admin</span>
+              </Link>
+            ) : user?.role === "admin" ? (
+              <Link
+                to="/admin"
+                className="inline-flex items-center gap-1.5 rounded-full bg-navy-900 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-bold text-brand-300 ring-1 ring-brand-500/50 hover:bg-navy-800 hover:text-white transition-all shadow-xs"
+                title="Open Admin Portal"
+              >
+                <ShieldCheck className="size-3.5 text-brand-400" aria-hidden="true" />
+                <span>Admin</span>
+              </Link>
+            ) : null}
+
+            {/* Subtle Divider between utility icons and user account CTA */}
+            <div className="hidden sm:block h-5 w-px bg-navy-900/10 mx-0.5 sm:mx-1" aria-hidden="true" />
+
+            <div className="shrink-0">
               <UserMenu />
             </div>
           </div>
@@ -297,7 +365,7 @@ export default function Header() {
           id="header-search"
           className={`border-t border-navy-900/[0.06] ${searchOpen ? "block" : scrolled ? "hidden" : "lg:hidden"}`}
         >
-          <div className="w-full max-w-[98rem] mx-auto px-2.5 xs:px-3 sm:px-4 lg:px-6 py-2.5">
+          <div className="w-full max-w-[98rem] mx-auto px-2 sm:px-3 lg:px-4 xl:px-6 py-2">
             <SearchForm
               idPrefix={searchOpen ? "header-search" : "mobile-search"}
               autoFocus={searchOpen}

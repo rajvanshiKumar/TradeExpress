@@ -60,7 +60,7 @@ export function useCatalogueFigures() {
       loading,
       items: [
         {
-          value: "21Cr+",
+          value: "11Cr+",
           label: "Active Buyers",
         },
         {
@@ -142,7 +142,7 @@ export default function HeroSection() {
         </p>
 
         {/* Compact Search Form */}
-        <div className="mt-4 sm:mt-5 w-full max-w-2xl">
+        <div className="mt-4 sm:mt-5 w-full max-w-2xl sm:max-w-3xl">
           <SearchForm variant="hero" idPrefix="hero-search" />
         </div>
 
@@ -171,3 +171,5 @@ export default function HeroSection() {
     </section>
   );
 }
+
+

@@ -292,13 +292,21 @@ export default function Footer() {
                 <span>Serving buyers and suppliers nationwide · India</span>
               </p>
 
-              <div className="pt-2 border-t border-[#d8e7d2]">
+              <div className="pt-2 border-t border-[#d8e7d2] flex flex-col gap-1.5">
                 <Link
                   to="/admin/login"
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-navy-700 hover:text-navy-950"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-navy-700 hover:text-navy-950 transition-colors"
                 >
                   <span>Admin Portal</span>
                   <ArrowRight className="size-3" />
+                </Link>
+                <Link
+                  to="/super-admin/login"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 transition-colors"
+                >
+                  <ShieldCheck className="size-3 text-emerald-600" />
+                  <span>Super Admin Console</span>
+                  <ArrowRight className="size-3 text-emerald-600" />
                 </Link>
               </div>
             </div>

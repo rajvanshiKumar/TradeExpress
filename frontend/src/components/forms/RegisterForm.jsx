@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, startTransition } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Building2, CheckCircle2, CircleAlert, RefreshCw, ShieldCheck, ShoppingBag, Smartphone, UserPlus } from 'lucide-react';
 import Input, { Checkbox } from '../common/Input';
@@ -252,7 +252,10 @@ export default function RegisterForm() {
       updateAccount(result.user.id, { companyId: company.id });
     }
     showToast(`Welcome to TradeSphere, ${result.user.name}.`);
-    return navigate(ROLE_HOME[values.role], { replace: true });
+    startTransition(() => {
+      navigate(ROLE_HOME[values.role], { replace: true });
+    });
+    return;
   };
 
   return (

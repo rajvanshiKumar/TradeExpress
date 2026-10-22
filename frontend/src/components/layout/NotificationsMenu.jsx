@@ -14,7 +14,7 @@ export function CountDot({ count }) {
   );
 }
 
-export default function NotificationsMenu() {
+export default function NotificationsMenu({ className = "" }) {
   const { isAuthenticated } = useAuth();
   const {
     notifications,
@@ -23,6 +23,8 @@ export default function NotificationsMenu() {
     markAllRead,
     clearNotifications,
   } = useNotifications();
+
+  const displayClass = className.includes("hidden") ? "" : "inline-flex ";
 
   return (
     <Dropdown
@@ -33,9 +35,9 @@ export default function NotificationsMenu() {
           {...props}
           aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
           title="Notifications"
-          className="relative inline-flex size-8 sm:size-8.5 xl:size-9 items-center justify-center rounded-full text-navy-800 hover:bg-navy-900/5 hover:text-navy-950 transition-colors"
+          className={`relative ${displayClass}size-7.5 sm:size-8 xl:size-8.5 items-center justify-center rounded-full text-navy-800 hover:bg-navy-900/5 hover:text-navy-950 transition-colors ${className}`}
         >
-          <Bell className="size-4 sm:size-[1.05rem]" aria-hidden="true" />
+          <Bell className="size-4" aria-hidden="true" />
           <CountDot count={unreadCount} />
         </button>
       )}

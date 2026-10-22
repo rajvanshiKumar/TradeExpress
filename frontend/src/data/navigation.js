@@ -7,6 +7,7 @@ export const mainNav = [
   { label: 'Exporters', to: '/exporters' },
   { label: 'Request For Quotation', to: '/rfq' },
   { label: 'Compare Quotes', to: '/compare-quotes' },
+  { label: 'Wishlist', to: '/wishlist' },
   { label: 'Help', to: '/help' },
   { label: 'About Us', to: '/info/about' },
   { label: 'Become a Supplier', to: '/register?role=supplier', highlight: true },

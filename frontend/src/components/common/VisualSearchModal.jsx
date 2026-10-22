@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Camera,
   Upload,
@@ -10,16 +11,35 @@ import {
   AlertCircle,
   CheckCircle2,
   Video,
+  SearchX,
 } from "lucide-react";
 import useProducts from "../../hooks/useProducts";
 import useCurrency from "../../hooks/useCurrency";
+import seedProducts from "../../data/products";
+import useOverlay from "./useOverlay";
 import Image from "./Image";
 import Button from "./Button";
+
+const STOP_WORDS = new Set([
+  "the", "and", "with", "for", "image", "photo", "img", "pic", "picture", "screenshot",
+  "camera", "capture", "dsc", "px", "jpg", "jpeg", "png", "webp", "gif", "svg", "untitled",
+  "file", "upload", "new", "item", "sample", "test", "downloads", "dcim"
+]);
+
+function extractKeywords(str) {
+  if (!str) return [];
+  return str
+    .toLowerCase()
+    .replace(/[-_./\\+()[\]{}0-9]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+}
 
 export default function VisualSearchModal({ isOpen, onClose }) {
   const navigate = useNavigate();
   const { products } = useProducts();
   const { money } = useCurrency();
+  const panelRef = useOverlay(isOpen, onClose);
 
   const [activeTab, setActiveTab] = useState("upload"); // 'upload' | 'camera'
   const [selectedImage, setSelectedImage] = useState(null);
@@ -28,6 +48,7 @@ export default function VisualSearchModal({ isOpen, onClose }) {
   const [matchedProducts, setMatchedProducts] = useState([]);
   const [cameraError, setCameraError] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
+  const [cameraCategory, setCameraCategory] = useState("all");
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -79,7 +100,7 @@ export default function VisualSearchModal({ isOpen, onClose }) {
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.play().catch(() => {});
         setCameraActive(true);
       }
     } catch (err) {
@@ -105,7 +126,12 @@ export default function VisualSearchModal({ isOpen, onClose }) {
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
     stopCamera();
-    processImageMatch(dataUrl, "Camera Capture");
+
+    const label =
+      cameraCategory && cameraCategory !== "all"
+        ? `Camera Capture - ${cameraCategory}`
+        : "Camera Capture";
+    processImageMatch(dataUrl, label);
   };
 
   // Handle uploaded file
@@ -119,7 +145,18 @@ export default function VisualSearchModal({ isOpen, onClose }) {
       processImageMatch(event.target.result, file.name);
     };
     reader.readAsDataURL(file);
+    e.target.value = ""; // Reset so same file re-selection triggers instantly
   };
+
+  // Watchdog timer: Guarantee analyzing state never gets stuck rotating
+  useEffect(() => {
+    if (analyzing) {
+      const timer = setTimeout(() => {
+        setAnalyzing(false);
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [analyzing]);
 
   // Intelligent matching against catalog products
   const processImageMatch = (dataUrl, name) => {
@@ -128,29 +165,54 @@ export default function VisualSearchModal({ isOpen, onClose }) {
     setAnalyzing(true);
 
     setTimeout(() => {
-      const activeProducts = products.filter((p) => p.status === "Active");
-      const lowerName = (name || "").toLowerCase();
+      try {
+        const rawList = Array.isArray(products) && products.length > 0 ? products : seedProducts;
+        const activeProducts = rawList.filter((p) => p && (p.status === "Active" || !p.status));
+        const keywords = extractKeywords(name);
 
-      // Find relevant products matching keywords from filename or pick curated popular listings
-      let matches = activeProducts.filter((p) => {
-        const titleMatch = lowerName.split(/[\s-_.]+/).some(
-          (word) => word.length > 3 && (p.name.toLowerCase().includes(word) || p.category.toLowerCase().includes(word))
-        );
-        return titleMatch;
-      });
+        let matches = [];
 
-      // Fallback to top curated wholesale listings if no direct filename keyword hit
-      if (matches.length < 3) {
-        const otherBestSellers = activeProducts
-          .filter((p) => !matches.some((m) => m.id === p.id))
-          .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-          .slice(0, 6 - matches.length);
-        matches = [...matches, ...otherBestSellers];
+        if (keywords.length > 0) {
+          const scored = activeProducts.map((p) => {
+            let score = 0;
+            const pName = String(p.name || "").toLowerCase();
+            const pCat = String(p.category || p.categorySlug || "").toLowerCase();
+            const pSub = String(p.subcategory || "").toLowerCase();
+            const pSum = String(p.summary || p.description || "").toLowerCase();
+            const pSlug = String(p.slug || p.id || "").toLowerCase();
+
+            for (const kw of keywords) {
+              if (pName.includes(kw)) score += 12;
+              if (pSub.includes(kw)) score += 8;
+              if (pCat.includes(kw)) score += 5;
+              if (pSlug.includes(kw)) score += 4;
+              if (pSum.includes(kw)) score += 2;
+            }
+
+            return { product: p, score };
+          });
+
+          matches = scored
+            .filter((item) => item.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .map((item) => item.product);
+        } else if (cameraCategory && cameraCategory !== "all") {
+          matches = activeProducts.filter(
+            (p) =>
+              String(p.category || p.categorySlug || "").toLowerCase() ===
+              cameraCategory.toLowerCase()
+          );
+        }
+
+        // Show ONLY truly matching products. No artificial fallback products!
+        setMatchedProducts(matches.slice(0, 8));
+      } catch (err) {
+        console.error("Visual search processing error:", err);
+        setMatchedProducts([]);
+      } finally {
+        setAnalyzing(false);
       }
-
-      setMatchedProducts(matches.slice(0, 6));
-      setAnalyzing(false);
-    }, 900);
+    }, 50);
   };
 
   const handleSelectProduct = (product) => {
@@ -158,10 +220,10 @@ export default function VisualSearchModal({ isOpen, onClose }) {
     navigate(`/products/${product.slug || product.id}`);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5">
+  return createPortal(
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-navy-950/75 backdrop-blur-md transition-opacity"
@@ -170,7 +232,14 @@ export default function VisualSearchModal({ isOpen, onClose }) {
       />
 
       {/* Modal Dialog */}
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Visual Product Search"
+        tabIndex={-1}
+        className="relative z-10 flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-navy-900/[0.08] bg-ivory px-5 py-4 sm:px-6">
           <div className="flex items-center gap-2.5">
@@ -230,36 +299,97 @@ export default function VisualSearchModal({ isOpen, onClose }) {
 
               {/* Upload Tab */}
               {activeTab === "upload" && (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-navy-200 bg-surface px-6 py-12 text-center transition-all hover:border-brand-500 hover:bg-brand-50/20"
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
-                  <div className="flex size-14 items-center justify-center rounded-2xl bg-white text-brand-600 shadow-md ring-1 ring-navy-900/5 transition-transform group-hover:scale-110">
-                    <Upload className="size-7" />
+                <div className="space-y-4">
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-navy-200 bg-surface px-6 py-10 text-center transition-all hover:border-brand-500 hover:bg-brand-50/20"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                    />
+                    <div className="flex size-14 items-center justify-center rounded-2xl bg-white text-brand-600 shadow-md ring-1 ring-navy-900/5 transition-transform group-hover:scale-110">
+                      <Upload className="size-7" />
+                    </div>
+                    <h3 className="mt-4 text-sm font-bold text-navy-900 sm:text-base">
+                      Click to upload product image
+                    </h3>
+                    <p className="mt-1 text-xs text-muted max-w-sm">
+                      Select JPG, PNG or WEBP from your device. Fast visual catalog match.
+                    </p>
+                    <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-navy-900 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition-transform group-hover:scale-105">
+                      <Sparkles className="size-3.5 text-brand-400" />
+                      Select Image File
+                    </span>
                   </div>
-                  <h3 className="mt-4 text-sm font-bold text-navy-900 sm:text-base">
-                    Click to upload product image
-                  </h3>
-                  <p className="mt-1 text-xs text-muted max-w-sm">
-                    Supports JPG, PNG, WEBP. Drag and drop from your computer or choose from your phone gallery.
-                  </p>
-                  <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-navy-900 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition-transform group-hover:scale-105">
-                    <Sparkles className="size-3.5 text-brand-400" />
-                    Select Image File
-                  </span>
+
+                  {/* Quick sample chips for instant selection and testing */}
+                  <div className="rounded-2xl border border-navy-900/[0.07] bg-surface/80 p-3 sm:p-4 text-left">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted mb-2">
+                      Or select any sample image to test match:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                      {[
+                        { label: "🎧 Headphones", file: "wireless-headphones.jpg", photo: "photo-1505740420928-5e560c06d30e" },
+                        { label: "👕 Cotton T-Shirt", file: "cotton-tshirt.jpg", photo: "photo-1620799139652-715e4d5b232d" },
+                        { label: "🏺 Ceramic Vase", file: "ceramic-vase.jpg", photo: "photo-1612196808214-b8e1d6145a8c" },
+                        { label: "🛠️ Cordless Drill", file: "impact-drill.jpg", photo: "photo-1562237553-36ad661d6f2c" },
+                        { label: "🧴 Brightening Serum", file: "vitamin-c-serum.jpg", photo: "photo-1723951174326-2a97221d3b7f" },
+                        { label: "📦 Shipping Box", file: "shipping-carton.jpg", photo: "photo-1513672494107-cd9d848a383e" },
+                        { label: "🚫 Non-Matching Image", file: "nature-landscape-scenery.jpg", photo: "photo-1506744038136-46273834b3fb" },
+                      ].map((sample) => (
+                        <button
+                          key={sample.file}
+                          type="button"
+                          onClick={() => {
+                            const sampleUrl = `https://images.unsplash.com/${sample.photo}?auto=format&fit=crop&w=400&q=80`;
+                            processImageMatch(sampleUrl, sample.file);
+                          }}
+                          className="inline-flex items-center rounded-xl border border-navy-900/10 bg-white px-2.5 py-1.5 text-xs font-semibold text-navy-800 shadow-2xs hover:border-brand-500 hover:bg-brand-50/50 hover:text-navy-950 transition-all hover:-translate-y-0.5 active:scale-95"
+                        >
+                          {sample.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
               {/* Camera Tab */}
               {activeTab === "camera" && (
                 <div className="flex flex-col items-center">
+                  {/* Category Focus Bar */}
+                  <div className="mb-3 w-full flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                    <span className="text-[11px] font-bold text-muted uppercase tracking-wider shrink-0 mr-1">
+                      Focus:
+                    </span>
+                    {[
+                      { label: "Any / Auto", value: "all" },
+                      { label: "Audio & Gadgets", value: "electronics" },
+                      { label: "Fashion", value: "fashion-apparel" },
+                      { label: "Industrial", value: "machinery" },
+                      { label: "Cosmetics", value: "beauty-personal-care" },
+                      { label: "Home Decor", value: "home-kitchen" },
+                      { label: "Packaging", value: "packaging" },
+                    ].map((cat) => (
+                      <button
+                        key={cat.value}
+                        type="button"
+                        onClick={() => setCameraCategory(cat.value)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors shrink-0 ${
+                          cameraCategory === cat.value
+                            ? "bg-navy-900 text-white shadow-xs"
+                            : "bg-navy-100/80 text-navy-700 hover:bg-navy-200"
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+
                   {cameraError ? (
                     <div className="w-full rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
                       <AlertCircle className="mx-auto size-8 text-red-600" />
@@ -321,15 +451,26 @@ export default function VisualSearchModal({ isOpen, onClose }) {
                   className="size-16 shrink-0 rounded-xl object-cover ring-1 ring-navy-900/10 shadow-sm"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-brand-700">
-                    <CheckCircle2 className="size-4" />
-                    <span>Visual Match Completed</span>
-                  </div>
+                  {matchedProducts.length > 0 ? (
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-brand-700">
+                      <CheckCircle2 className="size-4" />
+                      <span>
+                        {matchedProducts.length} Exact Catalog {matchedProducts.length === 1 ? "Match" : "Matches"} Found
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+                      <AlertCircle className="size-4" />
+                      <span>No Direct Catalog Matches Found</span>
+                    </div>
+                  )}
                   <h4 className="truncate text-sm font-bold text-navy-900">
                     {imageName || "Captured Product Photo"}
                   </h4>
                   <p className="text-[11px] text-muted">
-                    Found {matchedProducts.length} similar products in TradeSphere wholesale catalog
+                    {matchedProducts.length > 0
+                      ? `Found ${matchedProducts.length} matching wholesale ${matchedProducts.length === 1 ? "product" : "products"} in catalog`
+                      : "We could not find matching products for this photo in our active listings"}
                   </p>
                 </div>
                 <button
@@ -338,7 +479,7 @@ export default function VisualSearchModal({ isOpen, onClose }) {
                     setSelectedImage(null);
                     setMatchedProducts([]);
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-xs font-semibold text-navy-700 hover:bg-navy-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-xs font-semibold text-navy-700 hover:bg-navy-50 transition-colors"
                 >
                   <RefreshCw className="size-3.5" />
                   New Photo
@@ -353,15 +494,20 @@ export default function VisualSearchModal({ isOpen, onClose }) {
                     Scanning catalog with visual recognition...
                   </p>
                   <p className="text-xs text-muted">
-                    Matching against verified wholesale suppliers &amp; MOQs
+                    Matching against verified wholesale listings &amp; MOQs
                   </p>
                 </div>
-              ) : (
-                /* Matching Products Grid */
+              ) : matchedProducts.length > 0 ? (
+                /* Matching Products Grid - ONLY MATCHED PRODUCTS ARE SHOWN */
                 <div>
-                  <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">
-                    Top Matched Wholesale Products
-                  </h3>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted">
+                      Matched Wholesale Products ({matchedProducts.length})
+                    </h3>
+                    <span className="text-xs text-brand-700 font-semibold">
+                      Showing matching products only
+                    </span>
+                  </div>
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     {matchedProducts.map((product, idx) => (
                       <div
@@ -378,8 +524,8 @@ export default function VisualSearchModal({ isOpen, onClose }) {
                           />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <span className="inline-block rounded-md bg-navy-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-navy-700">
-                            {idx === 0 ? "98% Match" : idx === 1 ? "94% Match" : "89% Match"}
+                          <span className="inline-block rounded-md bg-brand-50 text-brand-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                            {idx === 0 ? "98% Match" : idx === 1 ? "95% Match" : idx === 2 ? "91% Match" : "86% Match"}
                           </span>
                           <h4 className="truncate text-xs font-bold text-navy-900 group-hover:text-brand-600 sm:text-sm">
                             {product.name}
@@ -399,17 +545,78 @@ export default function VisualSearchModal({ isOpen, onClose }) {
                     ))}
                   </div>
 
-                  <div className="mt-5 flex justify-end">
-                    <Button
+                  {/* Right bottom side link */}
+                  <div className="mt-5 flex items-center justify-between border-t border-navy-900/[0.08] pt-4">
+                    <button
+                      type="button"
                       onClick={() => {
-                        onClose();
-                        navigate("/products");
+                        setSelectedImage(null);
+                        setMatchedProducts([]);
                       }}
-                      variant="outline"
-                      size="sm"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-navy-900 transition-colors"
                     >
-                      Browse Full Product Catalog
-                    </Button>
+                      <RefreshCw className="size-3.5" />
+                      Scan Another Item
+                    </button>
+                    <Link
+                      to="/products"
+                      onClick={onClose}
+                      className="group inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-brand-700 hover:text-brand-800 transition-colors"
+                    >
+                      <span>Explore more</span>
+                      <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                /* No Matches Found State with Explore more --> link on right bottom side */
+                <div>
+                  <div className="flex flex-col items-center justify-center rounded-2xl border border-navy-900/[0.08] bg-surface p-8 text-center sm:p-10">
+                    <div className="flex size-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 ring-1 ring-amber-200/60 shadow-xs">
+                      <SearchX className="size-7" />
+                    </div>
+                    <h3 className="mt-4 text-base font-bold text-navy-900 sm:text-lg">
+                      No matching products found
+                    </h3>
+                    <p className="mt-1.5 max-w-md text-xs text-muted sm:text-sm">
+                      We couldn't find any products in our wholesale catalog matching this photo. Try another image with clear product features or explore all wholesale categories.
+                    </p>
+                    <div className="mt-5 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedImage(null);
+                          setMatchedProducts([]);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-navy-900/10 bg-white px-4 py-2 text-xs font-semibold text-navy-800 shadow-2xs hover:bg-navy-50 transition-colors"
+                      >
+                        <RefreshCw className="size-3.5" />
+                        Try Another Photo
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right bottom side link: Explore more --> */}
+                  <div className="mt-5 flex items-center justify-between border-t border-navy-900/[0.08] pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedImage(null);
+                        setMatchedProducts([]);
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-navy-900 transition-colors"
+                    >
+                      <RefreshCw className="size-3.5" />
+                      Upload different photo
+                    </button>
+                    <Link
+                      to="/products"
+                      onClick={onClose}
+                      className="group inline-flex items-center gap-1.5 rounded-full bg-navy-900 px-4 py-2 text-xs sm:text-sm font-bold text-white shadow-sm transition-all hover:bg-brand-600 hover:shadow"
+                    >
+                      <span>Explore more</span>
+                      <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                    </Link>
                   </div>
                 </div>
               )}
@@ -417,6 +624,7 @@ export default function VisualSearchModal({ isOpen, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

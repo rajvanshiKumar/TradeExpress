@@ -35,14 +35,32 @@ export default function MobileMenu({ open, onClose }) {
             <p className="font-display font-bold text-navy-900">{user.name}</p>
             <p className="text-xs capitalize text-muted">{user.role} account</p>
             <div className="mt-3 flex gap-2">
-              <Button to={ROLE_HOME[user.role]} size="sm" variant="navy" icon={LayoutDashboard} onClick={onClose} className="flex-1">Dashboard</Button>
+              <Button
+                to={ROLE_HOME[user.role] || '/'}
+                size="sm"
+                variant={user.role === 'super_admin' ? 'emerald' : 'navy'}
+                icon={LayoutDashboard}
+                onClick={onClose}
+                className={`flex-1 ${user.role === 'super_admin' ? '!bg-emerald-950 !text-emerald-300 ring-1 ring-emerald-500/40' : ''}`}
+              >
+                {user.role === 'super_admin' ? '👑 Super Admin' : 'Dashboard'}
+              </Button>
               <Button size="sm" variant="outline" icon={LogOut} onClick={signOut}>Sign out</Button>
             </div>
           </div>
         ) : (
-          <div className="flex gap-2">
-            <Button to="/login" variant="outline" size="sm" onClick={onClose} className="flex-1">Sign In</Button>
-            <Button to="/register" variant="navy" size="sm" onClick={onClose} className="flex-1">Get Started</Button>
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <Button to="/login" variant="outline" size="sm" onClick={onClose} className="flex-1">Sign In</Button>
+              <Button to="/register" variant="navy" size="sm" onClick={onClose} className="flex-1">Get Started</Button>
+            </div>
+            <Link
+              to="/super-admin/login"
+              onClick={onClose}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-950/10 px-3 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-950/20 ring-1 ring-emerald-600/30 transition-colors"
+            >
+              <span>👑 Super Admin Portal</span>
+            </Link>
           </div>
         )}
       </div>

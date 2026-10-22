@@ -16,6 +16,7 @@ import disputeRoutes from './disputeRoutes.js';
 import reviewRoutes from './reviewRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
 import ticketRoutes from './ticketRoutes.js';
+import superAdminRoutes from './superAdminRoutes.js';
 
 const router = Router();
 
@@ -30,6 +31,7 @@ router.use('/upload', uploadRoutes);
 router.use('/supplier/products', supplierProductRoutes);
 router.use('/supplier/orders', supplierOrderRoutes);
 router.use('/admin', adminRoutes);
+router.use('/super-admin', superAdminRoutes);
 router.use('/rfq', rfqRoutes);
 router.use('/escrow', escrowRoutes);
 router.use('/disputes', disputeRoutes);

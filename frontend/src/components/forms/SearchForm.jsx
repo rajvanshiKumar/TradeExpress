@@ -61,9 +61,19 @@ export default function SearchForm({ variant = 'header', idPrefix = 'search', on
     <form role="search" onSubmit={submit} className={`flex w-full items-stretch overflow-hidden rounded-full bg-white p-1 transition-shadow ${isHero ? 'shadow-pop ring-1 ring-white/40' : 'ring-1 ring-navy-900/15 focus-within:ring-2 focus-within:ring-brand-500'}`}>
       <label htmlFor={`${idPrefix}-scope`} className="sr-only">{isHero ? 'Category' : 'Search in'}</label>
       {isHero ? (
-        <select id={`${idPrefix}-scope`} value={category} onChange={(event) => setCategory(event.target.value)} className="hidden max-w-44 shrink-0 rounded-l-full border-r border-navy-900/10 bg-transparent pl-4 pr-2 text-sm font-semibold text-navy-900 focus:outline-none focus-visible:bg-navy-50 sm:block">
+        <select
+          id={`${idPrefix}-scope`}
+          value={category}
+          onChange={(event) => setCategory(event.target.value)}
+          title={(categories || []).find((item) => item.slug === category)?.name || 'All categories'}
+          className="hidden w-auto min-w-[145px] sm:min-w-[165px] max-w-[260px] sm:max-w-[290px] shrink-0 rounded-l-full border-r border-navy-900/10 bg-transparent pl-4 pr-8 text-sm font-semibold text-navy-900 focus:outline-none focus-visible:bg-navy-50 sm:block cursor-pointer"
+        >
           <option value="">All categories</option>
-          {categories.map((item) => <option key={item.id} value={item.slug}>{item.name}</option>)}
+          {(categories || []).map((item) => (
+            <option key={item.id} value={item.slug} className="bg-white text-navy-900 py-1">
+              {item.name}
+            </option>
+          ))}
         </select>
       ) : (
         <select id={`${idPrefix}-scope`} value={scope} onChange={(event) => setScope(event.target.value)} className="max-w-28 shrink-0 rounded-l-full border-r border-navy-900/10 bg-transparent pl-3 pr-1 text-[0.8125rem] font-semibold text-navy-900 focus:outline-none focus-visible:bg-navy-50 sm:max-w-none sm:pl-4 sm:pr-2 sm:text-sm">

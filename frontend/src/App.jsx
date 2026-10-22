@@ -1,7 +1,9 @@
+import { Suspense } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import AppRoutes from './routes/AppRoutes';
 import ScrollToTop from './components/common/ScrollToTop';
 import ToastViewport from './components/common/Toast';
+import { PageSkeleton } from './components/common/Skeleton';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { ProductProvider } from './contexts/ProductContext';
@@ -25,7 +27,9 @@ export default function App() {
                   <MessageProvider>
                     <OrderProvider>
                       <ScrollToTop />
-                      <AppRoutes />
+                      <Suspense fallback={<PageSkeleton />}>
+                        <AppRoutes />
+                      </Suspense>
                       <ToastViewport />
                     </OrderProvider>
                   </MessageProvider>

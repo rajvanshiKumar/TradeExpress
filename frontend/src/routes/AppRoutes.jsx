@@ -1,7 +1,8 @@
 import { lazy } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import DashboardLayout from '../components/layout/DashboardLayout';
+import SuperAdminLayout from '../components/layout/SuperAdminLayout';
 import ProtectedRoute from './ProtectedRoute';
 import RoleRoute from './RoleRoute';
 import Home from '../pages/Home';
@@ -49,6 +50,22 @@ const AdminCategories = lazy(() => import('../pages/admin/AdminCategories'));
 const AdminReports = lazy(() => import('../pages/admin/AdminReports'));
 const AdminVerification = lazy(() => import('../pages/admin/AdminVerification'));
 
+// Super Admin Suite
+const SuperAdminDashboard = lazy(() => import('../pages/superadmin/SuperAdminDashboard'));
+const SuperAdminUsers = lazy(() => import('../pages/superadmin/SuperAdminUsers'));
+const SuperAdminSuppliers = lazy(() => import('../pages/superadmin/SuperAdminSuppliers'));
+const SuperAdminProducts = lazy(() => import('../pages/superadmin/SuperAdminProducts'));
+const SuperAdminCategories = lazy(() => import('../pages/superadmin/SuperAdminCategories'));
+const SuperAdminRfqs = lazy(() => import('../pages/superadmin/SuperAdminRfqs'));
+const SuperAdminOrders = lazy(() => import('../pages/superadmin/SuperAdminOrders'));
+const SuperAdminPayments = lazy(() => import('../pages/superadmin/SuperAdminPayments'));
+const SuperAdminDisputes = lazy(() => import('../pages/superadmin/SuperAdminDisputes'));
+const SuperAdminTickets = lazy(() => import('../pages/superadmin/SuperAdminTickets'));
+const SuperAdminAdmins = lazy(() => import('../pages/superadmin/SuperAdminAdmins'));
+const SuperAdminSettings = lazy(() => import('../pages/superadmin/SuperAdminSettings'));
+const SuperAdminReports = lazy(() => import('../pages/superadmin/SuperAdminReports'));
+const SuperAdminAuditLogs = lazy(() => import('../pages/superadmin/SuperAdminAuditLogs'));
+
 // Dashboards, messaging and checkout load on demand to keep the first page light.
 export default function AppRoutes() {
   return (
@@ -70,7 +87,10 @@ export default function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/login" element={<AdminLogin defaultTab="admin" />} />
+        <Route path="/super-admin/login" element={<AdminLogin defaultTab="super_admin" />} />
+        <Route path="/superadmin/login" element={<Navigate to="/super-admin/login" replace />} />
+        <Route path="/superadmin" element={<Navigate to="/super-admin" replace />} />
         <Route path="/info/:slug" element={<Info />} />
         <Route path="/track" element={<OrderTracking />} />
         <Route path="/track/:orderNumber" element={<OrderTracking />} />
@@ -125,6 +145,24 @@ export default function AppRoutes() {
             <Route path="/admin/categories" element={<AdminCategories />} />
             <Route path="/admin/reports" element={<AdminReports />} />
             <Route path="/admin/verification" element={<AdminVerification />} />
+          </Route>
+        </Route>
+        <Route element={<RoleRoute roles={['super_admin']} />}>
+          <Route element={<SuperAdminLayout />}>
+            <Route path="/super-admin" element={<SuperAdminDashboard />} />
+            <Route path="/super-admin/users" element={<SuperAdminUsers />} />
+            <Route path="/super-admin/suppliers" element={<SuperAdminSuppliers />} />
+            <Route path="/super-admin/products" element={<SuperAdminProducts />} />
+            <Route path="/super-admin/categories" element={<SuperAdminCategories />} />
+            <Route path="/super-admin/rfqs" element={<SuperAdminRfqs />} />
+            <Route path="/super-admin/orders" element={<SuperAdminOrders />} />
+            <Route path="/super-admin/payments" element={<SuperAdminPayments />} />
+            <Route path="/super-admin/disputes" element={<SuperAdminDisputes />} />
+            <Route path="/super-admin/tickets" element={<SuperAdminTickets />} />
+            <Route path="/super-admin/admins" element={<SuperAdminAdmins />} />
+            <Route path="/super-admin/settings" element={<SuperAdminSettings />} />
+            <Route path="/super-admin/reports" element={<SuperAdminReports />} />
+            <Route path="/super-admin/audit" element={<SuperAdminAuditLogs />} />
           </Route>
         </Route>
       </Route>

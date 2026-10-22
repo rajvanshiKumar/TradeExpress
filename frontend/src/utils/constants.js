@@ -116,9 +116,9 @@ export const PAGE_SIZE = 12;
 export const MAX_RECENTLY_VIEWED = 8;
 export const SIMULATED_DELAY_MS = 0;
 
-export const ROLES = { buyer: 'buyer', supplier: 'supplier', admin: 'admin' };
-export const ROLE_HOME = { buyer: '/buyer', supplier: '/supplier', admin: '/admin' };
-export const ordersPathFor = (user) => (!user ? '/buyer/orders' : user.role === 'supplier' ? '/supplier/orders' : user.role === 'admin' ? '/admin/reports' : '/buyer/orders');
+export const ROLES = { buyer: 'buyer', supplier: 'supplier', admin: 'admin', super_admin: 'super_admin' };
+export const ROLE_HOME = { buyer: '/buyer', supplier: '/supplier', admin: '/admin', super_admin: '/super-admin' };
+export const ordersPathFor = (user) => (!user ? '/buyer/orders' : user.role === 'supplier' ? '/supplier/orders' : user.role === 'admin' ? '/admin/reports' : user.role === 'super_admin' ? '/super-admin/orders' : '/buyer/orders');
 
 // A product is flagged as "low stock" when fewer than this many minimum orders are left.
 export const LOW_STOCK_FACTOR = 2;

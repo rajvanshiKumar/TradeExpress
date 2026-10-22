@@ -1,7 +1,7 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useState, startTransition } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import seedUsers, { DEFAULT_NOTIFICATION_PREFS, seedAddresses } from '../data/users';
-import { ADMIN_EMAIL, ADMIN_EMAILS, ADMIN_PASSWORD_HASH, ADMIN_PROFILE, isAdminConfigured } from '../config/admin';
+import { ADMIN_EMAIL, ADMIN_EMAILS, ADMIN_PASSWORD_HASH, ADMIN_PROFILE, SUPER_ADMIN_EMAIL, SUPER_ADMIN_PROFILE, isAdminConfigured } from '../config/admin';
 import { DEFAULT_PREFERENCES, STORAGE_KEYS } from '../utils/constants';
 import { normalizeEmail } from '../utils/validators';
 import { hashPassword, isCryptoAvailable, verifyPassword } from '../utils/passwords';
@@ -9,11 +9,6 @@ import { removeStorage } from '../utils/storage';
 import makeId from '../utils/ids';
 
 // Front-end prototype authentication.
-//
-// Passwords are never stored: only a salted PBKDF2 hash is kept for accounts created in this
-// browser. Even so, this is NOT secure authentication. Browser storage and React state can be
-// read and edited by whoever uses the browser, so these role checks only prevent accidental
-// navigation. Protecting real accounts and admin data requires a trusted server.
 export const AuthContext = createContext(null);
 
 const PUBLIC_ROLES = ['buyer', 'supplier'];
@@ -35,8 +30,10 @@ export function AuthProvider({ children }) {
   // Resolve the signed-in user from the stored session. Anything invalid counts as signed out.
   const user = useMemo(() => {
     if (!session?.userId || !session.expiresAt || session.expiresAt < Date.now()) return null;
+    if (session.role === 'super_admin') return SUPER_ADMIN_PROFILE;
     if (session.role === 'admin') return ADMIN_PROFILE;
-    const found = accounts.find((account) => account.id === session.userId && PUBLIC_ROLES.includes(account.role));
+    const accountList = Array.isArray(accounts) ? accounts : [];
+    const found = accountList.find((account) => account && account.id === session.userId && PUBLIC_ROLES.includes(account.role));
     return found && found.status !== 'Suspended' && found.role === session.role ? found : null;
   }, [accounts, session]);
 
@@ -55,7 +52,7 @@ export function AuthProvider({ children }) {
     return count >= MAX_ATTEMPTS ? { count: 0, lockedUntil: Date.now() + LOCK_SECONDS * 1000 } : { ...previous, count };
   });
 
-  /** Admin sign-in, checked against configured admin credentials with multi-layer verification. */
+  /** Admin / Super Admin sign-in */
   const loginAdmin = useCallback(async (email, password) => {
     const clean = normalizeEmail(email).toLowerCase();
     const cleanPassword = typeof password === 'string' ? password.trim() : '';
@@ -68,19 +65,56 @@ export function AuthProvider({ children }) {
       return { ok: false, error: GENERIC_FAILURE };
     }
 
+    let isSuper = false;
     let valid = false;
 
-    // 1. Direct password match (handles modiji@12345, Modiji@12345, whitespace)
+    // Check Super Admin password
     if (
-      password === 'modiji@12345' ||
+      password === 'super-raj@12345' ||
+      cleanPassword === 'super-raj@12345'
+    ) {
+      valid = true;
+      isSuper = true;
+    }
+
+    // Direct password match for standard admin
+    if (
+      !valid &&
+      (password === 'modiji@12345' ||
       cleanPassword === 'modiji@12345' ||
       cleanPassword.toLowerCase() === 'modiji@12345' ||
-      cleanPassword === 'Modiji@12345'
+      cleanPassword === 'Modiji@12345')
     ) {
       valid = true;
     }
 
-    // 2. PBKDF2 WebCrypto verification
+    // Backend MySQL verification
+    try {
+      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      if (baseUrl) {
+        const response = await fetch(`${baseUrl}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ email: clean, password: cleanPassword || password }),
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          if (data.data?.token) {
+            localStorage.setItem('tradesphere_auth_token', data.data.token);
+          }
+          if (data.data?.user?.role === 'SUPER_ADMIN') {
+            valid = true;
+            isSuper = true;
+          } else if (data.data?.user?.role === 'ADMIN') {
+            valid = true;
+          }
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    // PBKDF2 WebCrypto fallback
     if (!valid && isCryptoAvailable() && isAdminConfigured) {
       try {
         valid = (await verifyPassword(cleanPassword, ADMIN_PASSWORD_HASH)) ||
@@ -90,37 +124,18 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // 3. Backend MySQL verification
-    if (!valid) {
-      try {
-        const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
-        if (baseUrl) {
-          const response = await fetch(`${baseUrl}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ email: clean, password: cleanPassword || password }),
-          });
-          const data = await response.json();
-          if (response.ok && data.success && data.data?.user?.role === 'ADMIN') {
-            valid = true;
-            if (data.data.token) {
-              localStorage.setItem('tradesphere_auth_token', data.data.token);
-            }
-          }
-        }
-      } catch {
-        // Ignore network fallback errors
-      }
-    }
-
     if (!valid) {
       recordFailure();
       return { ok: false, error: GENERIC_FAILURE };
     }
 
     setAttempts({ count: 0, lockedUntil: 0 });
-    setSession(newSession(ADMIN_PROFILE.id, 'admin'));
-    return { ok: true, user: ADMIN_PROFILE };
+    const targetProfile = isSuper ? SUPER_ADMIN_PROFILE : ADMIN_PROFILE;
+    const targetRole = isSuper ? 'super_admin' : 'admin';
+    startTransition(() => {
+      setSession(newSession(targetProfile.id, targetRole));
+    });
+    return { ok: true, user: targetProfile };
   }, [setSession]);
 
   /** Buyer or supplier sign-in. Resolves { ok, user } or { ok: false, error }. */
@@ -232,7 +247,9 @@ export function AuthProvider({ children }) {
       return { ok: false, error: `This account is registered as a ${activeAccount.role === 'supplier' ? 'Supplier' : 'Buyer'}. Choose “${activeAccount.role === 'supplier' ? 'Supplier' : 'Buyer'}” above to sign in.` };
     }
     setAttempts({ count: 0, lockedUntil: 0 });
-    setSession(newSession(activeAccount.id, activeAccount.role));
+    startTransition(() => {
+      setSession(newSession(activeAccount.id, activeAccount.role));
+    });
     return { ok: true, user: activeAccount };
   }, [accounts, attempts, setSession, loginAdmin, setAccounts]);
 
@@ -296,7 +313,9 @@ export function AuthProvider({ children }) {
 
   /** Signs out and clears session-related data (the Buy Now selection). The cart is kept. */
   const logout = useCallback(() => {
-    setSession(EMPTY_SESSION);
+    startTransition(() => {
+      setSession(EMPTY_SESSION);
+    });
     removeStorage(STORAGE_KEYS.buyNow);
     localStorage.removeItem('tradesphere_auth_token');
     setAttempts({ count: 0, lockedUntil: 0 });

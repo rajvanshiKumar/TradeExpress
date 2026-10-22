@@ -11,6 +11,7 @@ enum Role {
   BUYER
   SUPPLIER
   ADMIN
+  SUPER_ADMIN
 }
 
 enum PaymentStatus {
@@ -39,6 +40,11 @@ model User {
   passwordHash        String
   name                String
   role                Role                 @default(BUYER)
+  adminRole           String?              // USER_ADMIN, PRODUCT_ADMIN, VERIFICATION_ADMIN, FINANCE_ADMIN, SUPPORT_ADMIN, CUSTOM
+  adminPermissions    Json?                // Array of permission codes
+  isActive            Boolean              @default(true)
+  status              String               @default("ACTIVE") // ACTIVE, SUSPENDED, DEACTIVATED
+  statusReason        String?              @db.Text
   company             String?
   phone               String?
   city                String?
@@ -51,7 +57,7 @@ model User {
   warehouseAddress    String?              @db.Text
   warehouseState      String?
   warehousePincode    String?
-  kycStatus           String?              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED
+  kycStatus           String?              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, RESUBMISSION_REQUESTED
   kycRejectionReason  String?              @db.Text
   isVerified          Boolean              @default(false)
   isPhoneVerified     Boolean              @default(false)
@@ -71,6 +77,8 @@ model User {
   supportTickets      SupportTicket[]
   notifications       Notification[]
   payouts             SupplierPayout[]
+  auditLogs           AuditLog[]           @relation("ActorAuditLogs")
+  targetedAuditLogs   AuditLog[]           @relation("TargetAuditLogs")
 
   @@map("users")
 }
@@ -619,9 +627,47 @@ model TicketMessage {
   id        String        @id @default(uuid())
   ticketId  String
   ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  senderRole String       // USER, ADMIN
+  senderRole String       // USER, ADMIN, SUPER_ADMIN
   message   String        @db.Text
   createdAt DateTime      @default(now())
 
   @@map("ticket_messages")
 }
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actor      User?    @relation("ActorAuditLogs", fields: [actorId], references: [id], onDelete: SetNull)
+  actorEmail String
+  actorRole  String
+  action     String   // USER_STATUS_CHANGE, KYC_REVIEW, PRODUCT_MODERATE, COMMISSION_UPDATE, ADMIN_MANAGE, etc.
+  resource   String   // USERS, SUPPLIERS, PRODUCTS, ORDERS, PAYMENTS, SETTINGS, ADMINS
+  targetId   String?
+  targetUser User?    @relation("TargetAuditLogs", fields: [targetId], references: [id], onDelete: SetNull)
+  details    Json?
+  ipAddress  String?
+  userAgent  String?  @db.Text
+  result     String   @default("SUCCESS") // SUCCESS, FAILURE
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model PlatformSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  description String?  @db.Text
+  category    String   @default("GENERAL") // GENERAL, ANNOUNCEMENT, POLICY, INTEGRATION
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@map("platform_settings")
+}
+

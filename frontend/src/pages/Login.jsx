@@ -22,16 +22,24 @@ export default function Login() {
 
   const switcher = (
     <div className="mb-7">
-      <div role="radiogroup" aria-label="Account type" className="inline-flex rounded-full bg-ivory p-1 ring-1 ring-navy-900/[0.08]">
+      <div role="radiogroup" aria-label="Account type" className="inline-flex flex-wrap items-center gap-1 rounded-full bg-ivory p-1 ring-1 ring-navy-900/[0.08]">
         {ROLES.map((item) => (
           <button
             key={item.id} type="button" role="radio" aria-checked={role === item.id} onClick={() => setRole(item.id)}
-            className={`rounded-full px-5 py-2 text-sm font-semibold transition-all ${role === item.id ? 'bg-navy-900 text-white shadow-sm' : 'text-navy-700 hover:text-navy-900'}`}
+            className={`rounded-full px-4 sm:px-5 py-2 text-xs sm:text-sm font-semibold transition-all ${role === item.id ? 'bg-navy-900 text-white shadow-sm' : 'text-navy-700 hover:text-navy-900'}`}
           >
             {item.label}
           </button>
         ))}
-        <Link to="/admin/login" className="rounded-full px-5 py-2 text-sm font-semibold text-navy-700 hover:text-navy-900">Admin</Link>
+        <Link to="/admin/login" className="rounded-full px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-navy-700 hover:text-navy-900">
+          Admin
+        </Link>
+        <Link
+          to="/super-admin/login"
+          className="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/10 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-bold text-emerald-800 hover:bg-emerald-900 hover:text-white transition-all ring-1 ring-emerald-600/30"
+        >
+          <span>👑 Super Admin</span>
+        </Link>
       </div>
     </div>
   );
