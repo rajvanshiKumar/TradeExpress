@@ -6,7 +6,6 @@ import SupplierShowcase, {
 } from "../components/home/SupplierShowcase";
 import WholesaleDeals from "../components/home/WholesaleDeals";
 import RFQPromo from "../components/home/RFQPromo";
-import HowItWorks from "../components/home/HowItWorks";
 import IndustrySection from "../components/home/IndustrySection";
 import Benefits from "../components/home/Benefits";
 import SupplierCTA from "../components/home/SupplierCTA";
@@ -72,7 +71,6 @@ export default function Home() {
           <SupplierShowcase />
           <WholesaleDeals />
           <RFQPromo />
-          <HowItWorks />
           <IndustrySection />
           <Benefits />
         </>
