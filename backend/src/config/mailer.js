@@ -25,7 +25,7 @@ export async function getTransporter() {
     // Generate an automatic Ethereal test account in development if no SMTP credentials are set
     try {
       const testAccount = await nodemailer.createTestAccount();
-      console.log('[TradeSphere Mailer] Using Ethereal test account for email delivery:', testAccount.user);
+      console.log('[TradeExpress Mailer] Using Ethereal test account for email delivery:', testAccount.user);
       transporter = nodemailer.createTransport({
         host: 'smtp.ethereal.email',
         port: 587,
@@ -36,7 +36,7 @@ export async function getTransporter() {
         },
       });
     } catch (err) {
-      console.warn('[TradeSphere Mailer] Could not create Ethereal account, falling back to mock transport:', err.message);
+      console.warn('[TradeExpress Mailer] Could not create Ethereal account, falling back to mock transport:', err.message);
       transporter = nodemailer.createTransport({
         jsonTransport: true,
       });

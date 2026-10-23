@@ -184,7 +184,7 @@ export async function addTicketMessage({ ticketId, senderRole = 'USER', message,
     createNotification({
       userId: ticket.userId,
       title: `Support Update: ${ticket.subject}`,
-      message: `TradeSphere Support replied to your ticket.`,
+      message: `TradeExpress Support replied to your ticket.`,
       type: 'SUPPORT',
       link: `/help?ticket=${ticket.id}`,
     }).catch(() => {});

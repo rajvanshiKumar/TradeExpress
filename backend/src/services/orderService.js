@@ -297,13 +297,13 @@ export async function createOrder({
 
   // Automatically initialize escrow ledger entry for wholesale order
   initiateEscrowForOrder(order.id).catch((err) => {
-    console.error('[TradeSphere Escrow] Escrow init note:', err.message);
+    console.error('[TradeExpress Escrow] Escrow init note:', err.message);
   });
 
   // If COD, send confirmation email immediately since order is confirmed
   if (isCod) {
     sendOrderConfirmationEmail(order).catch((err) => {
-      console.error('[TradeSphere OrderService] Failed to send COD confirmation email:', err.message);
+      console.error('[TradeExpress OrderService] Failed to send COD confirmation email:', err.message);
     });
   }
 

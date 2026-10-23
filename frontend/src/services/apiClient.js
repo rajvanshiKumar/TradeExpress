@@ -1,6 +1,6 @@
 // Optional public API adapter.
 //
-// TradeSphere ships with NO external API configured: every service works from seeded
+// TradeExpress ships with NO external API configured: every service works from seeded
 // local data. If you have a real, CORS-enabled public API, set VITE_PUBLIC_API_BASE_URL
 // (and, for the catalogue, VITE_PUBLIC_API_PRODUCTS_PATH) in a .env file. Nothing in
 // this file invents endpoints: it only calls the base URL and paths you provide.
@@ -49,7 +49,7 @@ async function request(method, path, body = null, { signal, timeoutMs = 12000, h
 
   // Check for stored token
   try {
-    const token = localStorage.getItem('tradesphere_auth_token');
+    const token = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
     if (token && !reqHeaders.Authorization) {
       reqHeaders.Authorization = `Bearer ${token}`;
     }

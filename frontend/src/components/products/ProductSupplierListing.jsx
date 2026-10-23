@@ -78,10 +78,10 @@ export default function ProductSupplierListing({ product }) {
           }
         }
       } catch (err) {
-        console.warn('[TradeSphere] API supplier load error, using local verified catalogue:', err.message);
+        console.warn('[TradeExpress] API supplier load error, using local verified catalogue:', err.message);
       }
 
-      // Fallback: strictly query active TradeSphere listings for this exact product
+      // Fallback: strictly query active TradeExpress listings for this exact product
       if (isMounted) {
         const list = [];
         const seenSupplierIds = new Set();
@@ -114,10 +114,10 @@ export default function ProductSupplierListing({ product }) {
             leadTimeDays,
             estimatedDelivery: `${leadTimeDays} business days (${leadTimeDays + 3} days to door)`,
             shippingCost,
-            paymentTerms: product.specifications?.['Payment Terms'] || 'TradeSphere Escrow Protection (100% Secure, payment released upon delivery confirmation)',
+            paymentTerms: product.specifications?.['Payment Terms'] || 'TradeExpress Escrow Protection (100% Secure, payment released upon delivery confirmation)',
             qualityCertifications: Array.isArray(product.specifications?.Certifications)
               ? product.specifications.Certifications
-              : ['ISO 9001:2015', 'TradeSphere Verified Factory'],
+              : ['ISO 9001:2015', 'TradeExpress Verified Factory'],
             isPrimarySupplier: true,
             productId: product.id,
             productSlug: product.slug,
@@ -167,10 +167,10 @@ export default function ProductSupplierListing({ product }) {
               leadTimeDays,
               estimatedDelivery: `${leadTimeDays} business days (${leadTimeDays + 3} days to door)`,
               shippingCost,
-              paymentTerms: sibling.specifications?.['Payment Terms'] || 'TradeSphere Escrow Protection (100% Secure, payment released upon delivery confirmation)',
+              paymentTerms: sibling.specifications?.['Payment Terms'] || 'TradeExpress Escrow Protection (100% Secure, payment released upon delivery confirmation)',
               qualityCertifications: Array.isArray(sibling.specifications?.Certifications)
                 ? sibling.specifications.Certifications
-                : ['ISO 9001:2015', 'CE Conformity', 'TradeSphere Verified Factory'],
+                : ['ISO 9001:2015', 'CE Conformity', 'TradeExpress Verified Factory'],
               isPrimarySupplier: false,
               productId: sibling.id,
               productSlug: sibling.slug,
@@ -271,8 +271,8 @@ export default function ProductSupplierListing({ product }) {
         specifications: `Targeted multi-supplier quotation request for ${product.name}.\nTargeted suppliers: ${selectedNames}\n\nAdditional notes: ${rfqNotes || 'Standard wholesale inquiry.'}`,
         categorySlug: product.category || product.categorySlug,
         destinationCountry: 'India',
-        buyerName: user?.name || 'TradeSphere Buyer',
-        buyerEmail: user?.email || 'buyer@tradesphere.com',
+        buyerName: user?.name || 'TradeExpress Buyer',
+        buyerEmail: user?.email || 'buyer@tradeexpress.com',
         items: [
           {
             productId: product.id,
@@ -321,7 +321,7 @@ export default function ProductSupplierListing({ product }) {
         <div>
           <div className="flex items-center gap-2.5">
             <h2 id="suppliers-offering-title" className="font-display text-2xl font-black tracking-[-0.02em] text-navy-900 sm:text-3xl">
-              TradeSphere Registered Suppliers
+              TradeExpress Registered Suppliers
             </h2>
             <span className="inline-flex size-7 items-center justify-center rounded-full bg-brand-100 font-display text-xs font-bold text-brand-800">
               {filteredSuppliers.length}
@@ -332,7 +332,7 @@ export default function ProductSupplierListing({ product }) {
           </p>
           <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-500/20">
             <ShieldCheck className="size-4 text-emerald-600" />
-            <span>Strictly TradeSphere-registered accounts with live listings. External or unverified suppliers are excluded.</span>
+            <span>Strictly TradeExpress-registered accounts with live listings. External or unverified suppliers are excluded.</span>
           </div>
         </div>
 
@@ -402,7 +402,7 @@ export default function ProductSupplierListing({ product }) {
       ) : filteredSuppliers.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-navy-200 bg-white p-8 text-center">
           <Building2 className="mx-auto size-10 text-muted" />
-          <h3 className="mt-2 text-base font-bold text-navy-900">No matching TradeSphere suppliers</h3>
+          <h3 className="mt-2 text-base font-bold text-navy-900">No matching TradeExpress suppliers</h3>
           <p className="mt-1 text-xs text-muted">Try clearing the "Verified only" filter to see all active suppliers.</p>
           <Button size="sm" variant="outline" className="mt-4" onClick={() => setVerifiedOnly(false)}>
             Clear Filters
@@ -441,7 +441,7 @@ export default function ProductSupplierListing({ product }) {
                         </h3>
 
                         <span className="inline-flex items-center gap-1 rounded-full bg-navy-100 px-2.5 py-0.5 text-[0.6875rem] font-bold text-navy-800">
-                          TradeSphere Supplier
+                          TradeExpress Supplier
                         </span>
 
                         {supplier.isVerified ? (
@@ -495,7 +495,7 @@ export default function ProductSupplierListing({ product }) {
                       {/* Escrow payment terms */}
                       <div className="mt-2.5 flex items-center gap-1.5 text-xs text-emerald-800 bg-emerald-50/70 border border-emerald-200/60 rounded-lg px-2.5 py-1">
                         <ShieldCheck className="size-3.5 text-emerald-600 shrink-0" />
-                        <span className="font-semibold">{supplier.paymentTerms || 'TradeSphere Escrow Protection (100% Secure, payment released upon delivery confirmation)'}</span>
+                        <span className="font-semibold">{supplier.paymentTerms || 'TradeExpress Escrow Protection (100% Secure, payment released upon delivery confirmation)'}</span>
                       </div>
 
                       {/* Real quality certifications from DB */}
@@ -611,7 +611,7 @@ export default function ProductSupplierListing({ product }) {
                 {selectedSupplierIds.size}
               </span>
               <div>
-                <p className="font-bold text-sm">TradeSphere Suppliers Selected</p>
+                <p className="font-bold text-sm">TradeExpress Suppliers Selected</p>
                 <p className="text-xs text-navy-200">
                   Compare pricing, MOQ, stock, delivery, and certifications side-by-side.
                 </p>
@@ -647,7 +647,7 @@ export default function ProductSupplierListing({ product }) {
       <Modal
         open={multiRfqOpen}
         onClose={() => setMultiRfqOpen(false)}
-        title="Request Quotations from TradeSphere Suppliers"
+        title="Request Quotations from TradeExpress Suppliers"
         size="lg"
       >
         <form onSubmit={handleSubmitMultiRfq} className="space-y-5">

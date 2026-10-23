@@ -31,6 +31,66 @@ export async function resendMobileOtp(req, res, next) {
   }
 }
 
+export async function sendEmailOtp(req, res, next) {
+  try {
+    const { email, role } = req.body;
+    const result = await otpService.requestEmailLoginOtp({ email, role });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function verifyEmailOtp(req, res, next) {
+  try {
+    const { email, otp } = req.body;
+    otpService.validateEmailLoginOtp({ email, otp, consume: false });
+    res.json({ success: true, message: 'Email OTP code is valid.' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function sendMobileLoginOtp(req, res, next) {
+  try {
+    const { phone, country, role } = req.body;
+    const result = await otpService.requestMobileLoginOtp({ phone, country, role });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function loginMobile(req, res, next) {
+  try {
+    const { phone, country, otp, role } = req.body;
+    const { user, token } = await otpService.verifyAndLoginMobile({ phone, country, otp, role });
+    res.json({
+      success: true,
+      message: 'Signed in successfully via mobile OTP.',
+      data: { user, token },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function adminLogin(req, res, next) {
+  try {
+    const { user, token } = await authService.loginUser({
+      ...req.body,
+      isAdminLogin: true,
+    });
+    res.json({
+      success: true,
+      message: 'Super Admin signed in successfully.',
+      data: { user, token },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function register(req, res, next) {
   try {
     const { user, token } = await authService.registerUser(req.body);

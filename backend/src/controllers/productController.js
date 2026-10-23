@@ -95,3 +95,47 @@ export async function getProductById(req, res, next) {
   }
 }
 
+export async function compareProducts(req, res, next) {
+  try {
+    const { productId, ids, category, material, verifiedOnly, inStockOnly, sort, limit } = req.query;
+    const result = await productService.getSimilarProductsForComparison({
+      productId,
+      ids,
+      category,
+      material,
+      verifiedOnly,
+      inStockOnly,
+      sort,
+      limit,
+    });
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getSimilarProducts(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { category, material, verifiedOnly, inStockOnly, sort, limit } = req.query;
+    const result = await productService.getSimilarProductsForComparison({
+      productId: id,
+      category,
+      material,
+      verifiedOnly,
+      inStockOnly,
+      sort,
+      limit,
+    });
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

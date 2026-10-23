@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Clock, FileText, MessageSquare, PackageCheck, PackageX, Share2, ShoppingCart, Truck, Zap, CheckCircle2 } from 'lucide-react';
+import { Clock, FileText, MessageSquare, PackageCheck, PackageX, Scale, Share2, ShoppingCart, Truck, Zap, CheckCircle2 } from 'lucide-react';
 import Breadcrumbs from '../components/common/Breadcrumbs';
 import Button from '../components/common/Button';
 import Badge from '../components/common/Badge';
@@ -71,7 +71,7 @@ export default function ProductDetails() {
             setReviewsData(res.data);
           }
         } catch (err) {
-          console.warn('[TradeSphere] Could not load verified reviews:', err.message);
+          console.warn('[TradeExpress] Could not load verified reviews:', err.message);
         } finally {
           if (isMounted) setReviewsLoading(false);
         }
@@ -188,9 +188,19 @@ export default function ProductDetails() {
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <BuyNowButton product={product} quantity={quantity} variant={variantEntries.length ? variant : null} size="lg" />
-              <Button size="lg" variant="navy" icon={ShoppingCart} disabled={outOfStock} onClick={() => addToCart(product, quantity, variantEntries.length ? variant : null)}>
-                {outOfStock ? 'Out of stock' : inCart(product.id) ? 'Add more to cart' : 'Add to Cart'}
+              <Button
+                size="lg"
+                variant="outline"
+                icon={ShoppingCart}
+                disabled={outOfStock}
+                onClick={() => addToCart(product, quantity, variantEntries.length ? variant : null)}
+                className={`transition-all font-bold ${
+                  inCart(product.id)
+                    ? '!bg-emerald-100/95 !text-emerald-900 !border-2 !border-emerald-500 shadow-sm ring-2 ring-emerald-500/20 hover:!bg-emerald-200/90'
+                    : '!bg-emerald-50 !text-emerald-800 !border !border-emerald-300/90 shadow-xs hover:!bg-emerald-100 hover:!border-emerald-400'
+                }`}
+              >
+                {outOfStock ? 'Out of stock' : inCart(product.id) ? 'Added to Cart (Add More)' : 'Add to Cart'}
               </Button>
               {product.sampleAvailable !== false && (
                 <Button
@@ -202,6 +212,14 @@ export default function ProductDetails() {
                   Request Sample ({money(product.samplePrice || product.price)} / {product.unit})
                 </Button>
               )}
+              <Button
+                variant="outline"
+                icon={Scale}
+                to={`/compare-products/${product.id}`}
+                className="sm:col-span-2 border-brand-500/30 hover:border-brand-500 hover:bg-brand-50/40 text-navy-950 font-semibold shadow-xs"
+              >
+                Compare Similar Products
+              </Button>
               <Button variant="outline" icon={FileText} to={`/rfq?product=${product.id}`}>Request a Quote</Button>
               <Button variant="outline" icon={MessageSquare} onClick={() => company && contact(company, product)} disabled={!company}>Contact Supplier</Button>
               <div className="flex gap-2.5 sm:col-span-2">

@@ -46,7 +46,7 @@ export function renderOrderConfirmationEmail({ order }) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Order Confirmation - TradeSphere</title>
+  <title>Order Confirmation - TradeExpress</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; color: #1e293b; }
     .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; }
@@ -66,7 +66,7 @@ export function renderOrderConfirmationEmail({ order }) {
 <body>
   <div class="container">
     <div class="header">
-      <div style="font-size: 24px; font-weight: 800; letter-spacing: -0.02em;">TradeSphere</div>
+      <div style="font-size: 24px; font-weight: 800; letter-spacing: -0.02em;">TradeExpress</div>
       <div style="font-size: 13px; opacity: 0.8; margin-top: 4px;">International B2B Marketplace</div>
     </div>
     <div class="content">
@@ -140,8 +140,8 @@ export function renderOrderConfirmationEmail({ order }) {
       </div>
 
       <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #f1f5f9; text-align: center; font-size: 12px; color: #94a3b8;">
-        TradeSphere Marketplace · Your World of Business<br>
-        Questions? Contact us at support@tradesphere.com
+        TradeExpress Marketplace · Your World of Business<br>
+        Questions? Contact us at support@tradeexpress.com
       </div>
     </div>
   </div>

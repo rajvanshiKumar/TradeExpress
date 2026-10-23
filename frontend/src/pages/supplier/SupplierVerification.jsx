@@ -215,7 +215,7 @@ function Verification({ company }) {
     <div className="space-y-6">
       <SectionHeading
         title="Supplier Verification & KYC"
-        description="Submit GSTIN, PAN, Bank, Warehouse location, and business documents for review by TradeSphere admin."
+        description="Submit GSTIN, PAN, Bank, Warehouse location, and business documents for review by TradeExpress admin."
       />
 
       <section className="ts-card flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6" aria-label="Current status">
@@ -461,7 +461,7 @@ function Verification({ company }) {
       <div className="flex justify-end">
         {locked ? (
           <p className="text-sm font-medium text-amber-700 bg-amber-50 px-4 py-2 rounded-xl border border-amber-200">
-            Your verification request is currently under review by TradeSphere administrators.
+            Your verification request is currently under review by TradeExpress administrators.
           </p>
         ) : (
           <Button icon={Send} onClick={submit} disabled={submitting || uploadingFile} size="lg">

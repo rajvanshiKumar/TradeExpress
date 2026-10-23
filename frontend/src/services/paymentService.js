@@ -1,4 +1,4 @@
-// Payment provider adapter integrated with TradeSphere Express + MySQL backend.
+// Payment provider adapter integrated with TradeExpress + MySQL backend.
 //
 // Online payments (UPI, Cards, Net Banking, Wallets) communicate with the backend
 // Razorpay gateway in sandbox/production mode. Payments are cryptographically verified
@@ -75,7 +75,7 @@ export async function startPayment({ order, orderId, amount, method, buyerInfo, 
           key: paymentData.keyId,
           amount: paymentData.amountInPaise,
           currency: paymentData.currency || 'INR',
-          name: 'TradeSphere',
+          name: 'TradeExpress',
           description: `Wholesale Order #${paymentData.orderNumber}`,
           order_id: paymentData.paymentOrderId,
           prefill: {

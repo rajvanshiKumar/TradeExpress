@@ -6,7 +6,7 @@ export const mainNav = [
   { label: 'Find Suppliers', to: '/suppliers' },
   { label: 'Exporters', to: '/exporters' },
   { label: 'Request For Quotation', to: '/rfq' },
-  { label: 'Compare Quotes', to: '/compare-quotes' },
+  { label: 'Compare Products', to: '/compare-products' },
   { label: 'Wishlist', to: '/wishlist' },
   { label: 'Help', to: '/help' },
   { label: 'About Us', to: '/info/about' },
@@ -27,7 +27,7 @@ export const quickLinks = [
 
 export const footerColumns = [
   {
-    title: 'About TradeSphere',
+    title: 'About TradeExpress',
     links: [
       { label: 'About us', to: '/info/about' },
       { label: 'How it works', to: '/info/about#how-it-works' },

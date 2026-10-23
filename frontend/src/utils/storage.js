@@ -60,7 +60,7 @@ export function removeStorage(key) {
   }
 }
 
-/** Removes every TradeSphere key, including ones from older versions. Used by "Reset sample data". */
+/** Removes every TradeExpress key, including ones from older versions. Used by "Reset sample data". */
 export function clearAllStorage() {
   if (!available()) return;
   try {

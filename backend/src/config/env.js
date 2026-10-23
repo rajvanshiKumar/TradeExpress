@@ -18,5 +18,6 @@ export const ENV = {
   SMTP_USER: process.env.SMTP_USER || '',
   SMTP_PASS: process.env.SMTP_PASS || '',
   SMTP_FROM: process.env.SMTP_FROM || 'TradeSphere Marketplace <orders@tradesphere.com>',
+  DEV_OTP_ENABLED: process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production',
 };
 

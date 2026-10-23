@@ -10,10 +10,12 @@ import ProductGrid from '../../components/products/ProductGrid';
 import SupplierGrid from '../../components/suppliers/SupplierGrid';
 import useWishlist from '../../hooks/useWishlist';
 import useProducts from '../../hooks/useProducts';
+import useAuth from '../../hooks/useAuth';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 /** Saved products and saved suppliers. Used in the buyer dashboard and as the public /wishlist page. */
 export default function BuyerWishlist({ standalone = false }) {
+  const { user } = useAuth();
   const { items, clearWishlist, suppliers, clearSuppliers } = useWishlist();
   const { loading } = useProducts();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -23,6 +25,31 @@ export default function BuyerWishlist({ standalone = false }) {
 
   const setTab = (next) => setSearchParams(next === 'suppliers' ? { tab: 'suppliers' } : {});
   const hasItems = tab === 'products' ? items.length : suppliers.length;
+
+  if (!user) {
+    const guestState = (
+      <div className="max-w-md mx-auto rounded-3xl border border-navy-900/[0.08] bg-white p-8 sm:p-10 text-center shadow-sm">
+        <div className="inline-flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 mb-4">
+          <Heart className="size-7" />
+        </div>
+        <h1 className="text-xl sm:text-2xl font-bold text-navy-950 mb-2">
+          Sign In to Access Your Wishlist
+        </h1>
+        <p className="text-sm text-navy-600 mb-6">
+          Wishlist is available for registered TradeExpress buyers and suppliers. Please log in or create an account to view and save products.
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Button variant="brand" to="/login" state={{ from: '/wishlist' }}>
+            Log In
+          </Button>
+          <Button variant="outline" to="/register">
+            Register Account
+          </Button>
+        </div>
+      </div>
+    );
+    return standalone ? <div className="ts-container py-12 sm:py-16">{guestState}</div> : guestState;
+  }
 
   const content = (
     <>

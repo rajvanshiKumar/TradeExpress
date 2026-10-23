@@ -1,29 +1,56 @@
 import { Link } from 'react-router-dom';
 import { BRAND } from '../../utils/constants';
-import mark from '../../assets/logos/tradesphere-mark.svg';
+import logoDark from '../../assets/logos/tradeexpress-logo.png';
+import logoLight from '../../assets/logos/tradeexpress-logo-white.png';
+import mark from '../../assets/logos/tradeexpress-mark.png';
 
-/** TradeSphere wordmark. `light` is for navy backgrounds. `size="sm"` is compact for header. */
-export default function Logo({ light = false, showTagline = true, className = '', size = 'md' }) {
-  const isSm = size === 'sm';
+/**
+ * Official TradeExpress Brand Logo.
+ * @param {boolean} light - Use white text variant for dark/navy backgrounds
+ * @param {'xs' | 'sm' | 'md' | 'lg'} size - Scaled dimensions tailored for placement
+ * @param {boolean} markOnly - Show only the dynamic TE arrow mark
+ * @param {string} to - Destination link (defaults to '/')
+ */
+export default function Logo({
+  light = false,
+  className = '',
+  size = 'md',
+  markOnly = false,
+  to = '/',
+  showTagline, // backwards compatibility
+  ...rest
+}) {
+  const imgSrc = markOnly ? mark : (light ? logoLight : logoDark);
+
+  // Height and sizing tailored cleanly for each placement without overflow
+  const sizeClasses = {
+    xs: markOnly ? 'h-6 w-auto' : 'h-6.5 sm:h-7 w-auto',
+    sm: markOnly ? 'h-7 sm:h-8 xl:h-8.5 w-auto' : 'h-7.5 sm:h-8 xl:h-8.5 w-auto',
+    md: markOnly ? 'h-9 sm:h-10 w-auto' : 'h-9 sm:h-10 w-auto',
+    lg: markOnly ? 'h-10 sm:h-11 xl:h-12 w-auto' : 'h-10 sm:h-11 xl:h-12 w-auto',
+  }[size] || 'h-8.5 w-auto';
+
+  const imageElement = (
+    <img
+      src={imgSrc}
+      alt={BRAND.name}
+      className={`object-contain max-w-none transition-transform duration-200 hover:opacity-95 ${sizeClasses}`}
+      loading="eager"
+      {...rest}
+    />
+  );
+
+  if (!to) {
+    return <div className={`inline-flex shrink-0 items-center ${className}`}>{imageElement}</div>;
+  }
+
   return (
-    <Link to="/" aria-label={`${BRAND.name} home`} className={`inline-flex shrink-0 items-center ${isSm ? 'gap-1.5 sm:gap-2' : 'gap-2.5'} rounded-lg ${className}`}>
-      <img
-        src={mark}
-        alt=""
-        width={isSm ? "28" : "40"}
-        height={isSm ? "28" : "40"}
-        className={`${isSm ? 'size-6.5 sm:size-7 xl:size-7.5 rounded-[0.55rem]' : 'size-9 sm:size-10 rounded-[0.8rem]'} ${light ? 'ring-1 ring-white/20' : ''}`}
-      />
-      <span className="leading-none">
-        <span className={`block font-display font-extrabold tracking-[-0.03em] ${isSm ? 'text-[0.95rem] sm:text-base xl:text-[1.125rem]' : 'text-xl sm:text-[1.4rem]'} ${light ? 'text-white' : 'text-navy-900'}`}>
-          Trade<span className={light ? 'text-brand-500' : 'text-brand-600'}>Express</span>
-        </span>
-        {showTagline && !isSm ? (
-          <span className={`mt-0.5 hidden text-[0.5625rem] font-semibold uppercase tracking-[0.24em] xs:block ${light ? 'text-navy-200' : 'text-muted'}`}>
-            {BRAND.tagline}
-          </span>
-        ) : null}
-      </span>
+    <Link
+      to={to}
+      aria-label={`${BRAND.name} home`}
+      className={`inline-flex shrink-0 items-center focus-visible:outline-2 focus-visible:outline-brand-500 rounded-lg ${className}`}
+    >
+      {imageElement}
     </Link>
   );
 }

@@ -130,7 +130,7 @@ export default function SupportTicketsSection() {
       <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
         <LifeBuoy className="mx-auto size-8 text-brand-600 mb-2" />
         <h3 className="text-base font-bold text-navy-900">Need Help or Have a Trade Query?</h3>
-        <p className="mt-1 text-sm text-muted">Sign in to your TradeSphere account to raise support tickets and receive official responses.</p>
+        <p className="mt-1 text-sm text-muted">Sign in to your TradeExpress account to raise support tickets and receive official responses.</p>
         <div className="mt-4 flex justify-center gap-3">
           <Button to="/login" variant="navy" size="sm">Sign In</Button>
           <Button to="/info/contact" variant="outline" size="sm">Contact Public Desk</Button>
@@ -148,7 +148,7 @@ export default function SupportTicketsSection() {
             Support & Help Desk
           </h2>
           <p className="mt-0.5 text-xs text-muted">
-            Direct communication with TradeSphere marketplace operations & dispute staff.
+            Direct communication with TradeExpress marketplace operations & dispute staff.
           </p>
         </div>
         <Button
@@ -361,7 +361,7 @@ export default function SupportTicketsSection() {
                       }`}
                     >
                       <p className={`font-bold mb-1 text-[11px] ${isAdmin ? 'text-brand-600' : 'text-brand-300'}`}>
-                        {isAdmin ? 'TradeSphere Help Desk (Support Agent)' : 'You'}
+                        {isAdmin ? 'TradeExpress Help Desk (Support Agent)' : 'You'}
                       </p>
                       <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
                     </div>

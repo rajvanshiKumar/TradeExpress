@@ -17,6 +17,13 @@ const ROLE_OPTIONS = [
   { value: 'supplier', label: 'Supplier', text: 'Manufacturers and exporters listing products.', icon: Building2 },
 ];
 
+/**
+ * Mobile OTP Verification Toggle.
+ * Set to FALSE to temporarily bypass mobile OTP during registration.
+ * Set to TRUE whenever you want to re-enable mobile OTP verification.
+ */
+export const ENABLE_MOBILE_OTP = false;
+
 const schema = {
   name: [rules.required('Full name'), rules.minLength('Full name', 2), rules.maxLength('Full name', 80)],
   email: [rules.required('Email'), rules.email()],
@@ -28,14 +35,14 @@ const schema = {
   confirmPassword: [rules.required('Confirm password'), rules.matches('password', 'The two passwords do not match.')],
 };
 
-export default function RegisterForm() {
+export default function RegisterForm({ role: propRole, onRoleChange }) {
   const { register, updateAccount, preferences } = useAuth();
   const { addCompany } = useProducts();
   const { showToast } = useNotifications();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [values, setValues] = useState({
-    role: searchParams.get('role') === 'supplier' ? 'supplier' : 'buyer',
+    role: propRole || (searchParams.get('role') === 'supplier' ? 'supplier' : 'buyer'),
     name: '',
     email: '',
     company: '',
@@ -50,6 +57,12 @@ export default function RegisterForm() {
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (propRole && propRole !== values.role) {
+      setValues((prev) => ({ ...prev, role: propRole }));
+    }
+  }, [propRole]);
 
   // Mobile OTP Verification Modal & State
   const [otpModalOpen, setOtpModalOpen] = useState(false);
@@ -218,8 +231,8 @@ export default function RegisterForm() {
     if (!['buyer', 'supplier'].includes(values.role)) found.role = 'Choose Buyer or Supplier.';
     if (!values.agree) found.agree = 'Please accept the terms of use to continue.';
 
-    // Mobile OTP verification validation
-    if (!isMobileVerified || !verificationToken) {
+    // Mobile OTP verification validation (only when enabled)
+    if (ENABLE_MOBILE_OTP && (!isMobileVerified || !verificationToken)) {
       found.phone = 'Please verify your mobile number with OTP before continuing.';
     }
 
@@ -232,7 +245,7 @@ export default function RegisterForm() {
       ...trimmed,
       phone,
       role: values.role,
-      verificationToken,
+      ...(ENABLE_MOBILE_OTP ? { verificationToken } : {}),
     });
 
     // The passwords were only needed to create the hash. They are cleared from the form now.
@@ -251,7 +264,7 @@ export default function RegisterForm() {
       });
       updateAccount(result.user.id, { companyId: company.id });
     }
-    showToast(`Welcome to TradeSphere, ${result.user.name}.`);
+    showToast(`Welcome to TradeExpress, ${result.user.name}.`);
     startTransition(() => {
       navigate(ROLE_HOME[values.role], { replace: true });
     });
@@ -274,7 +287,18 @@ export default function RegisterForm() {
                   selected ? 'border-brand-500 bg-brand-50' : 'bg-white hover:border-navy-200'
                 }`}
               >
-                <input type="radio" name="register-role" value={option.value} checked={selected} onChange={set('role')} className="sr-only" />
+                <input
+                  type="radio"
+                  name="register-role"
+                  value={option.value}
+                  checked={selected}
+                  onChange={() => {
+                    setValues((prev) => ({ ...prev, role: option.value }));
+                    if (onRoleChange) onRoleChange(option.value);
+                    if (errors.role) setErrors((prev) => ({ ...prev, role: '' }));
+                  }}
+                  className="sr-only"
+                />
                 <span className={`inline-flex size-10 shrink-0 items-center justify-center rounded-lg ${selected ? 'bg-brand-500 text-navy-900' : 'bg-navy-50 text-navy-800'}`}>
                   <option.icon className="size-5" aria-hidden="true" />
                 </span>
@@ -300,85 +324,102 @@ export default function RegisterForm() {
         <Select id="register-country" label="Country" required options={COUNTRIES} value={values.country} onChange={set('country')} error={errors.country} />
         <Input id="register-city" label="City" required autoComplete="address-level2" value={values.city} onChange={set('city')} error={errors.city} />
 
-        {/* Mobile Number Field with Send OTP Button & Verified Status Indicator */}
-        <div className="sm:col-span-2">
-          <div className="flex items-center justify-between mb-1.5">
-            <label htmlFor="register-phone" className="ts-label !mb-0">
-              Mobile number <span className="text-danger" aria-hidden="true">*</span>
-            </label>
-            {isMobileVerified ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200">
-                <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden="true" />
-                Verified
-              </span>
-            ) : null}
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative flex-1">
-              <input
-                id="register-phone"
-                type="tel"
-                autoComplete="tel"
-                required
-                disabled={isMobileVerified || otpVerifying}
-                value={values.phone}
-                onChange={(e) => {
-                  set('phone')(e);
-                  if (isMobileVerified) {
+        {/* Mobile Number Field */}
+        {ENABLE_MOBILE_OTP ? (
+          <div className="sm:col-span-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="register-phone" className="ts-label !mb-0">
+                Mobile number <span className="text-danger" aria-hidden="true">*</span>
+              </label>
+              {isMobileVerified ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200">
+                  <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden="true" />
+                  Verified
+                </span>
+              ) : null}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1">
+                <input
+                  id="register-phone"
+                  type="tel"
+                  autoComplete="tel"
+                  required
+                  disabled={isMobileVerified || otpVerifying}
+                  value={values.phone}
+                  onChange={(e) => {
+                    set('phone')(e);
+                    if (isMobileVerified) {
+                      setIsMobileVerified(false);
+                      setVerificationToken('');
+                    }
+                  }}
+                  placeholder=""
+                  className={`ts-input ${
+                    isMobileVerified
+                      ? '!bg-slate-50 !text-slate-700 !border-emerald-400 cursor-not-allowed'
+                      : ''
+                  }`}
+                  aria-invalid={errors.phone ? 'true' : undefined}
+                  aria-describedby={errors.phone ? 'register-phone-error' : 'register-phone-hint'}
+                />
+              </div>
+              {!isMobileVerified ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="md"
+                  onClick={handleOpenOtpModal}
+                  loading={otpSending && !otpModalOpen}
+                  disabled={!values.phone}
+                  className="shrink-0 font-semibold"
+                >
+                  {otpSent ? 'Enter OTP' : 'Send OTP'}
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
                     setIsMobileVerified(false);
                     setVerificationToken('');
-                  }
-                }}
-                placeholder={mobileExample(values.country)}
-                className={`ts-input ${
-                  isMobileVerified
-                    ? '!bg-slate-50 !text-slate-700 !border-emerald-400 cursor-not-allowed'
-                    : ''
-                }`}
-                aria-invalid={errors.phone ? 'true' : undefined}
-                aria-describedby={errors.phone ? 'register-phone-error' : 'register-phone-hint'}
-              />
+                    setOtpSent(false);
+                    setOtpFeedback({ type: '', message: '' });
+                  }}
+                  className="shrink-0 text-xs font-semibold text-brand-600 hover:text-brand-700 self-center px-2 py-1"
+                >
+                  Change number
+                </button>
+              )}
             </div>
-            {!isMobileVerified ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="md"
-                onClick={handleOpenOtpModal}
-                loading={otpSending && !otpModalOpen}
-                disabled={!values.phone}
-                className="shrink-0 font-semibold"
-              >
-                {otpSent ? 'Enter OTP' : 'Send OTP'}
-              </Button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMobileVerified(false);
-                  setVerificationToken('');
-                  setOtpSent(false);
-                  setOtpFeedback({ type: '', message: '' });
-                }}
-                className="shrink-0 text-xs font-semibold text-brand-600 hover:text-brand-700 self-center px-2 py-1"
-              >
-                Change number
-              </button>
-            )}
+            {errors.phone ? (
+              <p id="register-phone-error" role="alert" className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
+                <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                {errors.phone}
+              </p>
+            ) : !isMobileVerified ? (
+              <p id="register-phone-hint" className="mt-1.5 text-[0.8125rem] text-muted">
+                Click Send OTP to verify your mobile number.
+              </p>
+            ) : null}
           </div>
-          {errors.phone ? (
-            <p id="register-phone-error" role="alert" className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
-              <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-              {errors.phone}
-            </p>
-          ) : !isMobileVerified ? (
-            <p id="register-phone-hint" className="mt-1.5 text-[0.8125rem] text-muted">
-              Format for {values.country}: {mobileExample(values.country)}. Click Send OTP to verify your number.
-            </p>
-          ) : null}
-        </div>
+        ) : (
+          <div className="sm:col-span-2">
+            <Input
+              id="register-phone"
+              label="Mobile number"
+              required
+              type="tel"
+              autoComplete="tel"
+              value={values.phone}
+              onChange={set('phone')}
+              error={errors.phone}
+              placeholder=""
+            />
+          </div>
+        )}
 
         {/* Mobile OTP Verification Popup Modal */}
+        {ENABLE_MOBILE_OTP && (
         <Modal
           open={otpModalOpen}
           onClose={() => {
@@ -502,6 +543,7 @@ export default function RegisterForm() {
             </div>
           </div>
         </Modal>
+        )}
 
         <Input id="register-password" label="Password" required type="password" autoComplete="new-password" value={values.password} onChange={set('password')} error={errors.password} hint="At least 8 characters, with a letter and a number." />
         <Input id="register-confirmPassword" label="Confirm password" required type="password" autoComplete="new-password" value={values.confirmPassword} onChange={set('confirmPassword')} error={errors.confirmPassword} />

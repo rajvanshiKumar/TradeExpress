@@ -92,7 +92,7 @@ export function AuthProvider({ children }) {
     try {
       const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
       if (baseUrl) {
-        const response = await fetch(`${baseUrl}/auth/login`, {
+        const response = await fetch(`${baseUrl}/auth/admin-login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ email: clean, password: cleanPassword || password }),
@@ -100,6 +100,7 @@ export function AuthProvider({ children }) {
         const data = await response.json();
         if (response.ok && data.success) {
           if (data.data?.token) {
+            localStorage.setItem('tradeexpress_auth_token', data.data.token);
             localStorage.setItem('tradesphere_auth_token', data.data.token);
           }
           if (data.data?.user?.role === 'SUPER_ADMIN') {
@@ -139,119 +140,153 @@ export function AuthProvider({ children }) {
   }, [setSession]);
 
   /** Buyer or supplier sign-in. Resolves { ok, user } or { ok: false, error }. */
-  const login = useCallback(async (email, password, expectedRole = null) => {
+  const login = useCallback(async (email, password, expectedRole = null, options = {}) => {
     const locked = lockMessage();
     if (locked) return { ok: false, error: locked };
     if (!isCryptoAvailable()) return { ok: false, error: 'Sign-in needs a secure connection (https or localhost).' };
     const clean = normalizeEmail(email).toLowerCase();
 
-    // Auto-detect admin sign in even from the main /login page
-    const adminList = Array.isArray(ADMIN_EMAILS) ? ADMIN_EMAILS : [ADMIN_EMAIL];
-    const isAdminEmail = adminList.some((addr) => addr.toLowerCase() === clean) || clean === ADMIN_EMAIL.toLowerCase();
-    if (isAdminEmail) {
-      return loginAdmin(email, password);
-    }
 
-    // Try backend sign-in
+    // Try backend sign-in with email, password, role, and email OTP
     let backendUser = null;
-    try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
-      if (baseUrl) {
+    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    if (baseUrl) {
+      try {
         const response = await fetch(`${baseUrl}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ email: clean, password }),
+          body: JSON.stringify({
+            email: clean,
+            password,
+            role: expectedRole ? expectedRole.toUpperCase() : undefined,
+            otp: options?.otp,
+          }),
         });
         const data = await response.json();
-        if (response.ok && data.success && data.data?.token) {
+        if (!response.ok || !data.success) {
+          recordFailure();
+          return { ok: false, error: data.message || GENERIC_FAILURE };
+        }
+        if (data.data?.token) {
+          localStorage.setItem('tradeexpress_auth_token', data.data.token);
           localStorage.setItem('tradesphere_auth_token', data.data.token);
           backendUser = data.data.user;
         }
+      } catch (err) {
+        console.warn('Backend login connection error:', err);
+        return { ok: false, error: 'Unable to connect to the authentication server. Please try again.' };
       }
-    } catch {
-      // Fallback smoothly
     }
 
-    const account = accounts.find((item) => item.email.toLowerCase() === clean && PUBLIC_ROLES.includes(item.role));
-    let activeAccount = account;
+    if (!backendUser) {
+      recordFailure();
+      return { ok: false, error: GENERIC_FAILURE };
+    }
 
-    if (!activeAccount && backendUser) {
+    let activeAccount = accounts.find((item) => item.email.toLowerCase() === clean && PUBLIC_ROLES.includes(item.role));
+    if (!activeAccount) {
       activeAccount = {
         id: backendUser.id,
-        status: 'Active',
+        status: backendUser.status === 'SUSPENDED' ? 'Suspended' : 'Active',
         name: backendUser.name,
         email: backendUser.email,
-        role: (backendUser.role || 'buyer').toLowerCase(),
-        company: backendUser.companyName || '',
+        role: (backendUser.role || expectedRole || 'buyer').toLowerCase(),
+        company: backendUser.company || backendUser.companyName || '',
         companyId: backendUser.companyId || null,
-        country: 'India',
-        city: backendUser.warehouseCity || '',
+        country: backendUser.country || 'India',
+        city: backendUser.city || '',
         phone: backendUser.phone || '',
         joinedAt: backendUser.createdAt || new Date().toISOString(),
         notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
         passwordHash: await hashPassword(password),
       };
-      setAccounts((prev) => [activeAccount, ...prev]);
+      setAccounts((prev) => [activeAccount, ...prev.filter((a) => a.email.toLowerCase() !== clean)]);
     }
 
-    if (!backendUser) {
-      const valid = await verifyPassword(password, account?.passwordHash ?? 'pbkdf2$210000$AAAAAAAAAAAAAAAAAAAAAA==$AAAA');
-      if (!account || !account.passwordHash || !valid) {
-        recordFailure();
-        return { ok: false, error: GENERIC_FAILURE };
-      }
-
-      // Auto-sync existing local account to MySQL backend users table if missing
-      try {
-        const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
-        if (baseUrl) {
-          const syncRes = await fetch(`${baseUrl}/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({
-              name: account.name,
-              email: account.email,
-              password,
-              role: (account.role || 'buyer').toUpperCase(),
-              company: account.company || '',
-              companyName: account.company || '',
-              phone: account.phone || '',
-              city: account.city || '',
-              country: account.country || 'India',
-            }),
-          });
-          const syncData = await syncRes.json();
-          if (syncRes.ok && syncData.success && syncData.data?.user) {
-            backendUser = syncData.data.user;
-            if (syncData.data.token) {
-              localStorage.setItem('tradesphere_auth_token', syncData.data.token);
-            }
-            if (activeAccount) {
-              activeAccount.id = backendUser.id;
-              setAccounts((prev) => prev.map((a) => (a.email.toLowerCase() === clean ? { ...a, id: backendUser.id } : a)));
-            }
-          }
-        }
-      } catch {
-        // Continue with local session if backend unreachable
-      }
+    if (activeAccount.status === 'Suspended') {
+      return { ok: false, error: 'This account has been suspended. Please contact TradeExpress.' };
     }
-
-    if (!activeAccount) {
-      recordFailure();
-      return { ok: false, error: GENERIC_FAILURE };
-    }
-
-    if (activeAccount.status === 'Suspended') return { ok: false, error: 'This account has been suspended. Please contact TradeSphere.' };
     if (expectedRole && activeAccount.role !== expectedRole) {
       return { ok: false, error: `This account is registered as a ${activeAccount.role === 'supplier' ? 'Supplier' : 'Buyer'}. Choose “${activeAccount.role === 'supplier' ? 'Supplier' : 'Buyer'}” above to sign in.` };
     }
+
     setAttempts({ count: 0, lockedUntil: 0 });
     startTransition(() => {
       setSession(newSession(activeAccount.id, activeAccount.role));
     });
     return { ok: true, user: activeAccount };
-  }, [accounts, attempts, setSession, loginAdmin, setAccounts]);
+  }, [accounts, attempts, setSession, setAccounts]);
+
+  /** Buyer or supplier sign-in via Mobile number and OTP */
+  const loginMobile = useCallback(async ({ phone, country = 'India', otp, role = null }) => {
+    const locked = lockMessage();
+    if (locked) return { ok: false, error: locked };
+    const cleanOtp = String(otp || '').trim();
+    if (!cleanOtp) return { ok: false, error: 'Please enter the verification OTP.' };
+
+    let backendUser = null;
+    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    if (baseUrl) {
+      try {
+        const response = await fetch(`${baseUrl}/auth/login-mobile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            phone,
+            country,
+            otp: cleanOtp,
+            role: role ? role.toUpperCase() : undefined,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          recordFailure();
+          return { ok: false, error: data.message || 'Mobile OTP verification failed.' };
+        }
+        if (data.data?.token) {
+          localStorage.setItem('tradeexpress_auth_token', data.data.token);
+          localStorage.setItem('tradesphere_auth_token', data.data.token);
+          backendUser = data.data.user;
+        }
+      } catch (err) {
+        return { ok: false, error: 'Unable to connect to the authentication server. Please try again.' };
+      }
+    }
+
+    if (!backendUser) {
+      recordFailure();
+      return { ok: false, error: 'Mobile sign-in failed. Please verify your OTP.' };
+    }
+
+    let activeAccount = accounts.find((item) => item.id === backendUser.id || item.email?.toLowerCase() === backendUser.email?.toLowerCase());
+    if (!activeAccount) {
+      activeAccount = {
+        id: backendUser.id,
+        status: backendUser.status === 'SUSPENDED' ? 'Suspended' : 'Active',
+        name: backendUser.name,
+        email: backendUser.email,
+        role: (backendUser.role || role || 'buyer').toLowerCase(),
+        company: backendUser.company || backendUser.companyName || '',
+        companyId: backendUser.companyId || null,
+        country: backendUser.country || country || 'India',
+        city: backendUser.city || '',
+        phone: backendUser.phone || phone,
+        joinedAt: backendUser.createdAt || new Date().toISOString(),
+        notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
+      };
+      setAccounts((prev) => [activeAccount, ...prev.filter((a) => a.id !== activeAccount.id)]);
+    }
+
+    if (activeAccount.status === 'Suspended') {
+      return { ok: false, error: 'This account has been suspended. Please contact TradeExpress.' };
+    }
+
+    setAttempts({ count: 0, lockedUntil: 0 });
+    startTransition(() => {
+      setSession(newSession(activeAccount.id, activeAccount.role));
+    });
+    return { ok: true, user: activeAccount };
+  }, [accounts, setAccounts, setSession, lockMessage, recordFailure]);
 
   /** Registers a Buyer or Supplier. Only a password hash is saved. Admin can never be chosen here. */
   const register = useCallback(async ({ name, email, password, company, country, city, phone, role, verificationToken }) => {
@@ -287,6 +322,7 @@ export function AuthProvider({ children }) {
         if (data.data) {
           backendUser = data.data.user;
           if (data.data.token) {
+            localStorage.setItem('tradeexpress_auth_token', data.data.token);
             localStorage.setItem('tradesphere_auth_token', data.data.token);
           }
         }
@@ -317,6 +353,7 @@ export function AuthProvider({ children }) {
       setSession(EMPTY_SESSION);
     });
     removeStorage(STORAGE_KEYS.buyNow);
+    localStorage.removeItem('tradeexpress_auth_token');
     localStorage.removeItem('tradesphere_auth_token');
     setAttempts({ count: 0, lockedUntil: 0 });
   }, [setSession]);
@@ -362,9 +399,9 @@ export function AuthProvider({ children }) {
   }, [user, setAddressBook]);
 
   const value = useMemo(() => ({
-    user, accounts: publicAccounts, isAuthenticated: Boolean(user), login, loginAdmin, register, logout, updateProfile, updateAccount,
+    user, accounts: publicAccounts, isAuthenticated: Boolean(user), login, loginMobile, loginAdmin, register, logout, updateProfile, updateAccount,
     preferences, setPreferences, addresses, saveAddress, deleteAddress, isAdminConfigured,
-  }), [user, publicAccounts, login, loginAdmin, register, logout, updateProfile, updateAccount, preferences, setPreferences, addresses, saveAddress, deleteAddress]);
+  }), [user, publicAccounts, login, loginMobile, loginAdmin, register, logout, updateProfile, updateAccount, preferences, setPreferences, addresses, saveAddress, deleteAddress]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

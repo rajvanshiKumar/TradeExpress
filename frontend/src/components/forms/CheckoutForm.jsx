@@ -92,7 +92,7 @@ export function PaymentOptions({ value, onChange }) {
         <OptionCard key={method.id} name="payment-method" value={method.id} checked={value === method.id} onChange={onChange} icon={PAYMENT_ICONS[method.id] ?? CreditCard} title={method.label} text={PAYMENT_TEXT[method.id]} />
       ))}
       <p className="rounded-lg bg-navy-50 px-4 py-3 text-[0.8125rem] text-navy-800">
-        Online payment processing is not available on TradeSphere yet. You will never be asked for card numbers, UPI PINs or bank logins here. If an online payment cannot be completed, you can place the order with payment pending and arrange payment with the supplier, or choose Cash on Delivery.
+        Online payment processing is not available on TradeExpress yet. You will never be asked for card numbers, UPI PINs or bank logins here. If an online payment cannot be completed, you can place the order with payment pending and arrange payment with the supplier, or choose Cash on Delivery.
       </p>
     </fieldset>
   );

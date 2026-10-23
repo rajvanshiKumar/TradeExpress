@@ -98,7 +98,7 @@ export default function InquiryForm({ product: fixedProduct = null, company: fix
         <CircleCheck className="mx-auto size-10 text-success" aria-hidden="true" />
         <h3 className="mt-3 text-lg font-bold">Quote request saved</h3>
         <p className="mt-1 text-sm text-ink">Reference <span className="font-semibold">{submitted.id}</span> for {submitted.quantity} × {submitted.productName}.</p>
-        <p className="mx-auto mt-2 max-w-md text-[0.8125rem] text-muted">The supplier can reply from their dashboard. Requests are stored in this browser in this version of TradeSphere.</p>
+        <p className="mx-auto mt-2 max-w-md text-[0.8125rem] text-muted">The supplier can reply from their dashboard. Requests are stored in this browser in this version of TradeExpress.</p>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           <Button to={user?.role === 'buyer' ? '/buyer/quotes' : '/rfq?tab=history'} variant="navy" size="sm">View my requests</Button>
           <Button variant="outline" size="sm" onClick={() => { setSubmitted(null); setValues(blank); }}>Send another request</Button>
@@ -132,7 +132,7 @@ export default function InquiryForm({ product: fixedProduct = null, company: fix
       <Textarea id={`${idPrefix}message`} label="Message to the supplier" rows={3} value={values.message} onChange={set('message')} error={errors.message} hint="Optional" wrapperClassName="sm:col-span-2" />
 
       <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-w-md text-xs text-muted">Your request goes to the supplier's inquiry inbox on TradeSphere.</p>
+        <p className="max-w-md text-xs text-muted">Your request goes to the supplier's inquiry inbox on TradeExpress.</p>
         <Button type="submit" icon={Send} loading={submitting} className="shrink-0">{submitting ? 'Saving…' : 'Submit request'}</Button>
       </div>
     </form>

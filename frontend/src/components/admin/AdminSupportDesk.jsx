@@ -290,7 +290,7 @@ export default function AdminSupportDesk() {
                       }`}
                     >
                       <p className={`font-bold mb-1 text-[11px] ${isAdmin ? 'text-brand-300' : 'text-navy-900'}`}>
-                        {isAdmin ? 'TradeSphere Support (Admin)' : ticketDetails.user?.name || 'User'}
+                        {isAdmin ? 'TradeExpress Support (Admin)' : ticketDetails.user?.name || 'User'}
                       </p>
                       <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
                     </div>

@@ -75,7 +75,7 @@ export default function Messages() {
 
   return (
     <>
-      <PageHeader breadcrumbs={[{ label: 'Messages' }]} title="Messages" description="Conversations between buyers and suppliers. In this version of TradeSphere, messages are stored in your browser." />
+      <PageHeader breadcrumbs={[{ label: 'Messages' }]} title="Messages" description="Conversations between buyers and suppliers. In this version of TradeExpress, messages are stored in your browser." />
       <div className="ts-container py-6">
         {error ? <div className="ts-card"><ErrorState text={error} onRetry={reload} /></div> : (
           <div className="ts-card grid grid-cols-1 h-[calc(100dvh-13rem)] min-h-[32rem] overflow-hidden md:grid-cols-[20rem_minmax(0,1fr)]">

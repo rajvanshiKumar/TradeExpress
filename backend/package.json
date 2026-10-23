@@ -1,7 +1,7 @@
 {
   "name": "tradesphere-backend",
   "version": "1.0.0",
-  "description": "TradeSphere REST API Backend (Node.js + Express + Prisma + MySQL)",
+  "description": "TradeExpress REST API Backend (Node.js + Express + Prisma + MySQL)",
   "main": "src/server.js",
   "type": "module",
   "scripts": {

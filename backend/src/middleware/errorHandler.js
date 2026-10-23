@@ -6,7 +6,7 @@ export function notFoundHandler(req, res, next) {
 }
 
 export function errorHandler(err, req, res, next) {
-  console.error('[TradeSphere API Error]', {
+  console.error('[TradeExpress API Error]', {
     message: err.message,
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
     path: req.originalUrl,

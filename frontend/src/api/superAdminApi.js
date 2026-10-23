@@ -1,7 +1,7 @@
 const API_BASE = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:5000/api').replace(/\/+$/, '');
 
 function getHeaders() {
-  const token = localStorage.getItem('tradesphere_auth_token') || '';
+  const token = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token') || '';
   return {
     'Content-Type': 'application/json',
     Accept: 'application/json',

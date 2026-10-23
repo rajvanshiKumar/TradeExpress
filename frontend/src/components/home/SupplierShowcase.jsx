@@ -29,7 +29,7 @@ export default function SupplierShowcase() {
       eyebrow="Supplier discovery"
       title="Meet suppliers,"
       accent="not just listings."
-      description="Company profiles with location, business type, response time and verification status. Badges reflect admin document reviews on TradeSphere only."
+      description="Company profiles with location, business type, response time and verification status. Badges reflect admin document reviews on TradeExpress only."
       linkTo="/suppliers"
       linkLabel="Supplier directory"
     >

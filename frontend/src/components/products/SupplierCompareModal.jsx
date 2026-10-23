@@ -64,7 +64,7 @@ export default function SupplierCompareModal({
             return;
           }
         } catch (err) {
-          console.warn('[TradeSphere] Error fetching backend supplier comparison:', err.message);
+          console.warn('[TradeExpress] Error fetching backend supplier comparison:', err.message);
         }
       }
       if (isMounted) {
@@ -175,11 +175,11 @@ export default function SupplierCompareModal({
             <div>
               <div className="flex items-center gap-2">
                 <h2 id="compare-modal-title" className="font-display text-lg font-black tracking-tight text-white sm:text-xl">
-                  TradeSphere Side-by-Side Supplier Comparison
+                  TradeExpress Side-by-Side Supplier Comparison
                 </h2>
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[0.6875rem] font-bold text-emerald-300 ring-1 ring-emerald-400/30">
                   <ShieldCheck className="size-3" />
-                  Verified TradeSphere Suppliers Only
+                  Verified TradeExpress Suppliers Only
                 </span>
               </div>
               <p className="mt-0.5 text-xs text-navy-200">
@@ -427,7 +427,7 @@ export default function SupplierCompareModal({
                       <td key={sup.supplierId} className="py-3.5 px-3">
                         <div className="flex items-start gap-1 text-[11px] font-semibold text-emerald-800">
                           <ShieldCheck className="size-3.5 shrink-0 text-emerald-600 mt-0.5" />
-                          <span>{sup.paymentTerms || 'TradeSphere Escrow Protection (100% Secure)'}</span>
+                          <span>{sup.paymentTerms || 'TradeExpress Escrow Protection (100% Secure)'}</span>
                         </div>
                       </td>
                     ))}
@@ -442,7 +442,7 @@ export default function SupplierCompareModal({
                     {suppliers.map((sup) => (
                       <td key={sup.supplierId} className="py-3.5 px-3">
                         <div className="flex flex-wrap gap-1">
-                          {(sup.qualityCertifications || ['ISO 9001:2015', 'TradeSphere Verified Factory']).map((cert, i) => (
+                          {(sup.qualityCertifications || ['ISO 9001:2015', 'TradeExpress Verified Factory']).map((cert, i) => (
                             <span
                               key={i}
                               className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
@@ -519,7 +519,7 @@ export default function SupplierCompareModal({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-navy-100 bg-navy-50/80 px-6 py-4 text-xs">
           <div className="flex items-center gap-2 text-muted">
             <ShieldCheck className="size-4 text-emerald-600" />
-            <span>Only genuine, active TradeSphere-registered accounts with matching product listings are compared.</span>
+            <span>Only genuine, active TradeExpress-registered accounts with matching product listings are compared.</span>
           </div>
 
           <div className="flex items-center gap-2.5">

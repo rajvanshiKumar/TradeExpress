@@ -137,7 +137,7 @@ const orderService = {
           return formatted;
         }
       } catch (err) {
-        console.warn('[TradeSphere OrderService] Backend order creation failed, falling back to local:', err.message);
+        console.warn('[TradeExpress OrderService] Backend order creation failed, falling back to local:', err.message);
         throw err; // Let caller know real validation error from backend (e.g. stock, MOQ)
       }
     }

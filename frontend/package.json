@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "TradeSphere \u2014 Your World of Business. International B2B marketplace, frontend-only (React + Vite).",
+  "description": "TradeExpress \u2014 Your World of Business. International B2B marketplace, frontend-only (React + Vite).",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

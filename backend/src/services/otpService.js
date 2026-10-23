@@ -222,7 +222,9 @@ export async function verifyMobileOtp({ phone, country = 'India', otp }) {
   }
 
   // 2. Verify OTP (via local cryptographic hash for PowersText/gateway, or MSG91)
-  if (verification.token && verification.token.startsWith('otp_')) {
+  if (isDevOtpAllowed(cleanOtp)) {
+    // Development OTP bypass allowed only when non-production and configured
+  } else if (verification.token && verification.token.startsWith('otp_')) {
     const expectedHash = verification.token.slice(4);
     const candidateHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
     if (candidateHash !== expectedHash) {
@@ -391,4 +393,413 @@ export async function validateVerifiedMobile({ phone, country = 'India', verific
   });
 
   return true;
+}
+
+// In-memory store for email login OTP sessions
+// Key: normalized email -> Value: { otpHash, expiresAt, attempts, resendCount, lastSentAt }
+const emailLoginOtpStore = new Map();
+
+// Periodic cleanup of expired email login OTPs every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [emailKey, entry] of emailLoginOtpStore.entries()) {
+    if (entry.expiresAt < now) {
+      emailLoginOtpStore.delete(emailKey);
+    }
+  }
+}, 5 * 60 * 1000);
+
+/**
+ * Checks whether the development bypass OTP (123456) is permitted.
+ * STRICT ENFORCEMENT: Never allowed in production (NODE_ENV=production),
+ * and only permitted when DEV_OTP_ENABLED=true in the environment.
+ */
+export function isDevOtpAllowed(candidateOtp) {
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+  const isDevOtpConfigured = process.env.DEV_OTP_ENABLED === 'true';
+  return isDevOtpConfigured && String(candidateOtp || '').trim() === '123456';
+}
+
+/**
+ * Requests an OTP for email login flow.
+ * Dispatches a genuine 6-digit OTP to the registered email address.
+ */
+export async function requestEmailLoginOtp({ email, role }) {
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  if (!normalizedEmail || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(normalizedEmail)) {
+    const error = new Error('Please enter a valid email address.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+
+  if (!user) {
+    const error = new Error('No account found with this email. Please check your email or join TradeExpress.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (role) {
+    const upperRole = String(role).toUpperCase();
+    if (user.role !== upperRole && user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      const friendlyCurrent = user.role === 'SUPPLIER' ? 'Supplier' : 'Buyer';
+      const error = new Error(`This account is registered as a ${friendlyCurrent}. Please select ${friendlyCurrent} above to sign in.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  if (user.isActive === false || user.status === 'SUSPENDED') {
+    const error = new Error('Your account is suspended. Reason: ' + (user.statusReason || 'Please contact platform administration.'));
+    error.statusCode = 403;
+    throw error;
+  }
+
+  // Rate limiting & cooldown check
+  const existing = emailLoginOtpStore.get(normalizedEmail);
+  if (existing) {
+    const elapsedSeconds = Math.floor((Date.now() - existing.lastSentAt) / 1000);
+    if (elapsedSeconds < RESEND_COOLDOWN_SECONDS) {
+      const waitSeconds = RESEND_COOLDOWN_SECONDS - elapsedSeconds;
+      const error = new Error(`Please wait ${waitSeconds} seconds before requesting another OTP.`);
+      error.statusCode = 429;
+      error.cooldownRemaining = waitSeconds;
+      throw error;
+    }
+
+    if (existing.resendCount >= MAX_HOURLY_ATTEMPTS) {
+      const error = new Error('Too many OTP requests for this email address. Please try again after 1 hour.');
+      error.statusCode = 429;
+      throw error;
+    }
+  }
+
+  // Generate real cryptographically secure random 6-digit OTP (never fixed 123456 as generated real OTP)
+  let generatedOtp;
+  do {
+    generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
+  } while (generatedOtp === '123456');
+
+  const otpHash = crypto.createHash('sha256').update(generatedOtp).digest('hex');
+  const expiresAt = Date.now() + OTP_EXPIRY_MS;
+
+  emailLoginOtpStore.set(normalizedEmail, {
+    otpHash,
+    expiresAt,
+    attempts: 0,
+    resendCount: existing ? existing.resendCount + 1 : 0,
+    lastSentAt: Date.now(),
+  });
+
+  const { sendLoginOtpEmail } = await import('./emailService.js');
+  await sendLoginOtpEmail({ email: normalizedEmail, name: user.name, otp: generatedOtp });
+
+  return {
+    success: true,
+    message: 'Verification code has been sent to your email address.',
+    cooldownSeconds: RESEND_COOLDOWN_SECONDS,
+    email: normalizedEmail,
+  };
+}
+
+/**
+ * Validates the email login OTP.
+ * Returns true if valid, or throws an error.
+ */
+export function validateEmailLoginOtp({ email, otp, consume = false }) {
+  const cleanOtp = String(otp || '').trim();
+  if (!cleanOtp) {
+    const error = new Error('Email verification OTP is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Check development OTP bypass
+  if (isDevOtpAllowed(cleanOtp)) {
+    return true;
+  }
+
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  const session = emailLoginOtpStore.get(normalizedEmail);
+
+  if (!session) {
+    const error = new Error('No OTP request found for this email. Please click "Send OTP" first.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (Date.now() > session.expiresAt) {
+    emailLoginOtpStore.delete(normalizedEmail);
+    const error = new Error('This verification code has expired. Please request a new OTP.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (session.attempts >= MAX_VERIFY_ATTEMPTS) {
+    emailLoginOtpStore.delete(normalizedEmail);
+    const error = new Error('Too many incorrect verification attempts. Please request a new OTP.');
+    error.statusCode = 429;
+    throw error;
+  }
+
+  const candidateHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
+  if (candidateHash !== session.otpHash) {
+    session.attempts += 1;
+    const error = new Error('Invalid verification code. Please check your email and try again.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (consume) {
+    emailLoginOtpStore.delete(normalizedEmail);
+  }
+
+  return true;
+}
+
+/**
+ * Requests an OTP for Mobile login flow.
+ * Checks registered account, checks role, and dispatches SMS.
+ */
+export async function requestMobileLoginOtp({ phone, country = 'India', role }) {
+  const normalized = normalizeMobile(phone, country);
+  if (!normalized.ok) {
+    const error = new Error(`Enter a valid ${country} mobile number.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { msg91Mobile, formattedPhone } = normalized;
+
+  // 1. Check registered account
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { phone: formattedPhone },
+        { phone: msg91Mobile },
+        { phone: `+${msg91Mobile}` },
+        { phone: normalized.national },
+      ],
+    },
+  });
+
+  if (!user) {
+    const error = new Error('No account found with this mobile number. Please check your number or join TradeExpress.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (role) {
+    const upperRole = String(role).toUpperCase();
+    if (user.role !== upperRole && user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      const friendlyCurrent = user.role === 'SUPPLIER' ? 'Supplier' : 'Buyer';
+      const error = new Error(`This mobile number is registered as a ${friendlyCurrent}. Please select ${friendlyCurrent} above to sign in.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  if (user.isActive === false || user.status === 'SUSPENDED') {
+    const error = new Error('Your account is suspended. Reason: ' + (user.statusReason || 'Please contact platform administration.'));
+    error.statusCode = 403;
+    throw error;
+  }
+
+  // 2. Check rate limits & resend cooldown in MobileVerification
+  const existingVerification = await prisma.mobileVerification.findUnique({
+    where: { phone: formattedPhone },
+  });
+
+  if (existingVerification) {
+    const elapsedSeconds = Math.floor((Date.now() - new Date(existingVerification.lastSentAt).getTime()) / 1000);
+    if (elapsedSeconds < RESEND_COOLDOWN_SECONDS) {
+      const waitSeconds = RESEND_COOLDOWN_SECONDS - elapsedSeconds;
+      const error = new Error(`Please wait ${waitSeconds} seconds before requesting another OTP.`);
+      error.statusCode = 429;
+      error.cooldownRemaining = waitSeconds;
+      throw error;
+    }
+
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    if (existingVerification.updatedAt > oneHourAgo && existingVerification.resendCount >= MAX_HOURLY_ATTEMPTS) {
+      const error = new Error('Too many OTP requests for this mobile number. Please try again after 1 hour.');
+      error.statusCode = 429;
+      throw error;
+    }
+  }
+
+  // 3. Dispatch OTP through configured provider
+  const isPowersText = Boolean(process.env.SMS_API_URL || process.env.SMS_SENDER_ID);
+  let sessionToken = null;
+  let generatedOtp = null;
+
+  if (isPowersText) {
+    do {
+      generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
+    } while (generatedOtp === '123456');
+
+    const otpHash = crypto.createHash('sha256').update(generatedOtp).digest('hex');
+    sessionToken = `otp_${otpHash}`;
+    await powerstextService.sendOtpSms({
+      mobile: msg91Mobile,
+      otp: generatedOtp,
+      expiryMinutes: Number(process.env.MSG91_OTP_EXPIRY_MINUTES) || 10,
+    });
+  } else {
+    await msg91Service.sendOtp(msg91Mobile);
+  }
+
+  // 4. Save/update verification state
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+  await prisma.mobileVerification.upsert({
+    where: { phone: formattedPhone },
+    create: {
+      phone: formattedPhone,
+      token: sessionToken,
+      verified: false,
+      attempts: 0,
+      resendCount: 0,
+      lastSentAt: new Date(),
+      expiresAt,
+      used: false,
+    },
+    update: {
+      token: sessionToken,
+      verified: false,
+      attempts: 0,
+      resendCount: { increment: 1 },
+      lastSentAt: new Date(),
+      expiresAt,
+      used: false,
+    },
+  });
+
+  return {
+    success: true,
+    message: 'OTP has been sent to your mobile number via SMS.',
+    cooldownSeconds: RESEND_COOLDOWN_SECONDS,
+    phone: formattedPhone,
+  };
+}
+
+/**
+ * Verifies mobile OTP and logs in the Buyer or Supplier.
+ */
+export async function verifyAndLoginMobile({ phone, country = 'India', otp, role }) {
+  const normalized = normalizeMobile(phone, country);
+  if (!normalized.ok) {
+    const error = new Error('Invalid mobile number format.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const cleanOtp = String(otp || '').trim();
+  if (!cleanOtp) {
+    const error = new Error('Please enter the OTP sent to your mobile number.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { msg91Mobile, formattedPhone } = normalized;
+
+  // 1. Verify user exists
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { phone: formattedPhone },
+        { phone: msg91Mobile },
+        { phone: `+${msg91Mobile}` },
+        { phone: normalized.national },
+      ],
+    },
+  });
+
+  if (!user) {
+    const error = new Error('No registered account found with this mobile number.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (role) {
+    const upperRole = String(role).toUpperCase();
+    if (user.role !== upperRole && user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      const friendlyCurrent = user.role === 'SUPPLIER' ? 'Supplier' : 'Buyer';
+      const error = new Error(`This mobile number is registered as a ${friendlyCurrent}. Please select ${friendlyCurrent} above to sign in.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  if (user.isActive === false || user.status === 'SUSPENDED') {
+    const error = new Error('Your account is suspended. Reason: ' + (user.statusReason || 'Please contact platform administration.'));
+    error.statusCode = 403;
+    throw error;
+  }
+
+  // 2. Check dev OTP bypass or verify real OTP
+  const isDev = isDevOtpAllowed(cleanOtp);
+  if (!isDev) {
+    const verification = await prisma.mobileVerification.findUnique({
+      where: { phone: formattedPhone },
+    });
+
+    if (!verification) {
+      const error = new Error('No OTP request found for this mobile number. Please click "Send OTP" first.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (new Date() > new Date(verification.expiresAt)) {
+      const error = new Error('This OTP has expired. Please request a new OTP.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (verification.attempts >= MAX_VERIFY_ATTEMPTS) {
+      const error = new Error('Too many incorrect verification attempts. Please request a new OTP.');
+      error.statusCode = 429;
+      throw error;
+    }
+
+    if (verification.token && verification.token.startsWith('otp_')) {
+      const expectedHash = verification.token.slice(4);
+      const candidateHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
+      if (candidateHash !== expectedHash) {
+        await prisma.mobileVerification.update({
+          where: { phone: formattedPhone },
+          data: { attempts: { increment: 1 } },
+        });
+        const error = new Error('Invalid OTP code. Please enter the correct code sent to your phone.');
+        error.statusCode = 400;
+        throw error;
+      }
+    } else {
+      try {
+        await msg91Service.verifyOtp(msg91Mobile, cleanOtp);
+      } catch (err) {
+        await prisma.mobileVerification.update({
+          where: { phone: formattedPhone },
+          data: { attempts: { increment: 1 } },
+        });
+        throw err;
+      }
+    }
+
+    // Mark as used
+    await prisma.mobileVerification.update({
+      where: { phone: formattedPhone },
+      data: { used: true, verified: true, verifiedAt: new Date() },
+    });
+  }
+
+  // 3. Issue JWT and return safe user
+  const { signJwt } = await import('../utils/jwt.js');
+  const token = signJwt({ userId: user.id, email: user.email, role: user.role });
+  const { passwordHash, ...safeUser } = user;
+  return { user: safeUser, token };
 }

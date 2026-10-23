@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { signJwt } from '../utils/jwt.js';
-import { normalizeMobile, validateVerifiedMobile } from './otpService.js';
+import { normalizeMobile, validateVerifiedMobile, validateEmailLoginOtp } from './otpService.js';
 
 export async function registerUser({ email, password, name, role = 'BUYER', company, companyName, phone, city, country, verificationToken }) {
   const upperRole = (role || 'BUYER').toUpperCase();
@@ -31,8 +31,16 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
   const normalized = normalizeMobile(phone, country || 'India');
   const storedPhone = normalized.ok ? normalized.formattedPhone : phone;
 
-  // Verify that this mobile number was verified with OTP
-  await validateVerifiedMobile({ phone: storedPhone, country: country || 'India', verificationToken });
+  // Verify that this mobile number was verified with OTP (temporarily disabled per user request, toggle via REQUIRE_MOBILE_OTP)
+  const requireMobileOtp = process.env.REQUIRE_MOBILE_OTP === 'true';
+  if (requireMobileOtp) {
+    if (!verificationToken) {
+      const error = new Error('Mobile verification is required. Please verify via OTP.');
+      error.statusCode = 400;
+      throw error;
+    }
+    await validateVerifiedMobile({ phone: storedPhone, country: country || 'India', verificationToken });
+  }
 
   // Double check mobile uniqueness
   const existingPhone = await prisma.user.findFirst({
@@ -81,14 +89,14 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
   return { user, token };
 }
 
-export async function loginUser({ email, password }) {
+export async function loginUser({ email, password, role, otp, isAdminLogin = false }) {
   const normalizedEmail = (email || '').toLowerCase().trim();
   let user = await prisma.user.findUnique({
     where: { email: normalizedEmail },
   });
 
-  // Support common admin aliases if standard email not found
-  if (!user && (normalizedEmail === 'admin' || normalizedEmail === 'admin@tradesphere.com' || normalizedEmail === 'admin@tradesphere.example')) {
+  // Support common admin aliases if standard email not found and it is an admin login attempt
+  if (!user && (normalizedEmail === 'admin' || normalizedEmail === 'admin@tradeexpress.com' || normalizedEmail === 'admin@tradesphere.com' || normalizedEmail === 'admin@tradesphere.example')) {
     user = await prisma.user.findUnique({
       where: { email: 'krajvanshi244@gmail.com' },
     });
@@ -98,6 +106,26 @@ export async function loginUser({ email, password }) {
     const error = new Error('Invalid email or password.');
     error.statusCode = 401;
     throw error;
+  }
+
+  // 1. Role enforcement & public vs admin portal separation
+  if (isAdminLogin) {
+    // Admin login requested (/super-admin/login): must have admin privileges
+    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+      const error = new Error('Access denied. Administrator privileges are required.');
+      error.statusCode = 403;
+      throw error;
+    }
+  } else {
+    if (role) {
+      const upperRole = String(role).toUpperCase();
+      if (user.role !== upperRole && user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+        const friendlyCurrent = user.role === 'SUPPLIER' ? 'Supplier' : 'Buyer';
+        const error = new Error(`This account is registered as a ${friendlyCurrent}. Please select ${friendlyCurrent} above to sign in.`);
+        error.statusCode = 400;
+        throw error;
+      }
+    }
   }
 
   if (user.isActive === false || user.status === 'SUSPENDED') {
@@ -140,6 +168,17 @@ export async function loginUser({ email, password }) {
     const error = new Error('Invalid email or password.');
     error.statusCode = 401;
     throw error;
+  }
+
+  // 2. For public Buyer/Supplier email login, require and validate Email OTP
+  if (!isAdminLogin && ['BUYER', 'SUPPLIER'].includes(user.role)) {
+    if (!otp) {
+      const error = new Error('Email verification code is required. Please click "Send OTP" and enter the 6-digit code.');
+      error.statusCode = 400;
+      throw error;
+    }
+    // Validate and consume OTP upon successful login
+    validateEmailLoginOtp({ email: normalizedEmail, otp, consume: true });
   }
 
   const token = signJwt({ userId: user.id, email: user.email, role: user.role });

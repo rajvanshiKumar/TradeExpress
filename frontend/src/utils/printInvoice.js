@@ -1,5 +1,5 @@
 /**
- * Formats and triggers the browser print dialog for an official TradeSphere B2B GST Tax Invoice & Purchase Order.
+ * Formats and triggers the browser print dialog for an official TradeExpress B2B GST Tax Invoice & Purchase Order.
  */
 export function printInvoice(order) {
   if (!order) return;
@@ -44,9 +44,9 @@ export function printInvoice(order) {
       <body>
         <div class="header">
           <div>
-            <div class="logo">TradeSphere</div>
+            <img src="/logos/tradeexpress-logo.png" alt="TradeExpress" style="height: 36px; width: auto; max-width: 220px; object-fit: contain; margin-bottom: 4px; display: block;" onerror="this.style.display='none'" />
             <div class="subtitle">B2B Wholesale Marketplace & Fulfillment</div>
-            <p style="margin: 5px 0 0 0; font-size: 11px; color: #475569;">TradeSphere B2B Private Limited · GSTIN: 27AABCT9999F1Z0</p>
+            <p style="margin: 5px 0 0 0; font-size: 11px; color: #475569;">TradeExpress B2B Private Limited · GSTIN: 27AABCT9999F1Z0</p>
           </div>
           <div style="text-align: right;">
             <h2 style="margin: 0; color: #0f172a; font-size: 18px;">GST TAX INVOICE & PO</h2>
@@ -59,7 +59,7 @@ export function printInvoice(order) {
         <div class="grid">
           <div class="box">
             <h4>Supplier / Consignor</h4>
-            <p style="margin: 0; font-weight: 700;">${order.supplierName || 'TradeSphere Verified Wholesale Supplier'}</p>
+            <p style="margin: 0; font-weight: 700;">${order.supplierName || 'TradeExpress Verified Wholesale Supplier'}</p>
             <p style="margin: 2px 0;">GSTIN: ${order.supplierGstin || '27AABCT1234F1Z1'}</p>
             <p style="margin: 2px 0;">State of Origin: ${order.supplierState || 'Maharashtra (State Code: 27)'}</p>
           </div>
@@ -124,7 +124,7 @@ export function printInvoice(order) {
 
         <div class="footer">
           <p>This is a computer generated invoice and does not require physical signature. E.&O.E.</p>
-          <p>Subject to Mumbai, Maharashtra jurisdiction. Verified B2B TradeSphere Escrow Transaction.</p>
+          <p>Subject to Mumbai, Maharashtra jurisdiction. Verified B2B TradeExpress Escrow Transaction.</p>
         </div>
       </body>
     </html>

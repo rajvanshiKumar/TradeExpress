@@ -26,7 +26,9 @@ export const isAdminConfigured = true;
 export const ADMIN_EMAILS = [
   'krajvanshi244@gmail.com',
   'hello.techvunex@gmail.com',
+  'admin@tradeexpress.com',
   'admin@tradesphere.com',
+  'admin@tradeexpress.example',
   'admin@tradesphere.example',
   'admin',
 ];

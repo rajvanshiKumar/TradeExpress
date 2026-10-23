@@ -12,7 +12,7 @@ try {
     });
   }
 } catch (error) {
-  console.warn('[TradeSphere Razorpay] Razorpay initialization warning:', error.message);
+  console.warn('[TradeExpress Razorpay] Razorpay initialization warning:', error.message);
 }
 
 export function getRazorpayClient() {

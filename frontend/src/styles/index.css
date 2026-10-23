@@ -2,7 +2,7 @@
 @import "./components.css";
 
 /* ------------------------------------------------------------------
-   TradeSphere design tokens (Tailwind v4 reads these from @theme)
+   TradeExpress design tokens (Tailwind v4 reads these from @theme)
 ------------------------------------------------------------------- */
 @theme {
   --app-header-height: 4.75rem;

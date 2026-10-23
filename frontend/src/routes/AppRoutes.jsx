@@ -32,6 +32,7 @@ const BuyerDashboard = lazy(() => import('../pages/buyer/BuyerDashboard'));
 const BuyerOrders = lazy(() => import('../pages/buyer/BuyerOrders'));
 const BuyerQuotes = lazy(() => import('../pages/buyer/BuyerQuotes'));
 const QuoteComparison = lazy(() => import('../pages/buyer/QuoteComparison'));
+const ProductComparison = lazy(() => import('../pages/buyer/ProductComparison'));
 const BuyerProfile = lazy(() => import('../pages/buyer/BuyerProfile'));
 const BuyerAddresses = lazy(() => import('../pages/buyer/BuyerAddresses'));
 const SupplierDashboard = lazy(() => import('../pages/supplier/SupplierDashboard'));
@@ -87,13 +88,15 @@ export default function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/admin/login" element={<AdminLogin defaultTab="admin" />} />
-        <Route path="/super-admin/login" element={<AdminLogin defaultTab="super_admin" />} />
+        <Route path="/admin/login" element={<Navigate to="/super-admin/login" replace />} />
+        <Route path="/super-admin/login" element={<AdminLogin />} />
         <Route path="/superadmin/login" element={<Navigate to="/super-admin/login" replace />} />
         <Route path="/superadmin" element={<Navigate to="/super-admin" replace />} />
         <Route path="/info/:slug" element={<Info />} />
         <Route path="/track" element={<OrderTracking />} />
         <Route path="/track/:orderNumber" element={<OrderTracking />} />
+        <Route path="/compare-products" element={<ProductComparison />} />
+        <Route path="/compare-products/:productId" element={<ProductComparison />} />
         <Route path="/compare-quotes" element={<QuoteComparison />} />
         <Route path="/compare-quotes/:rfqId" element={<QuoteComparison />} />
 
@@ -116,6 +119,8 @@ export default function AppRoutes() {
             <Route path="/buyer" element={<BuyerDashboard />} />
             <Route path="/buyer/orders" element={<BuyerOrders />} />
             <Route path="/buyer/quotes" element={<BuyerQuotes />} />
+            <Route path="/buyer/products/compare" element={<ProductComparison />} />
+            <Route path="/buyer/products/compare/:productId" element={<ProductComparison />} />
             <Route path="/buyer/quotes/compare" element={<QuoteComparison />} />
             <Route path="/buyer/quotes/compare/:rfqId" element={<QuoteComparison />} />
             <Route path="/buyer/wishlist" element={<BuyerWishlist />} />

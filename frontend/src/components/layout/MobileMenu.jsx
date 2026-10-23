@@ -10,6 +10,7 @@ import useMessages from '../../hooks/useMessages';
 import useWishlist from '../../hooks/useWishlist';
 import { mainNav, quickLinks } from '../../data/navigation';
 import { ordersPathFor, ROLE_HOME } from '../../utils/constants';
+import Logo from '../common/Logo';
 
 export default function MobileMenu({ open, onClose }) {
   const { user, logout } = useAuth();
@@ -28,7 +29,7 @@ export default function MobileMenu({ open, onClose }) {
   };
 
   return (
-    <Drawer open={open} onClose={onClose} title="Menu" side="left">
+    <Drawer open={open} onClose={onClose} title={<Logo size="xs" onClick={onClose} />} side="left">
       <div className="border-b bg-surface p-4">
         {user ? (
           <div>
@@ -90,10 +91,10 @@ export default function MobileMenu({ open, onClose }) {
 
         <ul className="mt-2 divide-y border-t">
           <li>
-            <Link to="/compare-quotes" onClick={onClose} className={row}>
+            <Link to="/compare-products" onClick={onClose} className={row}>
               <span className="flex items-center gap-2.5">
                 <Scale className="size-4 text-brand-600" aria-hidden="true" />
-                Smart Quote Comparison
+                Compare Products
               </span>
             </Link>
           </li>

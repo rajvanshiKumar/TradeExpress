@@ -1,4 +1,4 @@
-# TradeSphere — Your World of Business
+# TradeExpress — Your World of Business
 
 An international B2B marketplace for importers, exporters, manufacturers and wholesale buyers,
 built **frontend-only** with React and Vite. Buyers browse wholesale listings with minimum order
@@ -151,13 +151,13 @@ Supplier and admin changes update shared state, so they appear in the catalogue 
   contexts (Auth, Product, Cart, Wishlist, Inquiry, Message, Order, Notification) hold the app
   state, each with a matching hook in `src/hooks`.
 - **`localStorage` data stays in the current browser.** It is not shared between users, browsers
-  or devices, and clearing site data removes it. All keys start with `tradesphere:v2:` (older data from earlier versions is ignored).
+  or devices, and clearing site data removes it. All keys start with `tradeexpress:v2:` (older data from earlier versions is ignored).
 - Seed data in `src/data` is written only when nothing is saved yet. Missing or malformed saved
   data falls back to the seed instead of breaking the app.
 - Services in `src/services` return Promises with a short simulated delay, so pages have real
   loading, empty and error states and could later be pointed at a real API.
 - **Reset sample data** (in the footer and in every dashboard) clears everything saved by
-  TradeSphere after a confirmation and restores the sample data.
+  TradeExpress after a confirmation and restores the sample data.
 
 ### Sample data
 
@@ -183,7 +183,7 @@ assumed or invented. Never put private keys in `VITE_` variables: they ship to t
 ## Project structure
 
 ```
-TradeSphere/
+TradeExpress/
 ├── public/            favicon, logo, SVG illustrations
 └── src/
     ├── assets/        logo used by the app

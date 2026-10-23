@@ -109,7 +109,7 @@ export default function QuoteComparison() {
           }
         }
       } catch (err) {
-        console.warn('[TradeSphere] Could not list RFQs:', err.message);
+        console.warn('[TradeExpress] Could not list RFQs:', err.message);
       }
 
       if (available.length === 0 && inquiries?.length > 0) {
@@ -157,7 +157,7 @@ export default function QuoteComparison() {
         }
       }
     } catch (err) {
-      console.warn('[TradeSphere] API comparison error, falling back to local inquiry:', err.message);
+      console.warn('[TradeExpress] API comparison error, falling back to local inquiry:', err.message);
     }
 
     // Fallback: build comparison from local InquiryContext
@@ -1086,7 +1086,7 @@ export default function QuoteComparison() {
           <form onSubmit={handleSubmitCounter} className="space-y-4">
             <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900">
               <span className="font-bold">Negotiation Round {counterTargetQuote.currentVersion + 1} of 3: </span>
-              TradeSphere allows up to 3 structured rounds of binding counter-proposals to ensure fast closing.
+              TradeExpress allows up to 3 structured rounds of binding counter-proposals to ensure fast closing.
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-xl">

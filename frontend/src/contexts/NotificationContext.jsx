@@ -42,7 +42,7 @@ export function NotificationProvider({ children }) {
           setBackendItems(mapped);
         }
       } catch (err) {
-        console.warn('[TradeSphere] Could not sync backend notifications:', err.message);
+        console.warn('[TradeExpress] Could not sync backend notifications:', err.message);
       }
     }
 

@@ -24,7 +24,7 @@ const sizes = {
 };
 
 /**
- * The one button used across TradeSphere. Pass `to` for an internal link or `href`
+ * The one button used across TradeExpress. Pass `to` for an internal link or `href`
  * for an external one; otherwise it renders a <button>.
  */
 const Button = forwardRef(function Button(

@@ -51,7 +51,7 @@ export async function createPaymentOrder({ orderId }) {
       });
       gatewayOrderId = response.id;
     } catch (err) {
-      console.warn('[TradeSphere Payment] Razorpay API order create warning, falling back to sandbox test order:', err.message);
+      console.warn('[TradeExpress Payment] Razorpay API order create warning, falling back to sandbox test order:', err.message);
       gatewayOrderId = `order_test_${order.orderNumber.replace(/[^a-zA-Z0-9]/g, '')}`;
     }
   } else {
@@ -196,7 +196,7 @@ export async function verifyPayment({ orderId, paymentOrderId, transactionId, si
 
   // Automatically send order confirmation email
   sendOrderConfirmationEmail(updatedOrder).catch((err) => {
-    console.error('[TradeSphere Payment] Failed to send order confirmation email:', err.message);
+    console.error('[TradeExpress Payment] Failed to send order confirmation email:', err.message);
   });
 
   return {
@@ -237,7 +237,7 @@ export async function handleRazorpayWebhook({ rawBody, signature }) {
 
   const payload = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
   const event = payload.event;
-  console.log(`[TradeSphere Webhook] Received Razorpay event: ${event}`);
+  console.log(`[TradeExpress Webhook] Received Razorpay event: ${event}`);
 
   if (event === 'payment.captured' || event === 'order.paid') {
     const paymentEntity = payload.payload?.payment?.entity;

@@ -109,7 +109,7 @@ export default function AdminVerification() {
       audience: `company:${deciding.company.id}`,
       type: 'quotes',
       title: deciding.decision === 'approve' ? 'KYC Verified' : 'KYC Verification Declined',
-      body: deciding.decision === 'approve' ? 'A TradeSphere admin reviewed and approved your business KYC documents.' : `The admin requested changes: ${note.trim()}`,
+      body: deciding.decision === 'approve' ? 'A TradeExpress admin reviewed and approved your business KYC documents.' : `The admin requested changes: ${note.trim()}`,
       link: '/supplier/verification',
     });
     showToast(deciding.decision === 'approve' ? `${deciding.company.name} KYC verified.` : `Verification declined for ${deciding.company.name}.`, 'info');

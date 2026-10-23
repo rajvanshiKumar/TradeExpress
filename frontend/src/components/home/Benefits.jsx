@@ -99,7 +99,7 @@ export default function Benefits() {
       id="home-benefits"
       tone="plain"
       className="ts-sage-soft"
-      eyebrow="Why TradeSphere"
+      eyebrow="Why TradeExpress"
       title="Designed for both sides"
       accent="of the deal."
     >

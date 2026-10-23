@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom';
-import { ArrowUpRight, FileText, Heart, Layers, Plus, Scale, ShieldCheck, Users, Zap } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { ArrowUpRight, Check, FileText, Heart, Layers, Plus, Scale, ShieldCheck, ShoppingCart, Users, Zap } from 'lucide-react';
 import Image from '../common/Image';
 import Rating from '../common/Rating';
 import VerificationBadge from '../common/VerificationBadge';
@@ -8,6 +8,7 @@ import useCart from '../../hooks/useCart';
 import { defaultVariant } from '../../hooks/useBuyNow';
 import useProducts from '../../hooks/useProducts';
 import useWishlist from '../../hooks/useWishlist';
+import useAuth from '../../hooks/useAuth';
 import useCurrency from '../../hooks/useCurrency';
 import { getPriceRange } from '../../utils/calculateTotals';
 import { formatNumber } from '../../utils/formatCurrency';
@@ -26,11 +27,29 @@ export function PriceRange({ product, className = '', size = 'md' }) {
 
 export function WishlistButton({ product, className = '' }) {
   const { isSaved, toggleWishlist } = useWishlist();
-  const saved = isSaved(product.id);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const saved = user ? isSaved(product.id) : false;
+
+  const handleClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user) {
+      toggleWishlist(product);
+      navigate('/login', { state: { from: `${location.pathname}${location.search}` } });
+      return;
+    }
+    toggleWishlist(product);
+  };
+
   return (
     <button
-      type="button" onClick={() => toggleWishlist(product)} aria-pressed={saved} aria-label={saved ? `Remove ${product.name} from saved products` : `Save ${product.name}`}
-      title={saved ? 'Remove from saved products' : 'Save product'}
+      type="button"
+      onClick={handleClick}
+      aria-pressed={saved}
+      aria-label={saved ? `Remove ${product.name} from saved products` : `Save ${product.name}`}
+      title={user ? (saved ? 'Remove from saved products' : 'Save product to wishlist') : 'Log in to save to wishlist'}
       className={`inline-flex size-9 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-navy-900/5 transition-all hover:scale-105 hover:ring-brand-500 ${saved ? 'text-accent-600' : 'text-navy-900'} ${className}`}
     >
       <Heart className={`size-[1.05rem] ${saved ? 'fill-current' : ''}`} aria-hidden="true" />
@@ -71,12 +90,13 @@ function Availability({ product }) {
 /** Product tile used across the catalogue. `layout` is "grid" or "list". */
 export default function ProductCard({ product, layout = 'grid' }) {
   const { getCompany } = useProducts();
-  const { addToCart } = useCart();
+  const { addToCart, inCart } = useCart();
   const { money } = useCurrency();
   const company = getCompany(product.companyId);
   const href = `/products/${product.slug}`;
   const isList = layout === 'list';
   const outOfStock = product.stock <= 0;
+  const alreadyInCart = inCart(product.id);
   const bestTier = [...(product.priceTiers ?? [])].sort((a, b) => b.minQty - a.minQty)[0];
 
   const supplierName = product.supplier?.company || product.supplier?.name || company?.name;
@@ -109,7 +129,7 @@ export default function ProductCard({ product, layout = 'grid' }) {
             <p className="flex min-w-0 items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-muted truncate">
               <Link to={`/suppliers/${supplierSlug}`} className="truncate hover:text-brand-600">{supplierName}</Link>
               {isVerified && (
-                <span title="TradeSphere Verified Supplier" className="inline-flex items-center text-emerald-600">
+                <span title="TradeExpress Verified Supplier" className="inline-flex items-center text-emerald-600">
                   <ShieldCheck className="size-3.5" />
                 </span>
               )}
@@ -120,7 +140,7 @@ export default function ProductCard({ product, layout = 'grid' }) {
             <Link
               to={`${href}#suppliers-listing`}
               className="inline-flex items-center gap-1 shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[0.6875rem] font-bold text-brand-700 hover:bg-brand-100 transition-colors border border-brand-200/60"
-              title={`Compare ${supplierCount} TradeSphere suppliers offering this product`}
+              title={`Compare ${supplierCount} TradeExpress suppliers offering this product`}
             >
               <Scale className="size-3 text-brand-600" />
               {supplierCount} Suppliers
@@ -152,11 +172,35 @@ export default function ProductCard({ product, layout = 'grid' }) {
             {bestTier && bestTier.minQty > product.moq ? <p className="text-xs text-muted">{money(bestTier.price)} at {formatNumber(bestTier.minQty)}+</p> : null}
           </div>
           <button
-            type="button" disabled={outOfStock} onClick={() => addToCart(product, product.moq, defaultVariant(product))}
-            aria-label={`Add ${product.name} to cart`} title="Add to cart"
-            className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-navy-900 text-white shadow-[var(--shadow-gold)] transition-all hover:-translate-y-0.5 hover:bg-navy-800 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+            type="button"
+            disabled={outOfStock}
+            onClick={() => addToCart(product, product.moq, defaultVariant(product))}
+            aria-label={alreadyInCart ? `${product.name} is in cart` : `Add ${product.name} to cart`}
+            title={alreadyInCart ? 'Item in cart' : 'Add to cart'}
+            className={`relative inline-flex size-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 hover:-translate-y-0.5 active:scale-95 disabled:pointer-events-none disabled:opacity-40 ${
+              alreadyInCart
+                ? 'bg-emerald-100/95 text-emerald-800 border-2 border-emerald-500 shadow-sm ring-2 ring-emerald-500/20 hover:bg-emerald-200/80'
+                : 'bg-emerald-50 text-emerald-700 border border-emerald-200/90 shadow-xs hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800'
+            }`}
           >
-            <Plus className="size-5" aria-hidden="true" />
+            <div className="relative flex items-center justify-center">
+              <ShoppingCart className={`size-5 transition-colors ${alreadyInCart ? 'text-emerald-800' : 'text-emerald-700'}`} aria-hidden="true" />
+              {alreadyInCart ? (
+                <span
+                  className="absolute -top-2 -right-2.5 flex size-4 items-center justify-center rounded-full bg-white text-emerald-600 shadow-sm ring-1.5 ring-emerald-500 font-bold"
+                  title="In cart"
+                >
+                  <Check className="size-2.5 stroke-[3.5] text-emerald-600" aria-hidden="true" />
+                </span>
+              ) : (
+                <span
+                  className="absolute -top-2 -right-2.5 flex size-4 items-center justify-center rounded-full bg-emerald-600 text-white font-black shadow-xs ring-1 ring-white"
+                  title="Add to cart"
+                >
+                  <Plus className="size-2.5 stroke-[3.5] text-white" aria-hidden="true" />
+                </span>
+              )}
+            </div>
           </button>
         </div>
 
@@ -166,7 +210,7 @@ export default function ProductCard({ product, layout = 'grid' }) {
             <Link to={href} className="inline-flex items-center gap-1 text-navy-900 hover:text-brand-600">View product <ArrowUpRight className="size-3.5" aria-hidden="true" /></Link>
             <Link
               to={`${href}#suppliers-listing`}
-              aria-label={`Compare TradeSphere suppliers for ${product.name}`}
+              aria-label={`Compare TradeExpress suppliers for ${product.name}`}
               className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700"
             >
               <Scale className="size-3.5" aria-hidden="true" />

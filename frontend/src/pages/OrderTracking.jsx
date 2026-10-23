@@ -236,9 +236,9 @@ export default function OrderTracking() {
         <body>
           <div class="header">
             <div>
-              <div class="logo">TradeSphere</div>
+              <img src="/logos/tradeexpress-logo.png" alt="TradeExpress" style="height: 36px; width: auto; max-width: 220px; object-fit: contain; margin-bottom: 4px; display: block;" onerror="this.style.display='none'" />
               <div class="subtitle">B2B Wholesale Marketplace & Fulfillment</div>
-              <p style="margin: 5px 0 0 0; font-size: 11px; color: #475569;">TradeSphere B2B Private Limited · GSTIN: 27AABCT9999F1Z0</p>
+              <p style="margin: 5px 0 0 0; font-size: 11px; color: #475569;">TradeExpress B2B Private Limited · GSTIN: 27AABCT9999F1Z0</p>
             </div>
             <div style="text-align: right;">
               <h2 style="margin: 0; color: #0f172a; font-size: 18px;">GST TAX INVOICE & PO</h2>
@@ -251,7 +251,7 @@ export default function OrderTracking() {
           <div class="grid">
             <div class="box">
               <h4>Supplier / Consignor</h4>
-              <p style="margin: 0; font-weight: 700;">${tracking.supplierName || 'TradeSphere Verified Supplier'}</p>
+              <p style="margin: 0; font-weight: 700;">${tracking.supplierName || 'TradeExpress Verified Supplier'}</p>
               <p style="margin: 2px 0;">GSTIN: ${tracking.supplierGstin || '27AABCT1234F1Z1'}</p>
               <p style="margin: 2px 0;">State of Origin: ${tracking.supplierState || 'Maharashtra (State Code: 27)'}</p>
             </div>
@@ -355,7 +355,7 @@ export default function OrderTracking() {
               return;
             }
           } catch (apiErr) {
-            console.warn('[TradeSphere Tracking] API tracking fetch failed, checking local:', apiErr.message);
+            console.warn('[TradeExpress Tracking] API tracking fetch failed, checking local:', apiErr.message);
           }
         }
 
@@ -612,7 +612,7 @@ export default function OrderTracking() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-navy-950">TradeSphere Escrow Secured</h3>
+                      <h3 className="font-bold text-navy-950">TradeExpress Escrow Secured</h3>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                         tracking.escrowLedger?.status === 'RELEASED'
                           ? 'bg-emerald-100 text-emerald-800'
@@ -966,7 +966,7 @@ export default function OrderTracking() {
             <Package className="mx-auto size-12 text-brand-600" aria-hidden="true" />
             <h2 className="mt-3 text-lg font-bold text-navy-950">Track Any Order</h2>
             <p className="mt-1 text-sm text-muted">
-              Enter your TradeSphere order number above to view real-time fulfillment progress and shipment milestones.
+              Enter your TradeExpress order number above to view real-time fulfillment progress and shipment milestones.
             </p>
             <div className="mt-6 flex justify-center gap-3">
               <Button to="/buyer/orders" variant="outline">

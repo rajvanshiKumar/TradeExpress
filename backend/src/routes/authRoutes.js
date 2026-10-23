@@ -61,6 +61,54 @@ router.post(
 );
 
 router.post(
+  '/send-email-otp',
+  otpSendLimiter,
+  validate([
+    body('email').isEmail().withMessage('Valid email is required.'),
+  ]),
+  authController.sendEmailOtp
+);
+
+router.post(
+  '/verify-email-otp',
+  otpVerifyLimiter,
+  validate([
+    body('email').isEmail().withMessage('Valid email is required.'),
+    body('otp').trim().notEmpty().withMessage('OTP is required.').isLength({ min: 4, max: 9 }).withMessage('Valid OTP code is required.'),
+  ]),
+  authController.verifyEmailOtp
+);
+
+router.post(
+  '/send-mobile-login-otp',
+  otpSendLimiter,
+  validate([
+    body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
+  ]),
+  authController.sendMobileLoginOtp
+);
+
+router.post(
+  '/login-mobile',
+  authRateLimiter,
+  validate([
+    body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
+    body('otp').trim().notEmpty().withMessage('OTP is required.'),
+  ]),
+  authController.loginMobile
+);
+
+router.post(
+  '/admin-login',
+  authRateLimiter,
+  validate([
+    body('email').trim().notEmpty().withMessage('Admin email is required.'),
+    body('password').notEmpty().withMessage('Password is required.'),
+  ]),
+  authController.adminLogin
+);
+
+router.post(
   '/register',
   authRateLimiter,
   validate([
@@ -68,7 +116,7 @@ router.post(
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters.'),
     body('name').trim().notEmpty().withMessage('Name is required.'),
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
-    body('verificationToken').trim().notEmpty().withMessage('Mobile verification is required. Please verify via OTP.'),
+    body('verificationToken').optional().trim(),
   ]),
   authController.register
 );

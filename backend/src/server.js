@@ -10,7 +10,7 @@ async function startServer() {
 
     const server = app.listen(ENV.PORT, () => {
       console.log(`=======================================================`);
-      console.log(`🚀 TradeSphere Backend Server running on port ${ENV.PORT}`);
+      console.log(`🚀 TradeExpress Backend Server running on port ${ENV.PORT}`);
       console.log(`📡 Base API URL: http://localhost:${ENV.PORT}/api`);
       console.log(`🌐 Health Check: http://localhost:${ENV.PORT}/api/health`);
       console.log(`💻 Connected to Frontend at ${ENV.FRONTEND_URL}`);

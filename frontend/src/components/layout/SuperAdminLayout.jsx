@@ -70,9 +70,11 @@ export default function SuperAdminLayout() {
               {sidebarOpen ? <X className="size-6" /> : <Menu className="size-6" />}
             </button>
             <Link to="/super-admin" className="flex items-center gap-2.5">
-              <span className="flex items-center justify-center size-9 rounded-lg bg-emerald-500 text-slate-950 font-black text-xl shadow-inner">
-                T
-              </span>
+              <img
+                src="/logos/tradeexpress-mark.png"
+                alt="TradeExpress"
+                className="size-8 sm:size-8.5 object-contain shrink-0"
+              />
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-extrabold tracking-tight text-lg text-white">TradeExpress</span>

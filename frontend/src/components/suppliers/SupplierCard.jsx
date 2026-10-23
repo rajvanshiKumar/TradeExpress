@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Bookmark, Clock, MapPin, MessageSquare } from 'lucide-react';
 import Button from '../common/Button';
 import Image from '../common/Image';
@@ -7,15 +7,34 @@ import Rating from '../common/Rating';
 import VerificationBadge from '../common/VerificationBadge';
 import useProducts from '../../hooks/useProducts';
 import useWishlist from '../../hooks/useWishlist';
+import useAuth from '../../hooks/useAuth';
 import useContactSupplier from '../../hooks/useContactSupplier';
 
 export function SaveSupplierButton({ company, className = '' }) {
   const { isSupplierSaved, toggleSupplier } = useWishlist();
-  const saved = isSupplierSaved(company.id);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const saved = user ? isSupplierSaved(company.id) : false;
+
+  const handleClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user) {
+      toggleSupplier(company);
+      navigate('/login', { state: { from: `${location.pathname}${location.search}` } });
+      return;
+    }
+    toggleSupplier(company);
+  };
+
   return (
     <button
-      type="button" onClick={() => toggleSupplier(company)} aria-pressed={saved} aria-label={saved ? `Remove ${company.name} from saved suppliers` : `Save ${company.name}`}
-      title={saved ? 'Remove from saved suppliers' : 'Save supplier'}
+      type="button"
+      onClick={handleClick}
+      aria-pressed={saved}
+      aria-label={saved ? `Remove ${company.name} from saved suppliers` : `Save ${company.name}`}
+      title={user ? (saved ? 'Remove from saved suppliers' : 'Save supplier') : 'Log in to save supplier'}
       className={`inline-flex size-9 items-center justify-center rounded-full bg-white/90 shadow-sm ring-1 ring-navy-900/5 backdrop-blur transition-all hover:scale-105 hover:ring-brand-500 ${saved ? 'text-brand-600' : 'text-navy-900'} ${className}`}
     >
       <Bookmark className={`size-4 ${saved ? 'fill-current' : ''}`} aria-hidden="true" />

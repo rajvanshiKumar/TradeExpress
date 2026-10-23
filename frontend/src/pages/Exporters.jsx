@@ -377,7 +377,7 @@ const TRUST_PILLARS = [
   {
     id: 'export-escrow',
     badge: 'Export Authorization',
-    title: 'TradeSphere Escrow & Container Protection',
+    title: 'TradeExpress Escrow & Container Protection',
     icon: Globe,
     description:
       'Protected cross-border payments with milestone escrow release upon bill of lading (B/L) verification, pre-shipment inspections, and global container tracking.',
@@ -394,7 +394,7 @@ const EXPORT_STATS = [
 ];
 
 export default function Exporters() {
-  useDocumentTitle('Connect with Verified Exporters | TradeSphere Export Gateway');
+  useDocumentTitle('Connect with Verified Exporters | TradeExpress Export Gateway');
   const { companies } = useProducts();
   const { showToast } = useNotifications();
   const navigate = useNavigate();
@@ -804,15 +804,15 @@ export default function Exporters() {
         </div>
       </section>
 
-      {/* Why Trust TradeSphere Export? (Matching Image 2) */}
+      {/* Why Trust TradeExpress Export? (Matching Image 2) */}
       <section className="py-12 lg:py-16">
         <div className="ts-container">
           <div className="text-center max-w-2xl mx-auto mb-10">
             <h2 className="font-display text-2xl sm:text-3xl font-extrabold text-navy-950">
-              Why Trust TradeSphere Export?
+              Why Trust TradeExpress Export?
             </h2>
             <p className="mt-2 text-sm sm:text-base text-muted">
-              TradeSphere Export is an international gateway built on India's most trusted B2B platform,
+              TradeExpress Export is an international gateway built on India's most trusted B2B platform,
               connecting 500,000+ verified Indian suppliers to buyers across 150+ countries.
             </p>
           </div>
@@ -863,12 +863,12 @@ export default function Exporters() {
         </div>
       </section>
 
-      {/* TradeSphere Export by Numbers (Matching Image 2) */}
+      {/* TradeExpress Export by Numbers (Matching Image 2) */}
       <section className="py-12 bg-white border-y border-navy-900/[0.06]">
         <div className="ts-container">
           <div className="text-center max-w-xl mx-auto mb-8">
             <h2 className="font-display text-2xl sm:text-3xl font-extrabold text-navy-950">
-              TradeSphere Export by Numbers
+              TradeExpress Export by Numbers
             </h2>
             <p className="mt-1.5 text-sm text-muted">
               Real transaction volumes, verified supplier bases, and international trade footprint.
@@ -902,26 +902,26 @@ export default function Exporters() {
         <div className="ts-container max-w-4xl">
           <div className="ts-card p-6 sm:p-8 lg:p-10">
             <h2 className="font-display text-2xl font-extrabold text-navy-950 mb-4">
-              About TradeSphere Export
+              About TradeExpress Export
             </h2>
             <div className="space-y-4 text-sm sm:text-base text-ink/85 leading-relaxed">
               <p>
-                <strong>TradeSphere Export</strong> is India's dedicated export gateway, built as an extension of
+                <strong>TradeExpress Export</strong> is India's dedicated export gateway, built as an extension of
                 India's trusted B2B trade infrastructure. Our mission is to connect international buyers with vetted,
                 export-ready Indian manufacturers across hundreds of industrial, textile, chemical, and agricultural
                 categories.
               </p>
               <p>
-                As an extension of India's export powerhouse, TradeSphere simplifies cross-border trade by removing the
+                As an extension of India's export powerhouse, TradeExpress simplifies cross-border trade by removing the
                 opacity of traditional brokerages. Global buyers get complete visibility into exporter certifications,
                 production capacity, factory verification status, and port-level shipping terms. Every transaction is backed
-                by optional TradeSphere Escrow, which holds buyer funds securely until pre-shipment inspection is cleared
+                by optional TradeExpress Escrow, which holds buyer funds securely until pre-shipment inspection is cleared
                 and the bill of lading is verified.
               </p>
               <p className="text-xs sm:text-sm text-muted border-t pt-4">
                 Whether you are an overseas wholesaler importing full container loads (FCL), an e-commerce brand
                 requiring private-label contract manufacturing (OEM/ODM), or a project contractor procuring building
-                materials, TradeSphere Export ensures end-to-end reliability from factory floor to seaport.
+                materials, TradeExpress Export ensures end-to-end reliability from factory floor to seaport.
               </p>
             </div>
 
@@ -982,7 +982,7 @@ export default function Exporters() {
         title={submittedId ? 'Requirement Submitted Successfully' : 'Post an Export Requirement'}
         description={
           submittedId
-            ? 'Your inquiry is now live on TradeSphere Verified Exporters network.'
+            ? 'Your inquiry is now live on TradeExpress Verified Exporters network.'
             : 'Verified Indian exporters will review your specification and send competitive CIF/FOB quotes.'
         }
         size="lg"
@@ -1169,7 +1169,7 @@ export default function Exporters() {
             <div className="rounded-lg bg-surface/70 p-3 text-xs text-muted flex items-start gap-2 border">
               <ShieldCheck className="size-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>
-                <strong>TradeSphere Escrow Protected:</strong> You are not charged anything to receive quotes. Once
+                <strong>TradeExpress Escrow Protected:</strong> You are not charged anything to receive quotes. Once
                 you approve a quotation, funds remain protected until pre-shipment inspection and bill of lading release.
               </span>
             </div>

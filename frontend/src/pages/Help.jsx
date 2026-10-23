@@ -35,7 +35,7 @@ import SupportTicketsSection from '../components/support/SupportTicketsSection';
 export const HELP_CATEGORIES = [
   {
     id: 'buying',
-    title: 'Buying on TradeSphere',
+    title: 'Buying on TradeExpress',
     description: 'Find and purchase wholesale products from verified suppliers.',
     icon: ShoppingCart,
     color: 'from-blue-500/15 to-blue-600/5 text-blue-700 border-blue-200/60',
@@ -43,7 +43,7 @@ export const HELP_CATEGORIES = [
     articles: [
       {
         title: 'How to search and find verified suppliers',
-        content: `TradeSphere gives buyers multiple ways to discover authentic suppliers:
+        content: `TradeExpress gives buyers multiple ways to discover authentic suppliers:
 • Use the top search bar to filter by product keywords or company names.
 • Filter suppliers by "Verified Exporters", "Manufacturers", or "Trading Companies".
 • Look for the TrustSEAL™ badge and DGFT IEC certification on company profiles.
@@ -64,7 +64,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: 'Understanding Minimum Order Quantity (MOQ) and tiered wholesale prices',
-        content: `Every TradeSphere product listing clearly states its Minimum Order Quantity (MOQ):
+        content: `Every TradeExpress product listing clearly states its Minimum Order Quantity (MOQ):
 • The MOQ is the minimum volume a factory requires to produce or pack an order.
 • Volume Price Tiers: As order quantity increases, unit prices decrease systematically.
 • To purchase quantities below the factory MOQ, request a custom sample through direct supplier inquiry.`,
@@ -79,7 +79,7 @@ export const HELP_CATEGORIES = [
 • Inspect material finish, packaging, and dimensional tolerances before approving bulk production.`,
       },
       {
-        title: 'Placing orders with TradeSphere Buy Now & Cart',
+        title: 'Placing orders with TradeExpress Buy Now & Cart',
         content: `For ready-to-ship wholesale stock:
 • Select your quantity (at or above MOQ) and click "Buy Now" or "Add to Cart".
 • Enter your business shipping address and review billing details.
@@ -91,7 +91,7 @@ export const HELP_CATEGORIES = [
   },
   {
     id: 'selling',
-    title: 'Selling on TradeSphere',
+    title: 'Selling on TradeExpress',
     description: 'List products and connect with domestic and global buyers.',
     icon: Store,
     color: 'from-amber-500/15 to-amber-600/5 text-amber-800 border-amber-200/60',
@@ -131,7 +131,7 @@ export const HELP_CATEGORIES = [
         content: `Unlock verified supplier status:
 • Submit your active GSTIN number for domestic Indian trade verification.
 • For export capabilities, provide your 10-digit DGFT Import Export Code (IEC).
-• Verification is completed by TradeSphere's compliance team within 24 business hours.`,
+• Verification is completed by TradeExpress's compliance team within 24 business hours.`,
         actionLink: '/supplier/verification',
         actionLabel: 'Verification Center',
       },
@@ -146,7 +146,7 @@ export const HELP_CATEGORIES = [
     iconColor: 'bg-purple-100 text-purple-700',
     articles: [
       {
-        title: 'TradeSphere TrustSEAL™ physical factory verification',
+        title: 'TradeExpress TrustSEAL™ physical factory verification',
         content: `TrustSEAL™ is India's gold standard for B2B supplier credibility:
 • An independent inspection specialist visits your manufacturing premises.
 • Verifies machinery capacity, staff count, quality control processes, and legal ownership.
@@ -158,7 +158,7 @@ export const HELP_CATEGORIES = [
         title: 'Priority placement in verified supplier search results',
         content: `Premium suppliers receive top-tier ranking in buyer searches:
 • Prominent banner placement on relevant industry category pages.
-• Inclusion in the weekly "TradeSphere Verified Exporters" digest sent to 50,000+ overseas procurement officers.`,
+• Inclusion in the weekly "TradeExpress Verified Exporters" digest sent to 50,000+ overseas procurement officers.`,
       },
       {
         title: 'Global Exporters Showcase membership',
@@ -186,8 +186,8 @@ export const HELP_CATEGORIES = [
     iconColor: 'bg-emerald-100 text-emerald-700',
     articles: [
       {
-        title: 'How TradeSphere Escrow protects buyers and suppliers',
-        content: `TradeSphere Escrow eliminates payment risk in cross-border trade:
+        title: 'How TradeExpress Escrow protects buyers and suppliers',
+        content: `TradeExpress Escrow eliminates payment risk in cross-border trade:
 1. Buyer deposits payment into a secure multi-sign escrow account.
 2. The supplier is notified that funds are secured and starts production.
 3. Pre-shipment inspection is performed at the factory.
@@ -198,7 +198,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: 'Supported payment methods: UPI, Bank Wire, NEFT/RTGS, Letter of Credit (LC)',
-        content: `TradeSphere supports multiple trusted business payment gateways:
+        content: `TradeExpress supports multiple trusted business payment gateways:
 • Domestic Indian transactions: UPI, Net Banking, Corporate NEFT/RTGS.
 • Cross-border trade: International SWIFT wire transfers and irrevocable documentary Letters of Credit (LC).
 • All domestic transactions provide GST tax invoices with input tax credit eligibility.`,
@@ -234,7 +234,7 @@ export const HELP_CATEGORIES = [
     iconColor: 'bg-cyan-100 text-cyan-700',
     articles: [
       {
-        title: 'Using the TradeSphere real-time messaging center',
+        title: 'Using the TradeExpress real-time messaging center',
         content: `All business communications stay organized in one place:
 • Direct encrypted chat between registered buyers and suppliers.
 • Share PDF spec sheets, CAD drawings, lab test reports, and purchase orders.
@@ -253,13 +253,13 @@ export const HELP_CATEGORIES = [
         title: 'Reporting unresponsive buyers or suppliers',
         content: `If a party is unresponsive after placing an order or quote:
 • Suppliers have a mandatory 48-hour response window for pending orders.
-• If unanswered, click "Report Unresponsive" in your order details to have a TradeSphere trade officer intervene.`,
+• If unanswered, click "Report Unresponsive" in your order details to have a TradeExpress trade officer intervene.`,
       },
       {
-        title: 'Contacting TradeSphere 24/7 dedicated trade support',
+        title: 'Contacting TradeExpress 24/7 dedicated trade support',
         content: `Our customer support team is available across channels:
 • Toll-Free Helpline: 1800-TRADE-SPHERE (1800-872-3377) available 9 AM - 8 PM IST.
-• Email Support: support@tradesphere.in with guaranteed 4-hour response turnaround.
+• Email Support: support@tradeexpress.com with guaranteed 4-hour response turnaround.
 • Dedicated Priority Account Managers for Enterprise and TrustSEAL™ members.`,
         actionLink: '/info/contact',
         actionLabel: 'Contact Page',
@@ -275,7 +275,7 @@ export const HELP_CATEGORIES = [
     iconColor: 'bg-slate-100 text-slate-700',
     articles: [
       {
-        title: 'TradeSphere Buyer & Supplier Protection Policy',
+        title: 'TradeExpress Buyer & Supplier Protection Policy',
         content: `A fair, balanced marketplace environment:
 • Buyers are protected against non-delivery, counterfeit goods, and material quality variance.
 • Suppliers are protected against payment defaults and arbitrary order rejections once specifications match approval samples.`,
@@ -318,7 +318,7 @@ export const HELP_CATEGORIES = [
       {
         title: 'Securing your account with Two-Factor OTP authentication',
         content: `Enhanced security for high-value wholesale accounts:
-• TradeSphere supports real-time mobile OTP verification for logins and sensitive transactions.
+• TradeExpress supports real-time mobile OTP verification for logins and sensitive transactions.
 • Ensures that only authorized procurement officers can authorize purchase orders or quote approvals.`,
       },
       {
@@ -340,7 +340,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: 'Privacy settings and data storage management',
-        content: `How TradeSphere handles your commercial data:
+        content: `How TradeExpress handles your commercial data:
 • Passwords and credentials are never stored in readable plain text.
 • Inquiries and quotes are visible only to the contracting parties.
 • You can manage local storage or clear session history using the Reset tool in the footer.`,
@@ -364,7 +364,7 @@ export const HELP_CATEGORIES = [
 2. Click "Raise Dispute / Claim".
 3. Select dispute reason: "Quality Mismatch", "Delayed Delivery", "Missing Items", or "Specification Variance".
 4. Upload photographic evidence, inspection reports, or third-party lab tests.
-5. TradeSphere Dispute Council will freeze escrow disbursement and arbitrate fairly.`,
+5. TradeExpress Dispute Council will freeze escrow disbursement and arbitrate fairly.`,
         actionLink: '/buyer/orders',
         actionLabel: 'View Orders',
       },
@@ -382,7 +382,7 @@ export const HELP_CATEGORIES = [
 • Submit claim documentation within 7 calendar days of port/doorstep delivery.`,
       },
       {
-        title: 'Escalating to TradeSphere Dispute Mediation Council',
+        title: 'Escalating to TradeExpress Dispute Mediation Council',
         content: `Unbiased professional trade arbitration:
 • Our council consists of experienced international trade attorneys, logistics specialists, and industry engineers.
 • Reviews all written communication, sample approvals, and inspection findings to issue a binding determination within 7 to 10 business days.`,
@@ -398,8 +398,8 @@ export const HELP_CATEGORIES = [
 ];
 
 const POPULAR_QUESTIONS = [
-  'How to Register as a Verified Supplier on TradeSphere?',
-  'Does TradeSphere Provide Shipping & Escrow Services?',
+  'How to Register as a Verified Supplier on TradeExpress?',
+  'Does TradeExpress Provide Shipping & Escrow Services?',
   'How to Sell Items & Respond to Buyer RFQs?',
   'How to Verify Indian Exporter Credentials & DGFT IEC?',
   'What is Minimum Order Quantity (MOQ) & Price Tiers?',
@@ -416,7 +416,7 @@ const LANGUAGES = [
 ];
 
 export default function Help() {
-  useDocumentTitle('Help Center — FAQs, Sourcing Support & Dispute Center | TradeSphere');
+  useDocumentTitle('Help Center — FAQs, Sourcing Support & Dispute Center | TradeExpress');
   const { showToast } = useNotifications();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -490,7 +490,7 @@ export default function Help() {
             </span>
             <span>•</span>
             <span className="flex items-center gap-1 font-medium text-navy-800">
-              <Mail className="size-3 text-brand-600" /> support@tradesphere.in
+              <Mail className="size-3 text-brand-600" /> support@tradeexpress.com
             </span>
           </div>
         </div>
@@ -756,7 +756,7 @@ export default function Help() {
             </select>
           </div>
           <p className="text-[11px] text-muted">
-            Powered by TradeSphere Multi-Language International Trade Assistant
+            Powered by TradeExpress Multi-Language International Trade Assistant
           </p>
         </div>
       </div>
@@ -781,7 +781,7 @@ export default function Help() {
               <div className="rounded-xl bg-navy-50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-navy-100">
                 <div>
                   <p className="text-xs font-bold text-navy-900">Take Action Directly</p>
-                  <p className="text-xs text-muted">Jump straight to the corresponding TradeSphere workspace.</p>
+                  <p className="text-xs text-muted">Jump straight to the corresponding TradeExpress workspace.</p>
                 </div>
                 <Button
                   to={selectedArticle.actionLink}

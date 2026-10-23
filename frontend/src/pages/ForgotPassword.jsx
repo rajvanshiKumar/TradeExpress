@@ -74,7 +74,7 @@ export default function ForgotPassword() {
           ? 'You can now sign in with your new password.'
           : step === 'reset'
           ? `Enter the 6-digit OTP sent to ${email}`
-          : 'Enter the email you use for TradeSphere.'
+          : 'Enter the email you use for TradeExpress.'
       }
     >
       {step === 'success' ? (
@@ -82,7 +82,7 @@ export default function ForgotPassword() {
           <CheckCircle2 className="mx-auto size-12 text-emerald-600" aria-hidden="true" />
           <h2 className="mt-3 text-lg font-bold text-ink">Password updated successfully!</h2>
           <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
-            Your TradeSphere account password has been reset. You can now sign in to your dashboard.
+            Your TradeExpress account password has been reset. You can now sign in to your dashboard.
           </p>
           <div className="mt-6 flex justify-center">
             <Button to="/login" variant="primary" size="lg">

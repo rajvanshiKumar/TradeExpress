@@ -102,7 +102,7 @@ export default function BuyerOrders() {
         <body>
           <div class="header">
             <div>
-              <div class="logo">TradeSphere</div>
+              <img src="/logos/tradeexpress-logo.png" alt="TradeExpress" style="height: 36px; width: auto; max-width: 220px; object-fit: contain; margin-bottom: 4px; display: block;" onerror="this.style.display='none'" />
               <p style="margin: 5px 0 0 0; font-size: 11px; color: #475569;">B2B Wholesale Fulfillment · GSTIN: 27AABCT9999F1Z0</p>
             </div>
             <div style="text-align: right;">
@@ -114,7 +114,7 @@ export default function BuyerOrders() {
           <div class="grid">
             <div class="box">
               <h4 style="margin: 0 0 8px 0; text-transform: uppercase;">Consignor / Supplier</h4>
-              <p style="margin: 0; font-weight: bold;">TradeSphere Verified Wholesale Merchant</p>
+              <p style="margin: 0; font-weight: bold;">TradeExpress Verified Wholesale Merchant</p>
               <p style="margin: 2px 0;">GSTIN: 27AABCT1234F1Z1</p>
             </div>
             <div class="box">

@@ -157,9 +157,9 @@ export default function Header() {
               { label: "Suppliers", to: "/suppliers" },
               { label: "Exporters", to: "/exporters" },
               { label: "Post RFQ", to: "/rfq" },
-              { label: "Compare Quotes", to: "/compare-quotes" },
+              { label: "Compare Products", to: "/compare-products" },
               { label: "Wishlist", to: "/wishlist" },
-              ...(user
+              ...(user && user.role !== "super_admin"
                 ? [
                     { label: "Deals", to: "/products?deal=1" },
                     { label: "Help Center", to: "/help" },
@@ -175,7 +175,7 @@ export default function Header() {
               const isHelp = item.to === "/help";
 
               // Responsive tiering:
-              // - Categories, Products, Suppliers, Post RFQ, Compare Quotes: visible on lg+ (1024px+)
+              // - Categories, Products, Suppliers, Post RFQ, Compare Products: visible on lg+ (1024px+)
               // - Deals: visible on lg+ (1024px+)
               // - Wishlist (with Heart symbol): visible on min-[1180px]+
               // - Help Center: visible on xl+ (1280px+)
@@ -203,6 +203,14 @@ export default function Header() {
                 const renderLabel = (label) => {
                   if (label === "Request For Quotation" || label === "RFQ") {
                     return "Post RFQ";
+                  }
+                  if (label === "Compare Products") {
+                    return (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Scale className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                        <span>Compare Products</span>
+                      </span>
+                    );
                   }
                   if (label === "Compare Quotes" || label === "Smart Quote Comparison") {
                     return (
@@ -322,7 +330,9 @@ export default function Header() {
               count={messageCount}
               className="hidden min-[1680px]:inline-flex"
             />
-            <NotificationsMenu className="hidden sm:inline-flex" />
+            {user?.role !== "super_admin" && (
+              <NotificationsMenu className="hidden sm:inline-flex" />
+            )}
             <IconLink
               to="/cart"
               icon={ShoppingCart}
@@ -334,7 +344,7 @@ export default function Header() {
             {user?.role === "super_admin" ? (
               <Link
                 to="/super-admin"
-                className="inline-flex items-center gap-1.5 rounded-full bg-[#0b2716] px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/50 hover:bg-[#123f25] hover:text-white transition-all shadow-xs"
+                className="inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full bg-[#0b2716] px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/50 hover:bg-[#123f25] hover:text-white transition-all shadow-xs"
                 title="Open Super Admin Enterprise Portal"
               >
                 <ShieldCheck className="size-3.5 text-emerald-400" aria-hidden="true" />
@@ -343,7 +353,7 @@ export default function Header() {
             ) : user?.role === "admin" ? (
               <Link
                 to="/admin"
-                className="inline-flex items-center gap-1.5 rounded-full bg-navy-900 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-bold text-brand-300 ring-1 ring-brand-500/50 hover:bg-navy-800 hover:text-white transition-all shadow-xs"
+                className="inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full bg-navy-900 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-bold text-brand-300 ring-1 ring-brand-500/50 hover:bg-navy-800 hover:text-white transition-all shadow-xs"
                 title="Open Admin Portal"
               >
                 <ShieldCheck className="size-3.5 text-brand-400" aria-hidden="true" />

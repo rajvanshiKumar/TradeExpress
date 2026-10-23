@@ -99,7 +99,7 @@ export default function SupplierDetails() {
                 </section>
                 <section className="ts-card p-5">
                   <h2 className="text-lg font-bold">Certificates</h2>
-                  <p className="mt-1 rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning">Certificates are declared by the supplier as examples and have not been verified by TradeSphere.</p>
+                  <p className="mt-1 rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning">Certificates are declared by the supplier as examples and have not been verified by TradeExpress.</p>
                   {company.certificates?.length ? (
                     <ul className="mt-3 space-y-2">
                       {company.certificates.map((certificate) => (

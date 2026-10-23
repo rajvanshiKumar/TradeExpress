@@ -150,7 +150,7 @@ function ProductTable({ products, company }) {
                 </div>
                 <a
                   href="http://localhost:5000/api/supplier/products/bulk/template"
-                  download="tradesphere_products_template.xlsx"
+                  download="tradeexpress_products_template.xlsx"
                   className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand-600 shadow-sm border border-navy-900/[0.1] hover:bg-slate-50"
                 >
                   <Download className="size-3.5" />

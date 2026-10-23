@@ -55,7 +55,7 @@ export async function downloadBulkTemplate(req, res, next) {
   try {
     const buffer = supplierProductService.generateBulkUploadTemplate();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="TradeSphere_Bulk_Products_Template.xlsx"');
+    res.setHeader('Content-Disposition', 'attachment; filename="TradeExpress_Bulk_Products_Template.xlsx"');
     res.send(buffer);
   } catch (error) {
     next(error);

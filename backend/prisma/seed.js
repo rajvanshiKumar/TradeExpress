@@ -86,7 +86,7 @@ function buildPriceTiers(price, moq) {
 }
 
 async function main() {
-  console.log('Seeding TradeSphere MySQL database...');
+  console.log('Seeding TradeExpress MySQL database...');
 
   // 1. Seed Categories
   for (const cat of categoriesData) {
@@ -333,7 +333,7 @@ async function main() {
           fileName: `${s.companyId}-${cert.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`,
           fileUrl: `/uploads/kyc/${s.companyId}-${cert.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`,
           status: 'APPROVED',
-          notes: `Certified ${cert} verified by TradeSphere compliance team.`,
+          notes: `Certified ${cert} verified by TradeExpress compliance team.`,
         })),
       ],
     });
@@ -349,15 +349,15 @@ async function main() {
     create: {
       email: 'krajvanshi244@gmail.com',
       passwordHash: adminPasswordHash,
-      name: 'TradeSphere Administrator',
+      name: 'TradeExpress Administrator',
       role: 'ADMIN',
-      company: 'TradeSphere Global HQ',
+      company: 'TradeExpress Global HQ',
       phone: '+91 98765 00000',
       city: 'New Delhi',
       country: 'India',
     },
   });
-  console.log(`Seeded default users (buyer, admin, and ${suppliersSeedData.length} TradeSphere verified suppliers).`);
+  console.log(`Seeded default users (buyer, admin, and ${suppliersSeedData.length} TradeExpress verified suppliers).`);
 
   // 3. Seed Products
   for (let i = 0; i < productsRaw.length; i++) {
@@ -373,13 +373,13 @@ async function main() {
 
     const supplierInfo = supplierByCompanyId.get(companyId);
     const supplierId = supplierInfo?.user?.id || null;
-    const certs = supplierInfo?.certs || ['ISO 9001:2015', 'TradeSphere Verified'];
+    const certs = supplierInfo?.certs || ['ISO 9001:2015', 'TradeExpress Verified'];
 
     const specs = {
       'Model no.': `TS-${number}`,
       Origin: 'Verified TradeSphere Factory',
       Certifications: certs,
-      'Payment Terms': 'TradeSphere Escrow Protection (100% Secure)',
+      'Payment Terms': 'TradeExpress Escrow Protection (100% Secure)',
       'Estimated Dispatch': `${leadTimeDays} business days`,
     };
 
@@ -443,7 +443,7 @@ async function main() {
     });
   }
 
-  // 4. Seed Competing Product Listings so multiple TradeSphere registered suppliers offer the same product
+  // 4. Seed Competing Product Listings so multiple TradeExpress registered suppliers offer the same product
   const competingListings = [
     {
       sku: 'TS-ELE-1001-ALT1',
@@ -614,7 +614,7 @@ async function main() {
         specifications: {
           Origin: 'Verified TradeSphere Factory',
           Certifications: certs,
-          'Payment Terms': 'TradeSphere Escrow Protection (100% Secure)',
+          'Payment Terms': 'TradeExpress Escrow Protection (100% Secure)',
           'Estimated Dispatch': `${alt.leadTimeDays} business days`,
         },
       },
@@ -643,7 +643,7 @@ async function main() {
         specifications: {
           Origin: 'Verified TradeSphere Factory',
           Certifications: certs,
-          'Payment Terms': 'TradeSphere Escrow Protection (100% Secure)',
+          'Payment Terms': 'TradeExpress Escrow Protection (100% Secure)',
           'Estimated Dispatch': `${alt.leadTimeDays} business days`,
         },
       },

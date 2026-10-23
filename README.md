@@ -1,6 +1,6 @@
-# TradeSphere — Global B2B Wholesale Marketplace
+# TradeExpress — Global B2B Wholesale Marketplace
 
-TradeSphere is a full-stack, enterprise-grade B2B marketplace platform for manufacturers, exporters, wholesale buyers, and international trading companies.
+TradeExpress is a full-stack, enterprise-grade B2B marketplace platform for manufacturers, exporters, wholesale buyers, and international trading companies.
 
 ---
 
@@ -102,11 +102,11 @@ TradeSphere is a full-stack, enterprise-grade B2B marketplace platform for manuf
 1. Ensure MySQL Server is running.
 2. In `backend/.env`, configure your database connection string:
    ```env
-   DATABASE_URL="mysql://root:YOUR_PASSWORD@localhost:3306/tradesphere_db"
+   DATABASE_URL="mysql://root:YOUR_PASSWORD@localhost:3306/tradeexpress_db"
    ```
 3. **Database Migration & Backup Notice**:
    > [!IMPORTANT]
-   > **Backup First**: Before applying any database schema migration or running `prisma db push`, always back up your existing database (e.g. `mysqldump -u root -p tradesphere_db > tradesphere_backup.sql`).
+   > **Backup First**: Before applying any database schema migration or running `prisma db push`, always back up your existing database (e.g. `mysqldump -u root -p tradeexpress_db > tradeexpress_backup.sql`).
    ```bash
    cd backend
    npx prisma db push
@@ -125,7 +125,7 @@ MSG91_OTP_LENGTH=6
 ```
 > [!NOTE]
 > In your MSG91 account dashboard:
-> 1. Create an SMS OTP Template (e.g. `##OTP## is your verification code for TradeSphere. Valid for 10 minutes.`).
+> 1. Create an SMS OTP Template (e.g. `##OTP## is your verification code for TradeExpress. Valid for 10 minutes.`).
 > 2. Copy the Template ID into `MSG91_TEMPLATE_ID`.
 > 3. Generate an AuthKey in MSG91 settings and set it in `MSG91_AUTH_KEY`.
 
@@ -156,7 +156,7 @@ MSG91_OTP_LENGTH=6
 
 ## Public Deployment & Hosting Guide
 
-TradeSphere is architected as a decoupled client-server application:
+TradeExpress is architected as a decoupled client-server application:
 1. **Frontend (Vercel / Netlify / Cloudflare Pages / Render)**
 2. **Backend (Render / Railway / Fly.io / DigitalOcean / VPS)**
 3. **Database (Aiven MySQL / Railway MySQL / PlanetScale / TiDB Serverless)**
@@ -201,9 +201,9 @@ TradeSphere is architected as a decoupled client-server application:
 
 | Role | Email | Password | Details |
 | :--- | :--- | :--- | :--- |
-| **Buyer** | `buyer@tradesphere.com` | `TradeSphere@2026` | Verified wholesale buyer with saved address |
-| **Supplier** | `supplier@novatech.com` | `TradeSphere@2026` | Verified electronics manufacturer |
-| **Admin** | `admin@tradesphere.com` | `password123` | Platform super administrator with full panel access |
+| **Buyer** | `buyer@tradeexpress.com` | `TradeExpress@2026` | Verified wholesale buyer with saved address |
+| **Supplier** | `supplier@novatech.com` | `TradeExpress@2026` | Verified electronics manufacturer |
+| **Admin** | `admin@tradeexpress.com` | `password123` | Platform super administrator with full panel access |
 | **Admin (Legacy)** | `krajvanshi244@gmail.com` | `modiji@12345` | Super admin login (`/admin/login`) |
 
 ---

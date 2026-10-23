@@ -73,7 +73,7 @@ export function ProductProvider({ children }) {
     const record = {
       id: makeId('TS-CO'), status: 'Active', flag: '', initials: name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toUpperCase(),
       industry: 'General Trade', businessType: 'Trading Company', established: new Date().getFullYear(), employees: '1–10', color: '#123F25',
-      responseTime: 'Within 24 hours', rating: 0, reviewCount: 0, description: `${name} is a supplier on TradeSphere.`, mainProducts: [],
+      responseTime: 'Within 24 hours', rating: 0, reviewCount: 0, description: `${name} is a supplier on TradeExpress.`, mainProducts: [],
       moqInfo: 'Contact the supplier for minimum order details.', contact: { person: '', email: '', phone: '', address: '' }, cover: null,
       coverIllustration: 'cover-default', gallery: [], certificates: [], reviews: [],
       verification: { status: 'not-submitted', submittedAt: null, reviewedAt: null, note: '', documents: [] },

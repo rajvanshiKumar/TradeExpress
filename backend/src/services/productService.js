@@ -90,7 +90,7 @@ export async function listProducts({
     : [];
   const supplierMap = new Map(supplierUsers.map((u) => [u.id, u]));
 
-  // Count how many active TradeSphere suppliers offer each product name
+  // Count how many active TradeExpress suppliers offer each product name
   const productNames = [...new Set(products.map((p) => p.name))];
   const siblingListings = productNames.length
     ? await prisma.product.findMany({
@@ -268,8 +268,8 @@ export async function getProductSuppliers(slugOrId) {
     throw error;
   }
 
-  // 1. Query all active listings in the TradeSphere database for this product name or slug or exact id
-  // STRICT RULE: Only active approved products from TradeSphere database!
+  // 1. Query all active listings in the TradeExpress database for this product name or slug or exact id
+  // STRICT RULE: Only active approved products from TradeExpress database!
   const matchingListings = await prisma.product.findMany({
     where: {
       status: 'Active',
@@ -300,9 +300,9 @@ export async function getProductSuppliers(slugOrId) {
     .map((p) => p.supplierId)
     .filter(Boolean);
 
-  // 2. Query ONLY TradeSphere-registered suppliers (active users with role = SUPPLIER)
+  // 2. Query ONLY TradeExpress-registered suppliers (active users with role = SUPPLIER)
   // STRICT RULE: Exclude inactive accounts, unrelated suppliers, and suppliers without a matching product listing
-  const tradeSphereSuppliers = await prisma.user.findMany({
+  const tradeExpressSuppliers = await prisma.user.findMany({
     where: {
       role: 'SUPPLIER',
       id: { in: listingSupplierIds },
@@ -337,7 +337,7 @@ export async function getProductSuppliers(slugOrId) {
   const reviews = await prisma.review.findMany({
     where: {
       order: {
-        supplierId: { in: tradeSphereSuppliers.map((s) => s.id) },
+        supplierId: { in: tradeExpressSuppliers.map((s) => s.id) },
       },
     },
     include: {
@@ -363,7 +363,7 @@ export async function getProductSuppliers(slugOrId) {
 
   for (const listing of matchingListings) {
     if (!listing.supplierId || seenSupplierIds.has(listing.supplierId)) continue;
-    const supUser = tradeSphereSuppliers.find((s) => s.id === listing.supplierId);
+    const supUser = tradeExpressSuppliers.find((s) => s.id === listing.supplierId);
     if (!supUser) continue; // Not an active registered TradeSphere supplier
 
     seenSupplierIds.add(supUser.id);
@@ -391,7 +391,7 @@ export async function getProductSuppliers(slugOrId) {
       .filter((t) => t.includes('ISO') || t.includes('CE') || t.includes('BIS') || t.includes('CERT') || t.includes('REG'));
 
     const qualityCertifications = Array.from(
-      new Set([...specCerts, ...kycCerts, 'ISO 9001:2015', 'TradeSphere Verified Factory'])
+      new Set([...specCerts, ...kycCerts, 'ISO 9001:2015', 'TradeExpress Verified Factory'])
     ).slice(0, 4);
 
     // Calculated real shipping cost for MOQ based on weight and standard freight rules in DB
@@ -402,9 +402,9 @@ export async function getProductSuppliers(slugOrId) {
     // Estimated delivery timeframe
     const estimatedDelivery = `${leadTimeDays} business days (${leadTimeDays + 3} days to door)`;
 
-    // Payment terms supported on TradeSphere
+    // Payment terms supported on TradeExpress
     const paymentTerms = listing.specifications?.['Payment Terms'] ||
-      'TradeSphere Escrow Protection (100% Secure, payment released upon delivery confirmation)';
+      'TradeExpress Escrow Protection (100% Secure, payment released upon delivery confirmation)';
 
     const companySlug = supUser.company
       ? supUser.company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -461,7 +461,7 @@ export async function compareProductSuppliers(slugOrId, requestedSupplierIds = [
   }
 
   if (comparedSuppliers.length === 0) {
-    const error = new Error('No matching TradeSphere registered suppliers found for comparison.');
+    const error = new Error('No matching TradeExpress registered suppliers found for comparison.');
     error.statusCode = 404;
     throw error;
   }
@@ -505,6 +505,328 @@ export async function compareProductSuppliers(slugOrId, requestedSupplierIds = [
       verifiedCount: enriched.filter((s) => s.isVerified).length,
     },
     suppliers: enriched,
+  };
+}
+
+/**
+ * Extract material from specifications, variants, or title/summary
+ */
+export function extractMaterial(product) {
+  const specs = product.specifications || {};
+  const vars = product.variants || {};
+  if (specs.Material) return String(specs.Material);
+  if (specs.material) return String(specs.material);
+  if (specs.Fabric) return String(specs.Fabric);
+  if (vars.Material) {
+    return Array.isArray(vars.Material) ? vars.Material.join(', ') : String(vars.Material);
+  }
+
+  const text = `${product.name} ${product.summary || ''}`.toLowerCase();
+  const materialKeywords = [
+    { pattern: /\bcotton\b/i, name: 'Cotton' },
+    { pattern: /\bleather\b/i, name: 'Leather' },
+    { pattern: /\bglass\b/i, name: 'Glass' },
+    { pattern: /\bstainless steel\b/i, name: 'Stainless Steel' },
+    { pattern: /\bbrass\b/i, name: 'Brass' },
+    { pattern: /\bcopper\b/i, name: 'Copper' },
+    { pattern: /\baluminum\b|\baluminium\b/i, name: 'Aluminium' },
+    { pattern: /\bceramic\b/i, name: 'Ceramic' },
+    { pattern: /\bsilk\b/i, name: 'Silk' },
+    { pattern: /\blinen\b/i, name: 'Linen' },
+    { pattern: /\bwool\b/i, name: 'Wool' },
+    { pattern: /\bpolyester\b/i, name: 'Polyester' },
+    { pattern: /\bsoy wax\b|\bwax\b/i, name: 'Soy Wax' },
+    { pattern: /\bteak\b|\bwood\b|\btimber\b/i, name: 'Solid Wood' },
+    { pattern: /\bsilicone\b/i, name: 'Silicone' },
+    { pattern: /\brubber\b/i, name: 'Rubber' },
+    { pattern: /\bbamboo\b/i, name: 'Bamboo' },
+    { pattern: /\bplastic\b|\bpolypropylene\b/i, name: 'Plastic' },
+  ];
+
+  for (const m of materialKeywords) {
+    if (m.pattern.test(text)) return m.name;
+  }
+  return null;
+}
+
+/**
+ * Extract size or capacity options from variants or specifications
+ */
+export function extractSizes(product) {
+  const vars = product.variants || {};
+  const specs = product.specifications || {};
+  const sizeVal = vars.Size || vars.size || vars.Capacity || vars.capacity || vars.Battery || vars.Dimensions || specs.Dimensions || specs.Size || null;
+  if (!sizeVal) return null;
+  if (Array.isArray(sizeVal)) return sizeVal.join(', ');
+  return String(sizeVal);
+}
+
+/**
+ * Format product into a complete, clean B2B comparison record
+ */
+export function formatProductForComparison(product, supplier = null) {
+  const specs = product.specifications || {};
+  const leadDays = product.leadTimeDays || 7;
+  const dispatchText = specs['Estimated Dispatch'] || `${leadDays} business days`;
+  const material = extractMaterial(product);
+  const sizes = extractSizes(product);
+
+  const resolveBackendPhoto = (pId) => {
+    if (!pId) return null;
+    if (pId.startsWith('http://') || pId.startsWith('https://')) return pId;
+    if (pId.startsWith('photo-')) return `https://images.unsplash.com/${pId}?fm=jpg&fit=crop&w=800&h=800&q=75`;
+    return pId;
+  };
+
+  const rawImages = (product.images || []).map((img) => img.url).filter(Boolean);
+  const rawPhoto = product.photo || rawImages[0] || null;
+  const photo = resolveBackendPhoto(rawPhoto);
+  const images = (rawImages.length ? rawImages : (rawPhoto ? [rawPhoto] : [])).map(resolveBackendPhoto).filter(Boolean);
+
+  return {
+    id: product.id,
+    sku: product.sku,
+    name: product.name,
+    slug: product.slug,
+    photo,
+    rawPhoto,
+    images: images.length ? images : (photo ? [photo] : []),
+    price: Number(product.price),
+    currency: product.currency || 'INR',
+    unit: product.unit || 'piece',
+    moq: product.moq || 1,
+    stock: product.stock !== undefined ? product.stock : 100,
+    inStock: (product.stock !== undefined ? product.stock : 100) > 0,
+    readyToShip: Boolean(product.readyToShip),
+    leadTimeDays: leadDays,
+    estimatedDelivery: dispatchText,
+    categorySlug: product.categorySlug,
+    categoryName: product.category?.name || product.categorySlug,
+    subcategory: product.subcategory || null,
+    material,
+    sizes,
+    specifications: specs,
+    variants: product.variants || null,
+    priceTiers: product.priceTiers || [],
+    sampleAvailable: Boolean(product.sampleAvailable),
+    samplePrice: product.samplePrice ? Number(product.samplePrice) : null,
+    hsnCode: product.hsnCode || null,
+    gstRate: product.gstRate ? Number(product.gstRate) : 18.0,
+    supplier: supplier
+      ? {
+          id: supplier.id,
+          name: supplier.name,
+          company: supplier.company || supplier.name,
+          city: supplier.city || null,
+          country: supplier.country || 'India',
+          location: `${supplier.city ? supplier.city + ', ' : ''}${supplier.country || 'India'}`,
+          isVerified: Boolean(supplier.isVerified || supplier.kycStatus === 'VERIFIED'),
+          kycStatus: supplier.kycStatus || 'NOT_SUBMITTED',
+          status: supplier.status || 'ACTIVE',
+        }
+      : null,
+  };
+}
+
+/**
+ * Find similar products for comparison listed strictly by registered TradeExpress suppliers
+ */
+export async function getSimilarProductsForComparison({
+  productId,
+  ids,
+  category,
+  material,
+  verifiedOnly,
+  inStockOnly,
+  sort = 'relevance',
+  limit = 12,
+} = {}) {
+  // If specific product IDs are provided for direct side-by-side comparison
+  if (ids) {
+    const idList = Array.isArray(ids) ? ids : String(ids).split(',').map((s) => s.trim()).filter(Boolean);
+    if (idList.length > 0) {
+      const products = await prisma.product.findMany({
+        where: {
+          OR: [
+            { id: { in: idList } },
+            { slug: { in: idList } },
+            { sku: { in: idList } },
+          ],
+          status: 'Active',
+        },
+        include: {
+          category: true,
+          images: { orderBy: { sortOrder: 'asc' } },
+        },
+      });
+
+      const supIds = [...new Set(products.map((p) => p.supplierId).filter(Boolean))];
+      const suppliers = supIds.length
+        ? await prisma.user.findMany({
+            where: { id: { in: supIds }, role: 'SUPPLIER', status: 'ACTIVE' },
+            select: { id: true, name: true, company: true, city: true, country: true, isVerified: true, kycStatus: true, status: true },
+          })
+        : [];
+      const supMap = new Map(suppliers.map((s) => [s.id, s]));
+
+      const formatted = products.map((p) => formatProductForComparison(p, supMap.get(p.supplierId)));
+      return {
+        products: formatted,
+        total: formatted.length,
+      };
+    }
+  }
+
+  // If a reference product is specified
+  let referenceProduct = null;
+  let refSupplier = null;
+
+  if (productId) {
+    const rawRef = await prisma.product.findFirst({
+      where: {
+        OR: [{ id: productId }, { slug: productId }, { sku: productId }],
+        status: 'Active',
+      },
+      include: {
+        category: true,
+        images: { orderBy: { sortOrder: 'asc' } },
+      },
+    });
+
+    if (!rawRef) {
+      const error = new Error('Product not found or is currently inactive.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (rawRef.supplierId) {
+      refSupplier = await prisma.user.findFirst({
+        where: { id: rawRef.supplierId, role: 'SUPPLIER' },
+        select: { id: true, name: true, company: true, city: true, country: true, isVerified: true, kycStatus: true, status: true },
+      });
+    }
+    referenceProduct = formatProductForComparison(rawRef, refSupplier);
+  }
+
+  const targetCategory = category || referenceProduct?.categorySlug;
+
+  const where = {
+    status: 'Active',
+    ...(referenceProduct ? { id: { not: referenceProduct.id } } : {}),
+    ...(targetCategory ? { categorySlug: targetCategory } : {}),
+  };
+
+  if (inStockOnly === 'true' || inStockOnly === true) {
+    where.stock = { gt: 0 };
+  }
+
+  // Query candidate products
+  const candidates = await prisma.product.findMany({
+    where,
+    include: {
+      category: true,
+      images: { orderBy: { sortOrder: 'asc' } },
+    },
+    take: 80,
+  });
+
+  // Fetch only active registered TradeExpress suppliers
+  const supplierIds = [...new Set(candidates.map((c) => c.supplierId).filter(Boolean))];
+  const suppliers = supplierIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: supplierIds }, role: 'SUPPLIER', status: 'ACTIVE' },
+        select: { id: true, name: true, company: true, city: true, country: true, isVerified: true, kycStatus: true, status: true },
+      })
+    : [];
+  const supMap = new Map(suppliers.map((s) => [s.id, s]));
+
+  // Strictly filter to active registered TradeExpress suppliers only
+  let filtered = candidates.filter((c) => supMap.has(c.supplierId));
+
+  if (verifiedOnly === 'true' || verifiedOnly === true) {
+    filtered = filtered.filter((c) => {
+      const s = supMap.get(c.supplierId);
+      return Boolean(s?.isVerified || s?.kycStatus === 'VERIFIED');
+    });
+  }
+
+  // Format all candidates
+  let formattedCandidates = filtered.map((c) => formatProductForComparison(c, supMap.get(c.supplierId)));
+
+  if (material && material.trim()) {
+    const matLower = material.trim().toLowerCase();
+    formattedCandidates = formattedCandidates.filter(
+      (c) => c.material && c.material.toLowerCase().includes(matLower)
+    );
+  }
+
+  // Similarity scoring when a reference product is present
+  if (referenceProduct) {
+    const stopWords = new Set(['and', 'with', 'the', 'for', 'set', 'pack', 'piece', 'in', 'of', 'a', 'to']);
+    const refTokens = referenceProduct.name
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length > 2 && !stopWords.has(w));
+
+    formattedCandidates = formattedCandidates.map((c) => {
+      let score = 10;
+      if (c.subcategory && referenceProduct.subcategory && c.subcategory.toLowerCase() === referenceProduct.subcategory.toLowerCase()) {
+        score += 25;
+      }
+      const cTokens = c.name
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((w) => w.length > 2 && !stopWords.has(w));
+      const matchCount = cTokens.filter((t) => refTokens.includes(t)).length;
+      score += matchCount * 15;
+
+      if (c.material && referenceProduct.material && c.material.toLowerCase() === referenceProduct.material.toLowerCase()) {
+        score += 15;
+      }
+
+      if (referenceProduct.price > 0 && c.price > 0) {
+        const ratio = c.price / referenceProduct.price;
+        if (ratio >= 0.75 && ratio <= 1.25) score += 20;
+        else if (ratio >= 0.5 && ratio <= 1.5) score += 10;
+      }
+
+      if (c.supplier?.isVerified) {
+        score += 5;
+      }
+
+      return { ...c, similarityScore: score };
+    });
+  }
+
+  // Sorting
+  if (sort === 'price-asc') {
+    formattedCandidates.sort((a, b) => a.price - b.price);
+  } else if (sort === 'price-desc') {
+    formattedCandidates.sort((a, b) => b.price - a.price);
+  } else if (sort === 'moq-asc') {
+    formattedCandidates.sort((a, b) => a.moq - b.moq);
+  } else {
+    if (referenceProduct) {
+      formattedCandidates.sort((a, b) => (b.similarityScore || 0) - (a.similarityScore || 0));
+    } else {
+      formattedCandidates.sort((a, b) => (b.stock > 0 ? 1 : 0) - (a.stock > 0 ? 1 : 0));
+    }
+  }
+
+  const resultLimit = parseInt(limit, 10) || 12;
+  const slicedResults = formattedCandidates.slice(0, resultLimit);
+
+  const availableCategories = [...new Set(filtered.map((c) => c.categorySlug))];
+  const availableMaterials = [...new Set(formattedCandidates.map((c) => c.material).filter(Boolean))];
+
+  return {
+    referenceProduct,
+    similarProducts: slicedResults,
+    totalMatches: formattedCandidates.length,
+    availableFilters: {
+      categories: availableCategories,
+      materials: availableMaterials,
+    },
   };
 }
 

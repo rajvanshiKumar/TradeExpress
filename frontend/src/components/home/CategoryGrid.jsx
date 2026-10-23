@@ -117,7 +117,7 @@ export default function CategoryGrid() {
           </Link>
         </div>
 
-        {/* 6-Column Responsive Grid of White Cards with Real HD Photos (No cartoons) */}
+        {/* 6-Column Responsive Grid: Full Images with Title Appearing on the Image from the Bottom Side */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-3.5 md:gap-4">
           {allCards.map((card) => {
             const photoId =
@@ -127,33 +127,41 @@ export default function CategoryGrid() {
               REAL_HD_IMAGES[card.illustration] ||
               "photo-1498049794561-7780e7231661";
 
-            const photoSrc = photoUrl(photoId, 320, 320);
+            const photoSrc = photoUrl(photoId, 480, 480);
 
             return (
               <Link
                 key={card.id}
                 to={card.to}
-                className="group flex flex-col items-center justify-center rounded-2xl border border-white/30 bg-white p-3 sm:p-4 text-center shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+                className="group relative flex flex-col justify-end overflow-hidden rounded-2xl bg-white aspect-[4/3.8] sm:aspect-[4/3.8] shadow-[0_8px_22px_-3px_rgba(18,63,37,0.15),0_3px_8px_-2px_rgba(18,63,37,0.08)] ring-1 ring-emerald-900/10 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_38px_-4px_rgba(18,63,37,0.26),0_8px_16px_-4px_rgba(18,63,37,0.14)] hover:ring-emerald-500/60"
               >
-                {/* Category Real HD Photograph (No cartoons) */}
-                <div className="flex size-14 sm:size-16 shrink-0 items-center justify-center rounded-xl overflow-hidden bg-slate-100 group-hover:scale-105 transition-transform duration-200 shadow-2xs border border-slate-100">
-                  <img
-                    src={photoSrc}
-                    alt={card.name}
-                    width="80"
-                    height="80"
-                    loading="lazy"
-                    className="size-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = FALLBACK_IMAGE;
-                    }}
-                  />
-                </div>
+                {/* Full-bleed Category Real HD Photograph (Full of Card) */}
+                <img
+                  src={photoSrc}
+                  alt={card.name}
+                  width="360"
+                  height="360"
+                  loading="lazy"
+                  className="absolute inset-0 size-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                  onError={(e) => {
+                    e.currentTarget.src = FALLBACK_IMAGE;
+                  }}
+                />
 
-                {/* Centered Category Name */}
-                <span className="mt-2.5 text-xs sm:text-[13px] font-semibold text-navy-900 group-hover:text-brand-700 transition-colors line-clamp-2 leading-tight">
-                  {card.name}
-                </span>
+                {/* Subtle photo depth overlay */}
+                <div
+                  className="absolute inset-0 bg-gradient-to-t from-emerald-950/20 via-transparent to-transparent opacity-80"
+                  aria-hidden="true"
+                />
+
+                {/* Title Appearing Directly on the Image from the Bottom Side */}
+                <div className="relative z-10 w-full p-2 sm:p-2.5">
+                  <div className="w-full rounded-xl bg-emerald-50/95 backdrop-blur-md border border-emerald-200/80 px-2.5 py-2 text-center shadow-xs transition-all duration-200 group-hover:bg-emerald-100/95 group-hover:border-emerald-400 group-hover:shadow-sm">
+                    <span className="block text-xs sm:text-[13px] font-extrabold text-emerald-950 tracking-tight line-clamp-2 leading-snug group-hover:text-emerald-700 transition-colors">
+                      {card.name}
+                    </span>
+                  </div>
+                </div>
               </Link>
             );
           })}

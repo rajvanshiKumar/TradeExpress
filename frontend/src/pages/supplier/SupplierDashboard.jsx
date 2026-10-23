@@ -65,7 +65,7 @@ function Overview({ company, products }) {
       </div>
 
       {/* Plans Comparison Modal */}
-      <Modal open={showPlansModal} onClose={() => setShowPlansModal(false)} title="TradeSphere Supplier Plans" className="max-w-2xl">
+      <Modal open={showPlansModal} onClose={() => setShowPlansModal(false)} title="TradeExpress Supplier Plans" className="max-w-2xl">
         <div className="space-y-4">
           <p className="text-xs text-muted">Compare wholesale merchant tiers and listing capacity:</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

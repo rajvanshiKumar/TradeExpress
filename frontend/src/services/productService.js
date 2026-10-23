@@ -33,7 +33,7 @@ const productService = {
       const known = new Set(local.map((item) => item.id));
       return [...local, ...remote.filter((item) => !known.has(item.id))];
     } catch (error) {
-      console.warn(`[TradeSphere] ${error.message} Showing local data instead.`);
+      console.warn(`[TradeExpress] ${error.message} Showing local data instead.`);
       return local;
     }
   },
