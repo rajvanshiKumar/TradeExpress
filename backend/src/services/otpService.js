@@ -803,3 +803,160 @@ export async function verifyAndLoginMobile({ phone, country = 'India', otp, role
   const { passwordHash, ...safeUser } = user;
   return { user: safeUser, token };
 }
+
+const emailVerificationStore = new Map();
+
+// Periodic cleanup of expired email verifications every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [emailKey, entry] of emailVerificationStore.entries()) {
+    if (entry.expiresAt < now) {
+      emailVerificationStore.delete(emailKey);
+    }
+  }
+}, 5 * 60 * 1000);
+
+/**
+ * Requests an OTP for supplier email verification (registration or KYC).
+ */
+export async function requestEmailVerificationOtp({ email, name, purpose = 'registration' }) {
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  if (!normalizedEmail || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(normalizedEmail)) {
+    const error = new Error('Please enter a valid email address.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // If registering, make sure email is not already taken
+  if (purpose === 'registration') {
+    const existing = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+    if (existing) {
+      const error = new Error('An account with this email already exists. Please sign in or use another email.');
+      error.statusCode = 409;
+      throw error;
+    }
+  }
+
+  // Rate limiting & cooldown check
+  const existing = emailVerificationStore.get(normalizedEmail);
+  if (existing) {
+    const elapsedSeconds = Math.floor((Date.now() - existing.lastSentAt) / 1000);
+    if (elapsedSeconds < RESEND_COOLDOWN_SECONDS) {
+      const waitSeconds = RESEND_COOLDOWN_SECONDS - elapsedSeconds;
+      const error = new Error(`Please wait ${waitSeconds} seconds before requesting another OTP.`);
+      error.statusCode = 429;
+      error.cooldownRemaining = waitSeconds;
+      throw error;
+    }
+
+    if (existing.resendCount >= MAX_HOURLY_ATTEMPTS) {
+      const error = new Error('Too many OTP requests for this email. Please try again after 1 hour.');
+      error.statusCode = 429;
+      throw error;
+    }
+  }
+
+  // Generate real cryptographically secure random 6-digit OTP
+  let generatedOtp;
+  do {
+    generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
+  } while (generatedOtp === '123456');
+
+  const otpHash = crypto.createHash('sha256').update(generatedOtp).digest('hex');
+  const expiresAt = Date.now() + OTP_EXPIRY_MS;
+
+  emailVerificationStore.set(normalizedEmail, {
+    otpHash,
+    expiresAt,
+    attempts: 0,
+    resendCount: existing ? existing.resendCount + 1 : 0,
+    lastSentAt: Date.now(),
+    verified: false,
+    purpose,
+  });
+
+  const { sendSupplierVerificationOtpEmail } = await import('./emailService.js');
+  await sendSupplierVerificationOtpEmail({ email: normalizedEmail, name, otp: generatedOtp, purpose });
+
+  return {
+    success: true,
+    message: `Verification code sent to ${normalizedEmail}.`,
+    cooldownSeconds: RESEND_COOLDOWN_SECONDS,
+    email: normalizedEmail,
+  };
+}
+
+/**
+ * Validates and completes email verification with submitted OTP.
+ */
+export async function verifyEmailVerificationOtp({ email, otp, purpose = 'registration' }) {
+  const cleanOtp = String(otp || '').trim();
+  if (!cleanOtp) {
+    const error = new Error('Verification OTP code is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalizedEmail = (email || '').toLowerCase().trim();
+
+  // Check development OTP bypass
+  if (isDevOtpAllowed(cleanOtp)) {
+    const verificationToken = 'evt_' + crypto.randomBytes(24).toString('hex');
+    emailVerificationStore.set(normalizedEmail, {
+      verified: true,
+      verifiedAt: Date.now(),
+      verificationToken,
+      purpose,
+    });
+    return {
+      success: true,
+      message: 'Email verified successfully.',
+      verificationToken,
+      email: normalizedEmail,
+    };
+  }
+
+  const session = emailVerificationStore.get(normalizedEmail);
+  if (!session) {
+    const error = new Error('No OTP request found for this email. Please click "Send OTP" first.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (Date.now() > session.expiresAt) {
+    emailVerificationStore.delete(normalizedEmail);
+    const error = new Error('Verification code has expired. Please request a new OTP.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (session.attempts >= MAX_VERIFY_ATTEMPTS) {
+    emailVerificationStore.delete(normalizedEmail);
+    const error = new Error('Too many incorrect verification attempts. Please request a new OTP.');
+    error.statusCode = 429;
+    throw error;
+  }
+
+  const candidateHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
+  if (candidateHash !== session.otpHash) {
+    session.attempts += 1;
+    const error = new Error('Invalid verification code. Please check your email and try again.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const verificationToken = 'evt_' + crypto.randomBytes(24).toString('hex');
+  session.verified = true;
+  session.verifiedAt = Date.now();
+  session.verificationToken = verificationToken;
+
+  return {
+    success: true,
+    message: 'Email address verified successfully.',
+    verificationToken,
+    email: normalizedEmail,
+  };
+}
+

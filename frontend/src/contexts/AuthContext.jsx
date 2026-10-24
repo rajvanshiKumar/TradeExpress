@@ -289,7 +289,7 @@ export function AuthProvider({ children }) {
   }, [accounts, setAccounts, setSession, lockMessage, recordFailure]);
 
   /** Registers a Buyer or Supplier. Only a password hash is saved. Admin can never be chosen here. */
-  const register = useCallback(async ({ name, email, password, company, country, city, phone, role, verificationToken }) => {
+  const register = useCallback(async ({ name, email, password, company, country, city, phone, role, verificationToken, emailVerificationToken }) => {
     if (!PUBLIC_ROLES.includes(role)) return { ok: false, error: 'Please choose Buyer or Supplier.' };
     if (!isCryptoAvailable()) return { ok: false, error: 'Registration needs a secure connection (https or localhost).' };
     const clean = normalizeEmail(email);
@@ -313,11 +313,13 @@ export function AuthProvider({ children }) {
             city: city?.trim() || '',
             country: country || 'India',
             verificationToken: verificationToken || '',
+            emailVerificationToken: emailVerificationToken || '',
           }),
         });
         const data = await response.json();
         if (!response.ok || !data.success) {
           return { ok: false, error: data.message || 'An account with this email already exists.' };
+
         }
         if (data.data) {
           backendUser = data.data.user;

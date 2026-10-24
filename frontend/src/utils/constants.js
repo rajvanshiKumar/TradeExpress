@@ -62,13 +62,73 @@ export const COUNTRY_PHONE_RULES = {
   Kenya: { dial: '254', lengths: [9], pattern: /^[17]\d{8}$/, example: '712 345678' },
   Nigeria: { dial: '234', lengths: [10], pattern: /^[789][01]\d{8}$/, example: '802 123 4567' },
 };
+
 export const COUNTRIES = Object.keys(COUNTRY_PHONE_RULES);
+
+export const COUNTRY_FLAGS = {
+  India: '🇮🇳',
+  'United States': '🇺🇸',
+  Canada: '🇨🇦',
+  'United Kingdom': '🇬🇧',
+  'United Arab Emirates': '🇦🇪',
+  'Saudi Arabia': '🇸🇦',
+  Singapore: '🇸🇬',
+  Australia: '🇦🇺',
+  Germany: '🇩🇪',
+  France: '🇫🇷',
+  Italy: '🇮🇹',
+  Spain: '🇪🇸',
+  Netherlands: '🇳🇱',
+  'South Africa': '🇿🇦',
+  Brazil: '🇧🇷',
+  Mexico: '🇲🇽',
+  Japan: '🇯🇵',
+  'South Korea': '🇰🇷',
+  China: '🇨🇳',
+  Vietnam: '🇻🇳',
+  Bangladesh: '🇧🇩',
+  'Türkiye': '🇹🇷',
+  Kenya: '🇰🇪',
+  Nigeria: '🇳🇬',
+};
 
 export const LANGUAGES = [{ code: 'en', label: 'English' }];
 
 export const DEFAULT_PREFERENCES = { country: 'India', language: 'en' };
 
-export const BUSINESS_TYPES = ['Manufacturer', 'Trading Company', 'Exporter', 'Wholesaler'];
+export const BUSINESS_TYPES = [
+  'Manufacturer',
+  'Wholesaler',
+  'Distributor',
+  'Trader',
+  'Exporter',
+  'Importer',
+  'Retailer',
+  'Supplier',
+  'Dealer',
+  'Authorized Dealer',
+  'Reseller',
+  'OEM Manufacturer',
+  'ODM Manufacturer',
+  'Contract Manufacturer',
+  'Private Label Manufacturer',
+  'Factory / Industrial Producer',
+  'Artisan / Handicraft Producer',
+  'Farmer / Agricultural Producer',
+  'Cooperative / Producer Group',
+  'Service Provider',
+  'Logistics / Freight Provider',
+  'Raw Material Supplier',
+  'Component / Parts Supplier',
+  'Stockist',
+  'Trading Company',
+  'Buying House / Sourcing Agent',
+  'Franchisee',
+  'Brand Owner',
+  'Repair & Maintenance Provider',
+  'Other',
+];
+
 
 // Shipping estimates. `base` is a flat fee in INR and `rate` a share of the goods value.
 export const SHIPPING_METHODS = [

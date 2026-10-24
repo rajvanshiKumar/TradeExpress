@@ -1,9 +1,9 @@
-import { Globe } from 'lucide-react';
+import { ChevronDown, Globe } from 'lucide-react';
 import Dropdown from '../common/Dropdown';
 import Select from '../common/Select';
 import useAuth from '../../hooks/useAuth';
 import useCurrency from '../../hooks/useCurrency';
-import { COUNTRIES, LANGUAGES } from '../../utils/constants';
+import { COUNTRIES, COUNTRY_FLAGS, LANGUAGES } from '../../utils/constants';
 
 /** Region, language and currency selects, shared by the header dropdown and the mobile menu. */
 export function PreferenceFields({ idPrefix = 'pref' }) {
@@ -17,7 +17,10 @@ export function PreferenceFields({ idPrefix = 'pref' }) {
         label="Ship to"
         value={preferences.country}
         onChange={(event) => setPreferences({ country: event.target.value })}
-        options={COUNTRIES}
+        options={COUNTRIES.map((c) => ({
+          value: c,
+          label: `${COUNTRY_FLAGS[c] || '🌐'} ${c}`,
+        }))}
       />
       <Select
         id={`${idPrefix}-language`}
@@ -54,6 +57,7 @@ export default function PreferencesMenu() {
   const { preferences } = useAuth();
   const { currency, currencies } = useCurrency();
   const activeCur = currencies.find((c) => c.code === currency) || { symbol: '₹', code: 'INR' };
+  const flag = COUNTRY_FLAGS[preferences.country] || '🌐';
 
   return (
     <Dropdown
@@ -64,12 +68,13 @@ export default function PreferencesMenu() {
           {...props}
           aria-label={`Region and language: ${preferences.country}, English, ${activeCur.code}`}
           title={`Preferences: ${preferences.country} · ${activeCur.code}`}
-          className="inline-flex h-8 sm:h-8.5 xl:h-9 items-center gap-1 sm:gap-1.5 rounded-full px-2 text-left hover:bg-navy-900/5 transition-colors text-navy-800"
+          className="inline-flex h-8 sm:h-8.5 xl:h-9 items-center gap-1 sm:gap-1.5 rounded-full px-2 sm:px-2.5 text-left hover:bg-navy-900/5 transition-colors text-navy-800"
         >
-          <Globe className="size-3.5 sm:size-4" aria-hidden="true" />
+          <span className="text-sm shrink-0" aria-hidden="true">{flag}</span>
           <span className="text-xs font-bold text-navy-900">
             {activeCur.code}
           </span>
+          <ChevronDown className="size-3 text-navy-400" aria-hidden="true" />
         </button>
       )}
     >

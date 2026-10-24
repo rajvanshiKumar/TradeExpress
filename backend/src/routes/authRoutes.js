@@ -80,6 +80,26 @@ router.post(
 );
 
 router.post(
+  '/send-email-verification-otp',
+  otpSendLimiter,
+  validate([
+    body('email').isEmail().withMessage('Valid email is required.'),
+  ]),
+  authController.sendEmailVerificationOtp
+);
+
+router.post(
+  '/verify-email-verification-otp',
+  otpVerifyLimiter,
+  validate([
+    body('email').isEmail().withMessage('Valid email is required.'),
+    body('otp').trim().notEmpty().withMessage('OTP is required.').isLength({ min: 4, max: 9 }).withMessage('Valid OTP code is required.'),
+  ]),
+  authController.verifyEmailVerificationOtp
+);
+
+
+router.post(
   '/send-mobile-login-otp',
   otpSendLimiter,
   validate([
@@ -117,9 +137,11 @@ router.post(
     body('name').trim().notEmpty().withMessage('Name is required.'),
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
     body('verificationToken').optional().trim(),
+    body('emailVerificationToken').optional().trim(),
   ]),
   authController.register
 );
+
 
 router.post(
   '/login',

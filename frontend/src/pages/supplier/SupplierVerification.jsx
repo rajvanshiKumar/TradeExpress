@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Info, Plus, Send, Trash2, ExternalLink, Building2, Landmark, MapPin } from 'lucide-react';
+import { FileText, Info, Plus, Send, Trash2, ExternalLink, Building2, Landmark, MapPin, Mail, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Button, { IconButton } from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -7,6 +7,7 @@ import Select from '../../components/common/Select';
 import VerificationBadge from '../../components/common/VerificationBadge';
 import EmptyState from '../../components/common/EmptyState';
 import SupplierGuard from './SupplierGuard';
+import useAuth from '../../hooks/useAuth';
 import useProducts from '../../hooks/useProducts';
 import useNotifications from '../../hooks/useNotifications';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -18,9 +19,29 @@ import { apiGet, apiPost } from '../../services/apiClient';
 const EMPTY_DOC = { type: DOCUMENT_TYPES[0], reference: '', fileName: '', fileUrl: '' };
 
 function Verification({ company }) {
+  const { user } = useAuth();
   const { submitVerification } = useProducts();
   const { showToast, addNotification } = useNotifications();
   const initialInfo = getVerification(company);
+
+  const [businessEmail, setBusinessEmail] = useState(company.contact?.email || user?.email || '');
+  const [isEmailVerified, setIsEmailVerified] = useState(
+    Boolean(user?.isVerified || company.isVerified || (user?.email && user.email === company.contact?.email))
+  );
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpCode, setEmailOtpCode] = useState('');
+  const [emailOtpSending, setEmailOtpSending] = useState(false);
+  const [emailOtpVerifying, setEmailOtpVerifying] = useState(false);
+  const [emailCooldown, setEmailCooldown] = useState(0);
+  const [emailOtpFeedback, setEmailOtpFeedback] = useState({ type: '', message: '' });
+
+  useEffect(() => {
+    if (emailCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setEmailCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [emailCooldown]);
 
   const [kycData, setKycData] = useState({
     gstin: company.gstin || '',
@@ -42,6 +63,7 @@ function Verification({ company }) {
   const [errors, setErrors] = useState({});
 
   const locked = kycData.kycStatus === 'under-review' || kycData.kycStatus === 'PENDING';
+
 
   // Fetch latest KYC from backend MySQL
   useEffect(() => {
@@ -133,10 +155,109 @@ function Verification({ company }) {
     if (input) input.value = '';
   };
 
+  const handleSendEmailOtp = async () => {
+    if (emailOtpSending || emailCooldown > 0) return;
+    const clean = (businessEmail || '').trim().toLowerCase();
+    if (!clean || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(clean)) {
+      setErrors((prev) => ({ ...prev, email: 'Enter a valid business email address.' }));
+      return;
+    }
+
+    setEmailOtpSending(true);
+    setEmailOtpFeedback({ type: '', message: '' });
+    setErrors((prev) => ({ ...prev, email: '' }));
+
+    try {
+      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const res = await fetch(`${baseUrl}/auth/send-email-verification-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          email: clean,
+          name: company.name || user?.name || 'Supplier Partner',
+          purpose: 'kyc',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setEmailOtpSent(true);
+        setEmailCooldown(data.cooldownSeconds || 60);
+        setEmailOtpFeedback({
+          type: 'success',
+          message: data.message || `Verification code sent to ${clean}. Please check your email.`,
+        });
+        showToast('Verification code dispatched to your business email.');
+      } else {
+        setEmailOtpFeedback({
+          type: 'error',
+          message: data.message || 'Unable to send verification OTP.',
+        });
+      }
+    } catch {
+      setEmailOtpFeedback({
+        type: 'error',
+        message: 'Could not connect to email verification service.',
+      });
+    } finally {
+      setEmailOtpSending(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    const cleanCode = emailOtpCode.trim();
+    if (emailOtpVerifying || cleanCode.length < 4) return;
+    const clean = (businessEmail || '').trim().toLowerCase();
+
+    setEmailOtpVerifying(true);
+    setEmailOtpFeedback({ type: '', message: '' });
+
+    try {
+      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const res = await fetch(`${baseUrl}/auth/verify-email-verification-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          email: clean,
+          otp: cleanCode,
+          purpose: 'kyc',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsEmailVerified(true);
+        setEmailOtpFeedback({
+          type: 'success',
+          message: 'Official business email verified successfully!',
+        });
+        setErrors((prev) => ({ ...prev, email: '' }));
+        showToast('Official business email verified successfully!');
+      } else {
+        setEmailOtpFeedback({
+          type: 'error',
+          message: data.message || 'Invalid or expired OTP. Please try again.',
+        });
+      }
+    } catch {
+      setEmailOtpFeedback({
+        type: 'error',
+        message: 'Unable to verify OTP with server.',
+      });
+    } finally {
+      setEmailOtpVerifying(false);
+    }
+  };
+
   const submit = async () => {
     const errs = {};
     const gstinClean = kycData.gstin.trim().toUpperCase();
     const panClean = kycData.pan.trim().toUpperCase();
+
+    if (!isEmailVerified && !locked) {
+      errs.email = 'Please verify your official business email with OTP before submitting.';
+      if (!emailOtpSent && businessEmail) {
+        handleSendEmailOtp();
+      }
+    }
 
     if (gstinClean && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstinClean)) {
       errs.gstin = 'Invalid GSTIN format (e.g. 27ABCDE1234F1Z5).';
@@ -165,6 +286,7 @@ function Verification({ company }) {
         warehouseAddress: kycData.warehouseAddress.trim(),
         warehouseState: kycData.warehouseState.trim(),
         warehousePincode: kycData.warehousePincode.trim(),
+        businessEmail: (businessEmail || '').trim().toLowerCase(),
         documents: documents.map((doc) => ({
           type: doc.type,
           documentNumber: doc.reference,
@@ -172,6 +294,7 @@ function Verification({ company }) {
           fileUrl: doc.fileUrl,
         })),
       });
+
 
       setKycData((prev) => ({ ...prev, kycStatus: 'under-review' }));
       submitVerification(company.id, documents);
@@ -240,12 +363,125 @@ function Verification({ company }) {
         </div>
       </section>
 
+      {/* Official Business Email Verification */}
+      <section className="ts-card p-5 sm:p-6 space-y-5" aria-labelledby="email-verify-title">
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-navy-900/[0.06] pb-3">
+          <div className="flex items-center gap-2">
+            <Mail className="size-5 text-brand-600" />
+            <h2 id="email-verify-title" className="text-base font-bold text-ink">Authorized Business Email</h2>
+          </div>
+          {isEmailVerified ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle2 className="size-3.5 text-emerald-600" />
+              Verified with OTP
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              <ShieldCheck className="size-3.5 text-amber-600" />
+              Email Verification Required
+            </span>
+          )}
+        </div>
+
+        <p className="text-xs text-muted">
+          Official company correspondence, purchase orders, RFQ updates, and statutory notices will be directed to this verified address.
+        </p>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:items-end">
+          <div className="sm:col-span-2">
+            <Input
+              id="kyc-email"
+              label="Official Business Email"
+              type="email"
+              disabled={locked || isEmailVerified}
+              value={businessEmail}
+              onChange={(e) => {
+                setBusinessEmail(e.target.value);
+                setErrors((prev) => ({ ...prev, email: '' }));
+              }}
+              error={errors.email}
+              placeholder="e.g. contact@yourcompany.com"
+            />
+          </div>
+
+          <div>
+            {!isEmailVerified && !locked ? (
+              <Button
+                type="button"
+                variant={emailOtpSent ? 'outline' : 'primary'}
+                onClick={handleSendEmailOtp}
+                disabled={emailOtpSending || !businessEmail}
+                className="w-full"
+              >
+                {emailOtpSending ? 'Sending OTP...' : emailOtpSent ? (emailCooldown > 0 ? `Resend (${emailCooldown}s)` : 'Resend OTP') : 'Send OTP'}
+              </Button>
+            ) : isEmailVerified && !locked ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                onClick={() => {
+                  setIsEmailVerified(false);
+                  setEmailOtpSent(false);
+                  setEmailOtpCode('');
+                }}
+                className="w-full"
+              >
+                Change Email
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        {emailOtpSent && !isEmailVerified && !locked && (
+          <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-3 animate-in fade-in duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <p className="text-xs text-navy-900 font-medium">
+                Enter the 6-digit verification code dispatched to <strong className="font-semibold text-navy-950">{businessEmail}</strong>:
+              </p>
+              {emailCooldown > 0 && (
+                <span className="text-xs text-muted font-mono">Resend available in {emailCooldown}s</span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                id="kyc-email-otp"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={emailOtpCode}
+                onChange={(e) => setEmailOtpCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••••"
+                className="w-36 tracking-[0.3em] font-mono text-center text-sm font-bold py-2 px-3 rounded-lg border border-navy-300 bg-white text-navy-950 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm"
+              />
+              <Button
+                type="button"
+                onClick={handleVerifyEmailOtp}
+                disabled={emailOtpVerifying || emailOtpCode.length < 4}
+              >
+                {emailOtpVerifying ? 'Verifying...' : 'Verify OTP'}
+              </Button>
+            </div>
+
+            {emailOtpFeedback.message && (
+              <p className={`text-xs font-semibold ${emailOtpFeedback.type === 'error' ? 'text-danger' : 'text-emerald-700'}`}>
+                {emailOtpFeedback.message}
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
       {/* Statutory Details Form */}
       <section className="ts-card p-5 sm:p-6 space-y-5" aria-labelledby="statutory-title">
         <div className="flex items-center gap-2 border-b border-navy-900/[0.06] pb-3">
           <Building2 className="size-5 text-brand-600" />
           <h2 id="statutory-title" className="text-base font-bold text-ink">Statutory & Tax Details</h2>
         </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             id="kyc-gstin"

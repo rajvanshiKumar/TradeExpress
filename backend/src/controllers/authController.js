@@ -51,6 +51,27 @@ export async function verifyEmailOtp(req, res, next) {
   }
 }
 
+export async function sendEmailVerificationOtp(req, res, next) {
+  try {
+    const { email, name, purpose } = req.body;
+    const result = await otpService.requestEmailVerificationOtp({ email, name, purpose });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function verifyEmailVerificationOtp(req, res, next) {
+  try {
+    const { email, otp, purpose } = req.body;
+    const result = await otpService.verifyEmailVerificationOtp({ email, otp, purpose });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+
 export async function sendMobileLoginOtp(req, res, next) {
   try {
     const { phone, country, role } = req.body;

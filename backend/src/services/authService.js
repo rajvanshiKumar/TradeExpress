@@ -3,7 +3,7 @@ import prisma from '../config/db.js';
 import { signJwt } from '../utils/jwt.js';
 import { normalizeMobile, validateVerifiedMobile, validateEmailLoginOtp } from './otpService.js';
 
-export async function registerUser({ email, password, name, role = 'BUYER', company, companyName, phone, city, country, verificationToken }) {
+export async function registerUser({ email, password, name, role = 'BUYER', company, companyName, phone, city, country, verificationToken, emailVerificationToken }) {
   const upperRole = (role || 'BUYER').toUpperCase();
   if (!['BUYER', 'SUPPLIER'].includes(upperRole)) {
     const error = new Error('Invalid account type. Only Buyer and Supplier accounts can be created.');
@@ -70,6 +70,7 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
       city: city || '',
       country: country || 'India',
       isPhoneVerified: true,
+      isVerified: Boolean(emailVerificationToken),
     },
     select: {
       id: true,
@@ -81,9 +82,11 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
       city: true,
       country: true,
       isPhoneVerified: true,
+      isVerified: true,
       createdAt: true,
     },
   });
+
 
   const token = signJwt({ userId: user.id, email: user.email, role: user.role });
   return { user, token };
@@ -424,8 +427,10 @@ export async function submitKyc(userId, { gstin, pan, bankAccountNumber, bankIfs
       warehouseState: warehouseState ? warehouseState.trim() : undefined,
       warehousePincode: warehousePincode ? warehousePincode.trim() : undefined,
       kycStatus: 'PENDING',
+      isVerified: true,
     },
     select: {
+
       id: true,
       email: true,
       name: true,

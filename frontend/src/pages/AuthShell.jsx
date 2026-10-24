@@ -25,13 +25,13 @@ export default function AuthShell({
             wide ? 'max-w-6xl' : 'max-w-5xl'
           }`}
         >
-          {/* Left Side: Dynamic Buyer & Supplier HD Visual Banners (Full Background Width) */}
-          <aside className="relative hidden overflow-hidden bg-[#021d12] lg:flex w-full h-full min-h-[600px]">
+          {/* Left Side: Full-bleed Visual Hero Banner (Edge-to-edge, never half) */}
+          <aside className="relative hidden overflow-hidden bg-navy-950 lg:block w-full h-full min-h-[600px]">
             <img
               key={bannerImage}
               src={bannerImage}
               alt={bannerAlt}
-              className="w-full h-full object-cover object-center select-none pointer-events-none transition-all duration-300"
+              className="absolute inset-0 w-full h-full object-cover object-center select-none pointer-events-none transition-all duration-500"
             />
           </aside>
 

@@ -320,7 +320,7 @@ export default function Header() {
               size="sm"
               className={`!size-7.5 sm:!size-8 xl:!size-8.5 shrink-0 ${scrolled ? "" : "max-lg:hidden"}`}
             />
-            <div className="hidden min-[1680px]:block">
+            <div className="hidden md:block">
               <PreferencesMenu />
             </div>
             <IconLink

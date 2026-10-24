@@ -16,7 +16,7 @@ import {
 import Button from "../common/Button";
 import useAuth from "../../hooks/useAuth";
 import useNotifications from "../../hooks/useNotifications";
-import { ROLE_HOME, COUNTRIES, COUNTRY_PHONE_RULES } from "../../utils/constants";
+import { ROLE_HOME, COUNTRIES, COUNTRY_FLAGS, COUNTRY_PHONE_RULES } from "../../utils/constants";
 import {
   focusFirstError,
   hasErrors,
@@ -26,33 +26,6 @@ import {
   rules,
   validate,
 } from "../../utils/validators";
-
-const COUNTRY_FLAGS = {
-  India: "🇮🇳",
-  "United States": "🇺🇸",
-  Canada: "🇨🇦",
-  "United Kingdom": "🇬🇧",
-  "United Arab Emirates": "🇦🇪",
-  "Saudi Arabia": "🇸🇦",
-  Singapore: "🇸🇬",
-  Australia: "🇦🇺",
-  Germany: "🇩🇪",
-  France: "🇫🇷",
-  Italy: "🇮🇹",
-  Spain: "🇪🇸",
-  Netherlands: "🇳🇱",
-  "South Africa": "🇿🇦",
-  Brazil: "🇧🇷",
-  Mexico: "🇲🇽",
-  Japan: "🇯🇵",
-  "South Korea": "🇰🇷",
-  China: "🇨🇳",
-  Vietnam: "🇻🇳",
-  Bangladesh: "🇧🇩",
-  "Türkiye": "🇹🇷",
-  Kenya: "🇰🇪",
-  Nigeria: "🇳🇬",
-};
 
 const ROLE_NAMES = {
   buyer: "Buyer",

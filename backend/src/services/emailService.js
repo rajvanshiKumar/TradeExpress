@@ -143,3 +143,74 @@ export async function sendLoginOtpEmail({ email, name = 'Valued User', otp }) {
   }
 }
 
+export async function sendSupplierVerificationOtpEmail({ email, name = 'Supplier Partner', otp, purpose = 'registration' }) {
+  try {
+    const transporter = await getTransporter();
+    const fromAddress =
+      (ENV.SMTP_HOST && ENV.SMTP_HOST.includes('gmail')) || (ENV.SMTP_USER && ENV.SMTP_USER.includes('@gmail.com'))
+        ? `TradeExpress Security <${ENV.SMTP_USER}>`
+        : ENV.SMTP_FROM;
+
+    const isKyc = purpose === 'kyc' || purpose === 'verification';
+    const title = isKyc ? 'Supplier KYC Email Verification' : 'Supplier Registration Email Verification';
+    const actionText = isKyc
+      ? 'verify your official company email address for your Supplier KYC & Statutory documents review.'
+      : 'verify your official work email address and complete your TradeExpress supplier onboarding.';
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; color: #1e293b;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="display: inline-block; padding: 6px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 9999px; color: #047857; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;">
+            TradeExpress Marketplace
+          </div>
+          <h2 style="color: #0f172a; margin-top: 14px; margin-bottom: 6px; font-size: 22px; font-weight: 800;">${title}</h2>
+          <p style="color: #64748b; font-size: 13px; margin: 0;">Official Verification Code</p>
+        </div>
+
+        <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-bottom: 14px;">Hello <strong>${name || 'Supplier'}</strong>,</p>
+        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin-bottom: 20px;">
+          Please use the one-time password (OTP) below to ${actionText}
+        </p>
+
+        <div style="background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 12px; padding: 22px 16px; text-align: center; margin-bottom: 22px;">
+          <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">Your 6-Digit Verification Code</div>
+          <div style="font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #047857; font-family: monospace;">${otp}</div>
+          <div style="font-size: 12px; color: #94a3b8; margin-top: 8px;">Valid for 10 minutes · Do not share with anyone</div>
+        </div>
+
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px 14px; margin-bottom: 22px;">
+          <p style="font-size: 12px; color: #166534; margin: 0; line-height: 1.5;">
+            🔒 <strong>Security Notice:</strong> TradeExpress staff will never ask for your verification code or account password over phone, SMS, or WhatsApp.
+          </p>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+        <p style="font-size: 11px; color: #94a3b8; text-align: center; margin: 0;">
+          TradeExpress B2B Wholesale Marketplace · Automated Security System
+        </p>
+      </div>
+    `;
+
+    const mailOptions = {
+      from: fromAddress,
+      to: email,
+      subject: `Your TradeExpress Supplier Verification Code: ${otp}`,
+      html,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`[TradeExpress Email] Supplier verification OTP email dispatched to ${email}. Message ID: ${info.messageId}`);
+
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    if (previewUrl) {
+      console.log(`[TradeExpress Verification Email Preview URL]: ${previewUrl}`);
+    }
+
+    return { success: true, messageId: info.messageId, previewUrl };
+  } catch (error) {
+    console.error(`[TradeExpress Email Error] Failed to send supplier verification OTP email to ${email}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+
