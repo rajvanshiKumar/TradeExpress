@@ -120,15 +120,8 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
       throw error;
     }
   } else {
-    if (role) {
-      const upperRole = String(role).toUpperCase();
-      if (user.role !== upperRole && user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
-        const friendlyCurrent = user.role === 'SUPPLIER' ? 'Supplier' : 'Buyer';
-        const error = new Error(`This account is registered as a ${friendlyCurrent}. Please select ${friendlyCurrent} above to sign in.`);
-        error.statusCode = 400;
-        throw error;
-      }
-    }
+    // For member login, authenticate the user seamlessly regardless of which tab was active.
+    // The user's registered role (SUPPLIER or BUYER) is returned so they are routed to their appropriate portal.
   }
 
   if (user.isActive === false || user.status === 'SUSPENDED') {

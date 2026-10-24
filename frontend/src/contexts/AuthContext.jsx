@@ -183,14 +183,28 @@ export function AuthProvider({ children }) {
       return { ok: false, error: GENERIC_FAILURE };
     }
 
-    let activeAccount = accounts.find((item) => item.email.toLowerCase() === clean && PUBLIC_ROLES.includes(item.role));
-    if (!activeAccount) {
+    let activeAccount = accounts.find((item) => item.email.toLowerCase() === clean);
+    const resolvedRole = (backendUser.role || activeAccount?.role || expectedRole || 'buyer').toLowerCase();
+
+    if (activeAccount) {
+      activeAccount = {
+        ...activeAccount,
+        id: backendUser.id,
+        status: backendUser.status === 'SUSPENDED' ? 'Suspended' : 'Active',
+        name: backendUser.name || activeAccount.name,
+        role: resolvedRole,
+        company: backendUser.company || backendUser.companyName || activeAccount.company || '',
+        companyId: backendUser.companyId || activeAccount.companyId || null,
+        phone: backendUser.phone || activeAccount.phone || '',
+      };
+      setAccounts((prev) => [activeAccount, ...prev.filter((a) => a.email.toLowerCase() !== clean)]);
+    } else {
       activeAccount = {
         id: backendUser.id,
         status: backendUser.status === 'SUSPENDED' ? 'Suspended' : 'Active',
         name: backendUser.name,
         email: backendUser.email,
-        role: (backendUser.role || expectedRole || 'buyer').toLowerCase(),
+        role: resolvedRole,
         company: backendUser.company || backendUser.companyName || '',
         companyId: backendUser.companyId || null,
         country: backendUser.country || 'India',
@@ -205,9 +219,6 @@ export function AuthProvider({ children }) {
 
     if (activeAccount.status === 'Suspended') {
       return { ok: false, error: 'This account has been suspended. Please contact TradeExpress.' };
-    }
-    if (expectedRole && activeAccount.role !== expectedRole) {
-      return { ok: false, error: `This account is registered as a ${activeAccount.role === 'supplier' ? 'Supplier' : 'Buyer'}. Choose “${activeAccount.role === 'supplier' ? 'Supplier' : 'Buyer'}” above to sign in.` };
     }
 
     setAttempts({ count: 0, lockedUntil: 0 });

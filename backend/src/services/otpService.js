@@ -444,15 +444,7 @@ export async function requestEmailLoginOtp({ email, role }) {
     throw error;
   }
 
-  if (role) {
-    const upperRole = String(role).toUpperCase();
-    if (user.role !== upperRole && user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
-      const friendlyCurrent = user.role === 'SUPPLIER' ? 'Supplier' : 'Buyer';
-      const error = new Error(`This account is registered as a ${friendlyCurrent}. Please select ${friendlyCurrent} above to sign in.`);
-      error.statusCode = 400;
-      throw error;
-    }
-  }
+  // Allow OTP dispatch regardless of which tab is active on the login screen
 
   if (user.isActive === false || user.status === 'SUSPENDED') {
     const error = new Error('Your account is suspended. Reason: ' + (user.statusReason || 'Please contact platform administration.'));
@@ -594,15 +586,7 @@ export async function requestMobileLoginOtp({ phone, country = 'India', role }) 
     throw error;
   }
 
-  if (role) {
-    const upperRole = String(role).toUpperCase();
-    if (user.role !== upperRole && user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
-      const friendlyCurrent = user.role === 'SUPPLIER' ? 'Supplier' : 'Buyer';
-      const error = new Error(`This mobile number is registered as a ${friendlyCurrent}. Please select ${friendlyCurrent} above to sign in.`);
-      error.statusCode = 400;
-      throw error;
-    }
-  }
+  // Allow OTP dispatch regardless of which tab is active on the login screen
 
   if (user.isActive === false || user.status === 'SUSPENDED') {
     const error = new Error('Your account is suspended. Reason: ' + (user.statusReason || 'Please contact platform administration.'));
@@ -725,15 +709,7 @@ export async function verifyAndLoginMobile({ phone, country = 'India', otp, role
     throw error;
   }
 
-  if (role) {
-    const upperRole = String(role).toUpperCase();
-    if (user.role !== upperRole && user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
-      const friendlyCurrent = user.role === 'SUPPLIER' ? 'Supplier' : 'Buyer';
-      const error = new Error(`This mobile number is registered as a ${friendlyCurrent}. Please select ${friendlyCurrent} above to sign in.`);
-      error.statusCode = 400;
-      throw error;
-    }
-  }
+  // Allow login verification regardless of which tab is active on the login screen
 
   if (user.isActive === false || user.status === 'SUSPENDED') {
     const error = new Error('Your account is suspended. Reason: ' + (user.statusReason || 'Please contact platform administration.'));
