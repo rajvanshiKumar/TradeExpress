@@ -15,6 +15,7 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { buildPriceTiers } from '../../data/products';
 import { focusFirstError, hasErrors, rules, validate } from '../../utils/validators';
 import { apiPost, apiPut } from '../../services/apiClient';
+import { photoUrl } from '../../utils/images';
 
 const UNITS = ['piece', 'set', 'pair', 'unit', 'box', 'roll', 'kg', 'meter', 'litre'];
 const GST_RATES = [
@@ -96,16 +97,22 @@ function Form({ company, product }) {
       const formData = new FormData();
       formData.append('file', file);
       const res = await apiPost('upload', formData);
-      const fileUrl = res?.data?.url || res?.url;
+      const fileUrl = res?.data?.url || res?.data?.fileUrl || res?.url || res?.fileUrl;
       if (fileUrl) {
         setValues((prev) => ({ ...prev, photo: fileUrl }));
         showToast('Product photo uploaded successfully!');
+      } else {
+        throw new Error('Upload returned no URL');
       }
     } catch {
-      // Local object URL fallback
-      const localUrl = URL.createObjectURL(file);
-      setValues((prev) => ({ ...prev, photo: localUrl }));
-      showToast('Photo selected.');
+      // Local persistent base64 fallback so it displays and saves even if upload server is offline
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        setValues((prev) => ({ ...prev, photo: dataUrl }));
+        showToast('Photo selected and saved locally.');
+      };
+      reader.readAsDataURL(file);
     } finally {
       setUploadingImage(false);
     }
@@ -124,12 +131,29 @@ function Form({ company, product }) {
     const samplePrice = values.samplePrice ? Number(values.samplePrice) : basePrice;
 
     const data = {
-      name: values.name.trim(), category: values.category, subcategory: values.subcategory || category?.subcategories[0] || 'General', summary: values.summary.trim(),
-      description: values.description.trim() || values.summary.trim(), price: basePrice, unit: values.unit, moq, stock: Number(values.stock), leadTimeDays,
-      variants: colours.length ? { Colour: colours } : {}, specifications: textToSpecs(values.specifications), sampleAvailable: values.sampleAvailable,
-      samplePrice, readyToShip: values.readyToShip, deal: values.deal, status: values.status,
-      hsnCode: values.hsnCode.trim(), gstRate: Number(values.gstRate), weightKg: Number(values.weightKg || 1),
-      photo: values.photo, priceTiers: previewTiers,
+      name: values.name.trim(),
+      category: values.category,
+      categorySlug: values.category,
+      subcategory: values.subcategory || category?.subcategories[0] || 'General',
+      summary: values.summary.trim(),
+      description: values.description.trim() || values.summary.trim(),
+      price: basePrice,
+      unit: values.unit,
+      moq,
+      stock: Number(values.stock),
+      leadTimeDays,
+      variants: colours.length ? { Colour: colours } : {},
+      specifications: textToSpecs(values.specifications),
+      sampleAvailable: values.sampleAvailable,
+      samplePrice,
+      readyToShip: values.readyToShip,
+      deal: values.deal,
+      status: values.status,
+      hsnCode: values.hsnCode.trim(),
+      gstRate: Number(values.gstRate),
+      weightKg: Number(values.weightKg || 1),
+      photo: values.photo,
+      priceTiers: previewTiers,
       shippingEstimate: values.readyToShip ? 'Ships in 3–5 days from stock' : `Ships ${leadTimeDays}–${leadTimeDays + 7} days after order confirmation`,
     };
 
@@ -149,13 +173,19 @@ function Form({ company, product }) {
         showToast('Product updated. The catalogue shows the new details.');
       } else {
         // Create on backend MySQL
+        let createdBackendProduct = null;
         try {
-          await apiPost('supplier/products', { ...data, companyId: company.id });
+          const res = await apiPost('supplier/products', { ...data, companyId: company.id });
+          createdBackendProduct = res?.data || res?.product || null;
         } catch {
           // Fallback smoothly
         }
         addProduct({
-          ...data, companyId: company.id, illustration: data.photo || (category?.illustration ?? 'product-generic'),
+          ...data,
+          id: createdBackendProduct?.id || undefined,
+          sku: createdBackendProduct?.sku || undefined,
+          companyId: company.id,
+          illustration: data.photo || (category?.illustration ?? 'product-generic'),
           packaging: { unitPack: `One ${values.unit} per polybag or box`, cartonQty: moq >= 100 ? 50 : 10, cartonSize: '55 × 40 × 35 cm', note: 'Custom packaging available on request.' },
         });
         showToast('Product added. It is now live in the catalogue.');
@@ -304,12 +334,20 @@ function Form({ company, product }) {
           <div className="ts-card p-5 xl:sticky xl:top-40">
             <p className="ts-label">Product photograph / visual</p>
             {values.photo ? (
-              <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-navy-900/[0.08] bg-surface">
+              <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-navy-900/[0.08] bg-surface group">
                 <img
-                  src={values.photo.startsWith('http') || values.photo.startsWith('blob:') ? values.photo : `http://localhost:5000${values.photo}`}
+                  src={photoUrl(values.photo)}
                   alt="Product preview"
                   className="h-full w-full object-cover"
                 />
+                <button
+                  type="button"
+                  onClick={() => setValues((prev) => ({ ...prev, photo: null }))}
+                  className="absolute top-2 right-2 rounded-lg bg-navy-900/80 px-2.5 py-1 text-xs font-semibold text-white shadow backdrop-blur hover:bg-rose-600 transition"
+                  title="Remove image"
+                >
+                  Remove
+                </button>
               </div>
             ) : (
               <Image
@@ -324,17 +362,17 @@ function Form({ company, product }) {
 
             <div className="mt-3">
               <label htmlFor="product-photo-upload" className="block text-xs font-semibold text-muted mb-1">
-                Upload Custom Image
+                Upload Custom Image (T-Shirt, Electronics, etc.)
               </label>
               <input
                 id="product-photo-upload"
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp,image/jpg"
                 onChange={handleImageFileChange}
                 disabled={uploadingImage}
-                className="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-navy-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
+                className="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-navy-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-brand-600 cursor-pointer"
               />
-              {uploadingImage && <p className="mt-1 text-xs text-brand-600">Uploading image to server...</p>}
+              {uploadingImage && <p className="mt-1 text-xs text-brand-600 font-medium animate-pulse">Uploading image to server...</p>}
             </div>
 
             <div className="mt-5 grid gap-2">

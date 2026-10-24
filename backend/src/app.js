@@ -51,6 +51,7 @@ app.get('/', (req, res) => {
 
 // Serve uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/api/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Main API routes
 app.use('/api', routes);

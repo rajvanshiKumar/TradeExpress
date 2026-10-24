@@ -16,6 +16,12 @@ router.post('/bulk/upload', uploadMemory.single('file'), supplierProductControll
 
 router.post(
   '/',
+  (req, res, next) => {
+    if (!req.body.categorySlug && req.body.category) {
+      req.body.categorySlug = req.body.category;
+    }
+    next();
+  },
   validate([
     body('name').trim().notEmpty().withMessage('Product name is required.'),
     body('categorySlug').trim().notEmpty().withMessage('Category is required.'),

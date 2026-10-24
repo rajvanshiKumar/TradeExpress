@@ -41,17 +41,78 @@ export const REAL_HD_IMAGES = {
   'cover-default': 'photo-1586528116311-ad8dd3c8310d',
 };
 
+function getBackendOrigin() {
+  const rawApi = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PUBLIC_API_BASE_URL) || '';
+  if (rawApi) {
+    return rawApi.replace(/\/api\/?$/, '');
+  }
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:5000';
+    }
+    return window.location.origin;
+  }
+  return 'http://localhost:5000';
+}
+
 export function photoUrl(photoId, width = 800, height = 800, crop = '') {
   if (!photoId) return FALLBACK_IMAGE;
-  if (photoId.startsWith('http://') || photoId.startsWith('https://')) return photoId;
+
+  // Direct absolute URLs or browser object/data URLs
+  if (
+    photoId.startsWith('http://') ||
+    photoId.startsWith('https://') ||
+    photoId.startsWith('data:') ||
+    photoId.startsWith('blob:')
+  ) {
+    return photoId;
+  }
+
+  // Uploaded backend files
+  if (photoId.startsWith('/uploads/') || photoId.startsWith('uploads/') || photoId.startsWith('/api/uploads/')) {
+    const origin = getBackendOrigin();
+    const cleanPath = photoId.startsWith('/') ? photoId : `/${photoId}`;
+    return `${origin}${cleanPath}`;
+  }
+
+  // Predefined catalog image key (e.g. 'photo-car-mat' or 'category-electronics')
+  if (REAL_HD_IMAGES[photoId]) {
+    const realId = REAL_HD_IMAGES[photoId];
+    return `${UNSPLASH_CDN}${realId}?fm=jpg&fit=crop&w=${width}&h=${height}&q=75${crop ? `&crop=${crop}` : ''}`;
+  }
+
+  // Unsplash photo- ID
+  if (photoId.startsWith('photo-')) {
+    return `${UNSPLASH_CDN}${photoId}?fm=jpg&fit=crop&w=${width}&h=${height}&q=75${crop ? `&crop=${crop}` : ''}`;
+  }
+
+  // File path with extension or slash (e.g. uploaded images or relative paths)
+  if (photoId.includes('/') || /\.(jpe?g|png|webp|svg|gif)$/i.test(photoId)) {
+    const origin = getBackendOrigin();
+    const cleanPath = photoId.startsWith('/') ? photoId : `/uploads/${photoId}`;
+    return `${origin}${cleanPath}`;
+  }
+
   return `${UNSPLASH_CDN}${photoId}?fm=jpg&fit=crop&w=${width}&h=${height}&q=75${crop ? `&crop=${crop}` : ''}`;
 }
 
 export const illustrationUrl = (name) => {
-  if (name && REAL_HD_IMAGES[name]) {
+  if (!name) return FALLBACK_IMAGE;
+  if (
+    name.startsWith('http://') ||
+    name.startsWith('https://') ||
+    name.startsWith('data:') ||
+    name.startsWith('blob:') ||
+    name.startsWith('/uploads/') ||
+    name.startsWith('uploads/') ||
+    name.startsWith('/api/uploads/')
+  ) {
+    return photoUrl(name);
+  }
+  if (REAL_HD_IMAGES[name]) {
     return photoUrl(REAL_HD_IMAGES[name]);
   }
-  if (name && name.startsWith('photo-')) {
+  if (name.startsWith('photo-')) {
     return photoUrl(name);
   }
   return FALLBACK_IMAGE;
@@ -62,7 +123,19 @@ export function resolveImage(record = {}, width = 800, height = 800, crop = '') 
   const { photo, illustration, category } = record;
   let resolvedId = photo;
   if (!resolvedId && illustration) {
-    resolvedId = REAL_HD_IMAGES[illustration] || (illustration.startsWith('photo-') ? illustration : null);
+    if (
+      illustration.startsWith('http://') ||
+      illustration.startsWith('https://') ||
+      illustration.startsWith('data:') ||
+      illustration.startsWith('blob:') ||
+      illustration.startsWith('/uploads/') ||
+      illustration.startsWith('uploads/') ||
+      illustration.startsWith('/api/uploads/') ||
+      illustration.startsWith('photo-') ||
+      REAL_HD_IMAGES[illustration]
+    ) {
+      resolvedId = REAL_HD_IMAGES[illustration] || illustration;
+    }
   }
   if (!resolvedId && category) {
     resolvedId = REAL_HD_IMAGES[`category-${category}`];
