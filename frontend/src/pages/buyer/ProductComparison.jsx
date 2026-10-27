@@ -10,6 +10,7 @@ import {
   Clock,
   ExternalLink,
   Eye,
+  FileText,
   Filter,
   Flame,
   Layers,
@@ -40,6 +41,93 @@ import useContactSupplier from '../../hooks/useContactSupplier';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { apiGet } from '../../services/apiClient';
 
+const COUNTRY_FLAGS = {
+  china: '🇨🇳',
+  cn: '🇨🇳',
+  india: '🇮🇳',
+  in: '🇮🇳',
+  'south korea': '🇰🇷',
+  korea: '🇰🇷',
+  kr: '🇰🇷',
+  vietnam: '🇻🇳',
+  vn: '🇻🇳',
+  turkey: '🇹🇷',
+  türkiye: '🇹🇷',
+  tr: '🇹🇷',
+  bangladesh: '🇧🇩',
+  bd: '🇧🇩',
+  italy: '🇮🇹',
+  it: '🇮🇹',
+  usa: '🇺🇸',
+  'united states': '🇺🇸',
+  us: '🇺🇸',
+  germany: '🇩🇪',
+  de: '🇩🇪',
+  japan: '🇯🇵',
+  jp: '🇯🇵',
+  uk: '🇬🇧',
+  'united kingdom': '🇬🇧',
+  gb: '🇬🇧',
+};
+
+const resolveCountryFlag = (country, fallback = '🌐') => {
+  if (!country) return fallback;
+  const key = String(country).trim().toLowerCase();
+  return COUNTRY_FLAGS[key] || fallback;
+};
+
+const detectCountryFromName = (name = '') => {
+  const n = String(name).toLowerCase();
+  if (n.includes('shenzhen') || n.includes('guangzhou') || n.includes('pearl river') || n.includes('china')) {
+    return { city: 'Shenzhen', country: 'China', flag: '🇨🇳' };
+  }
+  if (n.includes('seoul') || n.includes('korea')) {
+    return { city: 'Seoul', country: 'South Korea', flag: '🇰🇷' };
+  }
+  if (n.includes('ho chi minh') || n.includes('vietnam')) {
+    return { city: 'Ho Chi Minh City', country: 'Vietnam', flag: '🇻🇳' };
+  }
+  if (n.includes('istanbul') || n.includes('turkey') || n.includes('türkiye')) {
+    return { city: 'Istanbul', country: 'Turkey', flag: '🇹🇷' };
+  }
+  if (n.includes('dhaka') || n.includes('bangladesh')) {
+    return { city: 'Dhaka', country: 'Bangladesh', flag: '🇧🇩' };
+  }
+  if (n.includes('milan') || n.includes('italy')) {
+    return { city: 'Milan', country: 'Italy', flag: '🇮🇹' };
+  }
+  if (n.includes('austin') || n.includes('usa') || n.includes('united states')) {
+    return { city: 'Austin', country: 'USA', flag: '🇺🇸' };
+  }
+  if (n.includes('jaipur')) {
+    return { city: 'Jaipur', country: 'India', flag: '🇮🇳' };
+  }
+  if (n.includes('mumbai')) {
+    return { city: 'Mumbai', country: 'India', flag: '🇮🇳' };
+  }
+  return null;
+};
+
+const parseNumeric = (val, fallback = 0) => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'number') return Number.isFinite(val) ? val : fallback;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/[^0-9.-]+/g, '');
+    const num = parseFloat(cleaned);
+    return Number.isFinite(num) ? num : fallback;
+  }
+  if (typeof val === 'object' && val !== null) {
+    if (typeof val.toNumber === 'function') {
+      const n = val.toNumber();
+      return Number.isFinite(n) ? n : fallback;
+    }
+    const str = String(val);
+    const parsed = parseFloat(str.replace(/[^0-9.-]+/g, ''));
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+};
+
 const POPULAR_SEARCH_SUGGESTIONS = [
   { label: 'Cotton T-Shirt (10 Sellers)', query: 'Cotton T-Shirt' },
   { label: 'Wireless Earbuds', query: 'Wireless Earbuds' },
@@ -57,7 +145,7 @@ export default function ProductComparison() {
   const { money } = useCurrency();
   const { addToCart, removeFromCart, inCart } = useCart();
   const { showToast } = useNotifications();
-  const { products, getCompany, getProduct } = useProducts();
+  const { products, companies, getCompany, getProduct } = useProducts();
   const contact = useContactSupplier();
 
   useDocumentTitle('Product Comparison | TradeExpress B2B');
@@ -122,36 +210,64 @@ export default function ProductComparison() {
 
       for (const item of [...remoteMatches, ...localMatches]) {
         if (!item || !item.id) continue;
-        const company = item.companyId ? getCompany(item.companyId) : null;
-        const supplierObj = item.supplier || (company ? {
-          id: company.id,
-          company: company.name,
-          name: company.name,
-          slug: company.slug,
-          isVerified: Boolean(company.verification?.status === 'reviewed' || company.isSample),
-          location: company.city ? `${company.city}, ${company.country}` : company.country || 'India',
-          city: company.city || 'Mumbai',
-          country: company.country || 'India',
-          flag: company.flag || '🇮🇳',
-          rating: company.rating || 4.7,
-          reviewCount: company.reviewCount || 24,
-          responseTime: company.responseTime || 'Within 12 hours',
-          businessType: company.businessType || 'Manufacturer',
-          established: company.established || 2012,
-        } : null);
 
-        // Strict company key: ID, company name, or supplier ID
-        const companyKey = company?.id || supplierObj?.id || supplierObj?.company || supplierObj?.name || item.companyId || item.supplierId;
+        // 1. Resolve company profile either via ID, slug, or matching name
+        const supRaw = item.supplier || {};
+        const company = (item.companyId ? getCompany(item.companyId) : null)
+          || (companies && companies.find((c) =>
+            c.id === item.companyId ||
+            (c.slug && (c.slug === item.companySlug || c.slug === item.supplierSlug)) ||
+            (c.name && supRaw.company && c.name.toLowerCase() === supRaw.company.toLowerCase()) ||
+            (c.name && supRaw.name && c.name.toLowerCase() === supRaw.name.toLowerCase())
+          ))
+          || null;
+
+        // 2. Accurately resolve country & flag (prevent foreign suppliers defaulting to India flag)
+        const companyName = company?.name || supRaw.company || supRaw.name || 'Verified Supplier';
+        const detected = detectCountryFromName(companyName || item.name);
+        const country = company?.country || supRaw.country || detected?.country || 'India';
+        const city = company?.city || supRaw.city || detected?.city || 'Mumbai';
+        const flag = company?.flag || (supRaw.flag && supRaw.flag !== '🇮🇳' ? supRaw.flag : null) || resolveCountryFlag(country, detected?.flag || '🌐');
+        const rating = parseNumeric(company?.rating ?? supRaw.rating ?? item.rating, 4.6);
+        const reviewCount = parseNumeric(company?.reviewCount ?? supRaw.reviewCount ?? item.reviewCount, 25);
+        const isVerified = Boolean(
+          company?.verification?.status === 'reviewed' ||
+          company?.isSample ||
+          supRaw.isVerified ||
+          supRaw.kycStatus === 'VERIFIED'
+        );
+
+        const supplierObj = {
+          id: company?.id || supRaw.id || `sup-${item.id}`,
+          company: companyName,
+          name: companyName,
+          slug: company?.slug || supRaw.slug || slugify(companyName),
+          isVerified,
+          location: city ? `${city}, ${country}` : country,
+          city,
+          country,
+          flag,
+          rating,
+          reviewCount,
+          responseTime: company?.responseTime || supRaw.responseTime || 'Within 12 hours',
+          businessType: company?.businessType || supRaw.businessType || 'Manufacturer',
+          established: company?.established || supRaw.established || 2012,
+        };
+
+        // Strict company key: deduplicate by company ID or name
+        const companyKey = (company?.id || supRaw.id || companyName || '').toLowerCase().trim();
         
         if (companyKey && !seenCompanyKeys.has(companyKey)) {
           seenCompanyKeys.add(companyKey);
           combined.push({
             ...item,
             supplier: supplierObj,
-            price: Number(item.price),
-            moq: Number(item.moq || 1),
-            stock: Number(item.stock || 100),
-            leadTimeDays: Number(item.leadTimeDays || 14),
+            price: parseNumeric(item.price, 0),
+            moq: parseNumeric(item.moq, 1),
+            stock: parseNumeric(item.stock, 100),
+            leadTimeDays: parseNumeric(item.leadTimeDays ?? item.leadTime, 14),
+            rating,
+            reviewCount,
           });
         }
       }
@@ -170,8 +286,8 @@ export default function ProductComparison() {
     executeSearch();
   };
 
-  // Initial load: If productId or search query provided, search for it;
-  // Otherwise default to the flagship 10-seller "Cotton T-Shirt" comparison showcase!
+  // Initial load: Only auto-search if a specific productId or query parameter is passed!
+  // In the initial time, Compare Product starts empty until the user searches.
   useEffect(() => {
     if (productId) {
       const target = getProduct(productId);
@@ -186,18 +302,12 @@ export default function ProductComparison() {
               executeSearch(res.data.name);
             }
           })
-          .catch(() => {
-            executeSearch('Cotton T-Shirt');
-          });
+          .catch(() => {});
       }
     } else if (initialQuery) {
       executeSearch(initialQuery);
-    } else {
-      // Default to 10-seller Cotton T-Shirt so the page is immediately rich and never empty
-      setSearchInput('Cotton T-Shirt');
-      executeSearch('Cotton T-Shirt');
     }
-  }, [productId]);
+  }, [productId, initialQuery]);
 
   // Remove a product from current comparison list
   const removeProduct = (idToRemove) => {
@@ -211,7 +321,7 @@ export default function ProductComparison() {
     setCartQuantities((prev) => ({ ...prev, [productId]: val }));
   };
 
-  // Filter and Sort Compared Products
+  // Filter and Sort Compared Products with robust numeric sorting
   const processedProducts = useMemo(() => {
     let list = [...comparedProducts];
 
@@ -226,56 +336,43 @@ export default function ProductComparison() {
       list = list.filter((p) => p.readyToShip);
     }
 
-    // Sorters
-    if (sortBy === 'price-asc') {
-      list.sort((a, b) => a.price - b.price);
-    } else if (sortBy === 'price-desc') {
-      list.sort((a, b) => b.price - a.price);
-    } else if (sortBy === 'moq-asc') {
-      list.sort((a, b) => a.moq - b.moq);
-    } else if (sortBy === 'delivery-asc') {
-      list.sort((a, b) => a.leadTimeDays - b.leadTimeDays);
-    } else if (sortBy === 'rating-desc') {
-      list.sort((a, b) => (b.supplier?.rating || b.rating || 0) - (a.supplier?.rating || a.rating || 0));
-    }
+    // Sort comparator (safe numeric comparisons that never return NaN)
+    list.sort((a, b) => {
+      switch (sortBy) {
+        case 'price-asc': {
+          const diff = parseNumeric(a.price, 0) - parseNumeric(b.price, 0);
+          return diff !== 0 ? diff : String(a.id || '').localeCompare(String(b.id || ''));
+        }
+        case 'price-desc': {
+          const diff = parseNumeric(b.price, 0) - parseNumeric(a.price, 0);
+          return diff !== 0 ? diff : String(a.id || '').localeCompare(String(b.id || ''));
+        }
+        case 'moq-asc': {
+          const diff = parseNumeric(a.moq, 1) - parseNumeric(b.moq, 1);
+          return diff !== 0 ? diff : parseNumeric(a.price, 0) - parseNumeric(b.price, 0);
+        }
+        case 'moq-desc': {
+          const diff = parseNumeric(b.moq, 1) - parseNumeric(a.moq, 1);
+          return diff !== 0 ? diff : parseNumeric(b.price, 0) - parseNumeric(a.price, 0);
+        }
+        case 'delivery-asc': {
+          const diff = parseNumeric(a.leadTimeDays, 999) - parseNumeric(b.leadTimeDays, 999);
+          return diff !== 0 ? diff : parseNumeric(a.price, 0) - parseNumeric(b.price, 0);
+        }
+        case 'rating-desc': {
+          const rB = parseNumeric(b.supplier?.rating ?? b.rating, 0);
+          const rA = parseNumeric(a.supplier?.rating ?? a.rating, 0);
+          const diff = rB - rA;
+          return diff !== 0 ? diff : parseNumeric(a.price, 0) - parseNumeric(b.price, 0);
+        }
+        case 'relevance':
+        default:
+          return 0;
+      }
+    });
 
     return list;
   }, [comparedProducts, sortBy, filterVerifiedOnly, filterSampleOnly, filterReadyToShip]);
-
-  // Count distinct suppliers among results
-  const uniqueSuppliersCount = useMemo(() => {
-    const set = new Set();
-    processedProducts.forEach((p) => {
-      const name = p.supplier?.company || p.supplier?.name;
-      if (name) set.add(name);
-    });
-    return set.size;
-  }, [processedProducts]);
-
-  // Benchmark Highlights: Lowest Price, Lowest MOQ, Fastest Lead Time, Top Rated
-  const benchmarks = useMemo(() => {
-    if (!processedProducts.length) return null;
-    let lowestPriceProd = processedProducts[0];
-    let lowestMoqProd = processedProducts[0];
-    let fastestDeliveryProd = processedProducts[0];
-    let topRatedProd = processedProducts[0];
-
-    for (const p of processedProducts) {
-      if (p.price < lowestPriceProd.price) lowestPriceProd = p;
-      if (p.moq < lowestMoqProd.moq) lowestMoqProd = p;
-      if (p.leadTimeDays < fastestDeliveryProd.leadTimeDays) fastestDeliveryProd = p;
-      const curRating = p.supplier?.rating || p.rating || 0;
-      const topRating = topRatedProd.supplier?.rating || topRatedProd.rating || 0;
-      if (curRating > topRating) topRatedProd = p;
-    }
-
-    return {
-      lowestPrice: lowestPriceProd,
-      lowestMoq: lowestMoqProd,
-      fastestDelivery: fastestDeliveryProd,
-      topRated: topRatedProd,
-    };
-  }, [processedProducts]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
@@ -374,6 +471,37 @@ export default function ProductComparison() {
       {/* COMPARISON RESULTS SECTION                                               */}
       {/* ========================================================================= */}
 
+      {/* Case 0: Initial state before search (Compare Product is empty at start) */}
+      {!hasSearched && (
+        <div className="rounded-3xl border border-navy-900/[0.08] bg-white p-8 sm:p-14 text-center shadow-xs">
+          <div className="mx-auto size-16 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-4 ring-1 ring-brand-500/20">
+            <Scale className="size-8" />
+          </div>
+          <h3 className="text-xl sm:text-2xl font-extrabold text-navy-950 mb-2">
+            Compare Competing Sellers
+          </h3>
+          <p className="text-sm text-navy-600 max-w-lg mx-auto mb-6">
+            Search any product in the search box above to compare pricing, MOQ, lead times, and credentials across multiple verified suppliers.
+          </p>
+          <div className="flex flex-wrap justify-center items-center gap-2 max-w-2xl mx-auto">
+            <span className="text-xs text-navy-500 font-bold mr-1">Suggested searches:</span>
+            {POPULAR_SEARCH_SUGGESTIONS.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => {
+                  setSearchInput(item.query);
+                  executeSearch(item.query);
+                }}
+                className="text-xs bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-800 px-3.5 py-1.5 rounded-full font-medium transition-colors border border-slate-200 shadow-2xs"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Case 1: Searched, but 0 products match */}
       {hasSearched && !searching && processedProducts.length === 0 && (
         <div className="rounded-3xl border border-navy-900/[0.08] bg-white p-8 sm:p-12 text-center shadow-xs">
@@ -399,75 +527,9 @@ export default function ProductComparison() {
       )}
 
       {/* Case 2: Matching products found across suppliers */}
-      {processedProducts.length > 0 && (
+      {hasSearched && processedProducts.length > 0 && (
         <section aria-labelledby="comparison-results-heading" className="space-y-6">
           
-          {/* Top Benchmark Summary Matrix Bar */}
-          {benchmarks && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-              {/* Lowest Price */}
-              <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50/80 to-white p-4 shadow-xs">
-                <div className="flex items-center gap-2 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-1">
-                  <Tag className="size-3.5 text-emerald-600" />
-                  <span>Lowest Wholesale Price</span>
-                </div>
-                <div className="text-2xl font-black text-emerald-950">
-                  {money(benchmarks.lowestPrice.price)}
-                  <span className="text-xs font-normal text-muted ml-1">/{benchmarks.lowestPrice.unit || 'piece'}</span>
-                </div>
-                <p className="text-xs text-navy-700 truncate mt-1">
-                  By <span className="font-bold">{benchmarks.lowestPrice.supplier?.company || benchmarks.lowestPrice.supplier?.name}</span> ({benchmarks.lowestPrice.supplier?.flag || '🇮🇳'})
-                </p>
-              </div>
-
-              {/* Lowest MOQ */}
-              <div className="rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-50/80 to-white p-4 shadow-xs">
-                <div className="flex items-center gap-2 text-blue-800 text-xs font-bold uppercase tracking-wider mb-1">
-                  <Package className="size-3.5 text-blue-600" />
-                  <span>Lowest Minimum Order</span>
-                </div>
-                <div className="text-2xl font-black text-blue-950">
-                  {benchmarks.lowestMoq.moq.toLocaleString()}
-                  <span className="text-xs font-normal text-muted ml-1">{benchmarks.lowestMoq.unit || 'units'} MOQ</span>
-                </div>
-                <p className="text-xs text-navy-700 truncate mt-1">
-                  By <span className="font-bold">{benchmarks.lowestMoq.supplier?.company || benchmarks.lowestMoq.supplier?.name}</span> ({benchmarks.lowestMoq.supplier?.flag || '🇮🇳'})
-                </p>
-              </div>
-
-              {/* Fastest Delivery */}
-              <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/80 to-white p-4 shadow-xs">
-                <div className="flex items-center gap-2 text-amber-800 text-xs font-bold uppercase tracking-wider mb-1">
-                  <Truck className="size-3.5 text-amber-600" />
-                  <span>Fastest Dispatch</span>
-                </div>
-                <div className="text-2xl font-black text-amber-950">
-                  {benchmarks.fastestDelivery.leadTimeDays} Days
-                  <span className="text-xs font-normal text-muted ml-1">lead time</span>
-                </div>
-                <p className="text-xs text-navy-700 truncate mt-1">
-                  By <span className="font-bold">{benchmarks.fastestDelivery.supplier?.company || benchmarks.fastestDelivery.supplier?.name}</span> ({benchmarks.fastestDelivery.supplier?.flag || '🇮🇳'})
-                </p>
-              </div>
-
-              {/* Highest Rated */}
-              <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-50/80 to-white p-4 shadow-xs">
-                <div className="flex items-center gap-2 text-purple-800 text-xs font-bold uppercase tracking-wider mb-1">
-                  <Award className="size-3.5 text-purple-600" />
-                  <span>Top-Rated Supplier</span>
-                </div>
-                <div className="text-2xl font-black text-purple-950 flex items-center gap-1.5">
-                  <span>{(benchmarks.topRated.supplier?.rating || benchmarks.topRated.rating || 4.8).toFixed(1)}</span>
-                  <span className="text-amber-500 text-base">★</span>
-                  <span className="text-xs font-normal text-muted">/ 5.0</span>
-                </div>
-                <p className="text-xs text-navy-700 truncate mt-1">
-                  By <span className="font-bold">{benchmarks.topRated.supplier?.company || benchmarks.topRated.supplier?.name}</span> ({benchmarks.topRated.supplier?.flag || '🇮🇳'})
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Controls Bar: Sort, Filter, and Counter */}
           <div className="rounded-2xl border border-navy-900/[0.08] bg-white p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -490,16 +552,18 @@ export default function ProductComparison() {
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold text-navy-600">Sort:</span>
                 <select
+                  id="sort-products-by"
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="rounded-lg border border-navy-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-navy-800 shadow-2xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="rounded-lg border border-navy-200 bg-white px-3 py-1.5 text-xs font-semibold text-navy-800 shadow-2xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
                 >
                   <option value="relevance">Best Match</option>
                   <option value="price-asc">Price: Low to High</option>
                   <option value="price-desc">Price: High to Low</option>
                   <option value="moq-asc">MOQ: Low to High</option>
-                  <option value="delivery-asc">Delivery: Fastest First</option>
-                  <option value="rating-desc">Supplier Rating</option>
+                  <option value="moq-desc">MOQ: High to Low</option>
+                  <option value="delivery-asc">Fastest Dispatch</option>
+                  <option value="rating-desc">Top Rated Supplier</option>
                 </select>
               </div>
 
@@ -554,49 +618,33 @@ export default function ProductComparison() {
             {processedProducts.map((product, index) => {
               const sup = product.supplier;
               const alreadyInCart = inCart(product.id);
-              const isLowestPrice = benchmarks && benchmarks.lowestPrice.id === product.id;
-              const isLowestMoq = benchmarks && benchmarks.lowestMoq.id === product.id;
-              const isFastestDelivery = benchmarks && benchmarks.fastestDelivery.id === product.id;
-              const isTopRated = benchmarks && benchmarks.topRated.id === product.id;
               const orderQty = cartQuantities[product.id] || product.moq || 1;
 
               return (
                 <div
                   key={product.id}
-                  className={`group relative rounded-2xl border bg-white p-5 sm:p-6 shadow-xs hover:shadow-md transition-all duration-200 ${
-                    isLowestPrice
-                      ? 'border-emerald-500/40 ring-1 ring-emerald-500/20'
-                      : 'border-navy-900/[0.08] hover:border-brand-500/30'
-                  }`}
+                  className="group relative rounded-2xl border border-navy-900/[0.08] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-brand-500/30 transition-all duration-200"
                 >
-                  {/* Top Bar: Seller Rank Badge & Remove Button */}
+                  {/* Top Bar: Seller Rank Badge & Country Badge & Remove Button */}
                   <div className="flex items-center justify-between gap-3 border-b border-navy-900/[0.06] pb-3 mb-4">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center justify-center size-6 rounded-full bg-navy-900 text-white text-xs font-black">
-                        #{index + 1}
+                      <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-navy-950 text-white text-xs font-black">
+                        Seller #{index + 1}
                       </span>
-                      {isLowestPrice && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                          <Tag className="size-3" />
-                          Lowest Unit Price
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-navy-800 border border-slate-200/80">
+                        <span className="text-sm leading-none">{sup?.flag || '🌐'}</span>
+                        <span>{sup?.country || 'Global'}</span>
+                      </span>
+                      {sup?.isVerified && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <ShieldCheck className="size-3" />
+                          Verified Supplier
                         </span>
                       )}
-                      {isLowestMoq && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-300">
-                          <Package className="size-3" />
-                          Lowest MOQ
-                        </span>
-                      )}
-                      {isFastestDelivery && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                      {product.readyToShip && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
                           <Truck className="size-3" />
-                          Fastest Delivery
-                        </span>
-                      )}
-                      {isTopRated && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-300">
-                          <Award className="size-3" />
-                          Top Rated Seller
+                          Ready to Ship
                         </span>
                       )}
                     </div>
@@ -694,14 +742,14 @@ export default function ProductComparison() {
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
                         <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200/60">
                           <span className="text-muted block text-[11px]">Minimum Order</span>
-                          <span className={`font-bold text-sm ${isLowestMoq ? 'text-blue-700' : 'text-navy-950'}`}>
+                          <span className="font-bold text-sm text-navy-950">
                             {product.moq.toLocaleString()} {product.unit || 'pieces'}
                           </span>
                         </div>
 
                         <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200/60">
                           <span className="text-muted block text-[11px]">Production Lead Time</span>
-                          <span className={`font-bold text-sm ${isFastestDelivery ? 'text-amber-700' : 'text-navy-950'}`}>
+                          <span className="font-bold text-sm text-navy-950">
                             {product.leadTimeDays} Business Days
                           </span>
                         </div>
@@ -747,7 +795,7 @@ export default function ProductComparison() {
                       <div>
                         <span className="text-xs text-muted block mb-0.5">Wholesale Unit Price</span>
                         <div className="flex items-baseline gap-1.5">
-                          <span className={`text-2xl sm:text-3xl font-black ${isLowestPrice ? 'text-emerald-700' : 'text-navy-950'}`}>
+                          <span className="text-2xl sm:text-3xl font-black text-navy-950">
                             {money(product.price)}
                           </span>
                           <span className="text-xs text-muted font-medium">/ {product.unit || 'piece'}</span>

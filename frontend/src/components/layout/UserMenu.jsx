@@ -7,7 +7,6 @@ import {
   HelpCircle,
   LayoutDashboard,
   LogOut,
-  MessageSquare,
   Package,
   Scale,
   ShieldCheck,
@@ -16,7 +15,6 @@ import {
 } from 'lucide-react';
 import Dropdown from '../common/Dropdown';
 import useAuth from '../../hooks/useAuth';
-import useMessages from '../../hooks/useMessages';
 import useNotifications from '../../hooks/useNotifications';
 import { ordersPathFor, ROLE_HOME } from '../../utils/constants';
 
@@ -45,7 +43,6 @@ const ROLE_BADGES = {
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
-  const { unreadCount } = useMessages();
   const { showToast } = useNotifications();
   const navigate = useNavigate();
 
@@ -208,27 +205,11 @@ export default function UserMenu() {
             </Link>
           </div>
 
-          {/* Communications & Perks */}
+          {/* Perks & Deals */}
           <div className="mt-2 border-t border-slate-100 pt-1.5 px-1 space-y-0.5">
             <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-              Communication & Perks
+              Perks & Deals
             </div>
-
-            <Link to="/messages" onClick={close} className={menuItemClass}>
-              <span className="flex items-center gap-2.5">
-                <span className="flex size-6 items-center justify-center rounded-lg bg-teal-100 text-teal-800 shrink-0 group-hover:bg-teal-600 group-hover:text-white transition-colors">
-                  <MessageSquare className="size-3.5" aria-hidden="true" />
-                </span>
-                <span>Messages</span>
-              </span>
-              {unreadCount > 0 ? (
-                <span className="inline-flex items-center rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-2xs">
-                  {unreadCount}
-                </span>
-              ) : (
-                <ChevronRight className="size-3 text-slate-300 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
-              )}
-            </Link>
 
             <Link to="/products?deal=1" onClick={close} className={menuItemClass}>
               <span className="flex items-center gap-2.5">

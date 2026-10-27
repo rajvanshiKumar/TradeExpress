@@ -6,7 +6,6 @@ import {
   Heart,
   HelpCircle,
   Menu,
-  MessageSquare,
   Scale,
   Search,
   ShieldCheck,
@@ -24,7 +23,6 @@ import UserMenu from "./UserMenu";
 import useAuth from "../../hooks/useAuth";
 import useCart from "../../hooks/useCart";
 import useWishlist from "../../hooks/useWishlist";
-import useMessages from "../../hooks/useMessages";
 import useDisclosure from "../../hooks/useDisclosure";
 import useScrolled from "../../hooks/useScrolled";
 import { mainNav } from "../../data/navigation";
@@ -67,7 +65,6 @@ export default function Header() {
   const { user } = useAuth();
   const { count: cartCount } = useCart();
   const { count: wishlistCount } = useWishlist();
-  const { unreadCount } = useMessages();
   const mobileMenu = useDisclosure();
   const scrolled = useScrolled();
   const [megaOpen, setMegaOpen] = useState(false);
@@ -114,8 +111,6 @@ export default function Header() {
   const scheduleClose = () => {
     closeTimer.current = window.setTimeout(() => setMegaOpen(false), 160);
   };
-  const messageCount =
-    user?.notificationPrefs?.messages === false ? 0 : unreadCount;
 
   return (
     <>
@@ -318,15 +313,6 @@ export default function Header() {
             <div className="hidden md:block">
               <PreferencesMenu />
             </div>
-            {!isAuthPage && user && (
-              <IconLink
-                to="/messages"
-                icon={MessageSquare}
-                label="Messages"
-                count={unreadCount}
-                className="hidden sm:inline-flex"
-              />
-            )}
             {user?.role !== "super_admin" && (
               <NotificationsMenu className="hidden sm:inline-flex" />
             )}
