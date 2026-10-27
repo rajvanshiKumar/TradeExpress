@@ -3,7 +3,11 @@ import * as paymentService from '../services/paymentService.js';
 export async function createPaymentOrder(req, res, next) {
   try {
     const { orderId } = req.body;
-    const paymentData = await paymentService.createPaymentOrder({ orderId });
+    const paymentData = await paymentService.createPaymentOrder({
+      orderId,
+      userId: req.user?.id,
+      userRole: req.user?.role,
+    });
     res.json({
       success: true,
       data: paymentData,
@@ -21,6 +25,8 @@ export async function verifyPayment(req, res, next) {
       paymentOrderId,
       transactionId,
       signature,
+      userId: req.user?.id,
+      userRole: req.user?.role,
     });
 
     res.json({
@@ -39,6 +45,8 @@ export async function sandboxSimulate(req, res, next) {
     const result = await paymentService.simulateSandboxPayment({
       orderId,
       paymentOrderId,
+      userId: req.user?.id,
+      userRole: req.user?.role,
     });
 
     res.json({
@@ -55,7 +63,7 @@ export async function handleWebhook(req, res, next) {
   try {
     const signature = req.headers['x-razorpay-signature'];
     const result = await paymentService.handleRazorpayWebhook({
-      rawBody: req.body,
+      rawBody: req.rawBody || req.body,
       signature,
     });
     res.status(200).json(result);

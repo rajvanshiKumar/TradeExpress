@@ -17,6 +17,7 @@ enum Role {
 enum PaymentStatus {
   PENDING
   PAID
+  PARTIALLY_PAID
   FAILED
   COD
   REFUNDED
@@ -312,6 +313,8 @@ model Payment {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
+  @@index([orderId])
+  @@index([paymentOrderId])
   @@map("payments")
 }
 

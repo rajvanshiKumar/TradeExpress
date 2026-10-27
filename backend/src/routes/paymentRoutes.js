@@ -2,35 +2,40 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import * as paymentController from '../controllers/paymentController.js';
 import { validate } from '../middleware/validate.js';
+import { authenticateJWT } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
 router.post(
   '/create-order',
-  validate([body('orderId').notEmpty().withMessage('Order ID is required.')]),
+  authenticateJWT,
+  validate([body('orderId').trim().notEmpty().withMessage('Order ID is required.')]),
   paymentController.createPaymentOrder
 );
 
 router.post(
   '/verify',
+  authenticateJWT,
   validate([
-    body('orderId').notEmpty().withMessage('Order ID is required.'),
-    body('paymentOrderId').notEmpty().withMessage('Payment Order ID is required.'),
-    body('transactionId').notEmpty().withMessage('Transaction ID is required.'),
-    body('signature').notEmpty().withMessage('Payment signature is required.'),
+    body('orderId').trim().notEmpty().withMessage('Order ID is required.'),
+    body('paymentOrderId').trim().notEmpty().withMessage('Payment Order ID is required.'),
+    body('transactionId').trim().notEmpty().withMessage('Transaction ID is required.'),
+    body('signature').trim().notEmpty().withMessage('Payment signature is required.'),
   ]),
   paymentController.verifyPayment
 );
 
 router.post(
   '/sandbox-pay',
+  authenticateJWT,
   validate([
-    body('orderId').notEmpty().withMessage('Order ID is required.'),
-    body('paymentOrderId').notEmpty().withMessage('Payment Order ID is required.'),
+    body('orderId').trim().notEmpty().withMessage('Order ID is required.'),
+    body('paymentOrderId').trim().notEmpty().withMessage('Payment Order ID is required.'),
   ]),
   paymentController.sandboxSimulate
 );
 
+// Webhook endpoint verified cryptographically via HMAC SHA-256 with raw body
 router.post('/webhook', paymentController.handleWebhook);
 
 export default router;

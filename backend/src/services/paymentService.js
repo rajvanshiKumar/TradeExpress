@@ -1,9 +1,21 @@
 import prisma from '../config/db.js';
-import { getRazorpayClient, verifyRazorpaySignature, createSandboxSignature, verifyWebhookSignature } from '../config/razorpay.js';
+import {
+  assertSandboxMode,
+  getRazorpayClient,
+  verifyRazorpaySignature,
+  createSandboxSignature,
+  verifyWebhookSignature,
+} from '../config/razorpay.js';
 import { ENV } from '../config/env.js';
 import { sendOrderConfirmationEmail } from './emailService.js';
 
-export async function createPaymentOrder({ orderId }) {
+/**
+ * Creates a Razorpay test order for an existing TradeExpress order.
+ * Strictly uses server-calculated totals from database records.
+ */
+export async function createPaymentOrder({ orderId, userId, userRole }) {
+  assertSandboxMode();
+
   const where = orderId.startsWith('TS-') ? { orderNumber: orderId } : { id: orderId };
   const order = await prisma.order.findFirst({
     where,
@@ -15,50 +27,68 @@ export async function createPaymentOrder({ orderId }) {
     throw error;
   }
 
+  // Authorization: Only the order owner or administrator can initiate payment
+  if (userId && order.userId && order.userId !== userId && userRole !== 'ADMIN' && userRole !== 'SUPER_ADMIN') {
+    const error = new Error('You do not have permission to initiate payment for this order.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (order.orderStatus === 'CANCELLED') {
+    const error = new Error('Cannot initiate payment for a cancelled order.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   if (order.paymentStatus === 'PAID') {
     const error = new Error('This order has already been fully paid.');
     error.statusCode = 400;
     throw error;
   }
 
-  // Determine payable amount (partial advance vs balance vs full)
+  // Calculate payable amount strictly from server-side database records
   let payableAmount = Number(order.total);
   if (order.isPartialPayment) {
-    if (order.paymentStatus === 'UNPAID' && order.advanceAmount) {
-      payableAmount = Number(order.advanceAmount);
-    } else if (order.paymentStatus === 'PARTIALLY_PAID' && order.balanceDue) {
+    if (order.paymentStatus === 'PARTIALLY_PAID' && order.balanceDue) {
       payableAmount = Number(order.balanceDue);
+    } else if (order.advanceAmount) {
+      payableAmount = Number(order.advanceAmount);
     }
   }
 
+  // Razorpay amounts are strictly in smallest currency unit (paise for INR)
   const amountInPaise = Math.round(payableAmount * 100);
-  const razorpay = getRazorpayClient();
+  if (amountInPaise <= 0) {
+    const error = new Error('Payable amount must be greater than zero.');
+    error.statusCode = 400;
+    throw error;
+  }
 
+  const razorpay = getRazorpayClient();
   let gatewayOrderId = null;
 
-  if (razorpay && ENV.PAYMENT_GATEWAY_MODE !== 'sandbox_offline') {
-    try {
-      const response = await razorpay.orders.create({
-        amount: amountInPaise,
-        currency: 'INR',
-        receipt: order.orderNumber,
-        notes: {
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          buyerEmail: order.buyerEmail,
-          isPartialPayment: String(order.isPartialPayment),
-        },
-      });
-      gatewayOrderId = response.id;
-    } catch (err) {
-      console.warn('[TradeExpress Payment] Razorpay API order create warning, falling back to sandbox test order:', err.message);
-      gatewayOrderId = `order_test_${order.orderNumber.replace(/[^a-zA-Z0-9]/g, '')}`;
-    }
-  } else {
-    gatewayOrderId = `order_test_${order.orderNumber.replace(/[^a-zA-Z0-9]/g, '')}`;
+  try {
+    const rzpOrder = await razorpay.orders.create({
+      amount: amountInPaise,
+      currency: 'INR',
+      receipt: order.orderNumber.slice(0, 40),
+      notes: {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        buyerEmail: order.buyerEmail,
+        isPartialPayment: String(order.isPartialPayment),
+      },
+    });
+    gatewayOrderId = rzpOrder.id;
+    console.log(`[TradeExpress Payment] Razorpay test order created: ${gatewayOrderId} for order #${order.orderNumber}`);
+  } catch (err) {
+    console.error('[TradeExpress Payment] Razorpay order creation failed:', err?.error?.description || err.message);
+    const error = new Error(err?.error?.description || 'Failed to create payment order with Razorpay test gateway.');
+    error.statusCode = err?.statusCode || 502;
+    throw error;
   }
 
-  // Record initial pending payment
+  // Record initial pending payment in MySQL
   await prisma.payment.create({
     data: {
       orderId: order.id,
@@ -83,11 +113,23 @@ export async function createPaymentOrder({ orderId }) {
     buyerName: order.buyerName,
     buyerEmail: order.buyerEmail,
     buyerPhone: order.buyerPhone,
-    isSandbox: ENV.PAYMENT_GATEWAY_MODE === 'sandbox',
+    isSandbox: true,
   };
 }
 
-export async function verifyPayment({ orderId, paymentOrderId, transactionId, signature }) {
+/**
+ * Cryptographically verifies Razorpay payment signature and confirms order payment.
+ */
+export async function verifyPayment({
+  orderId,
+  paymentOrderId,
+  transactionId,
+  signature,
+  userId,
+  userRole,
+}) {
+  assertSandboxMode();
+
   const where = orderId.startsWith('TS-') ? { orderNumber: orderId } : { id: orderId };
   const order = await prisma.order.findFirst({
     where,
@@ -100,11 +142,38 @@ export async function verifyPayment({ orderId, paymentOrderId, transactionId, si
     throw error;
   }
 
-  if (order.paymentStatus === 'PAID') {
-    return { success: true, message: 'Order is already marked as paid.', order };
+  // Authorization check
+  if (userId && order.userId && order.userId !== userId && userRole !== 'ADMIN' && userRole !== 'SUPER_ADMIN') {
+    const error = new Error('You do not have permission to verify payment for this order.');
+    error.statusCode = 403;
+    throw error;
   }
 
-  // Cryptographic Signature Verification
+  // Idempotency: Return existing successful order if this transaction was already processed
+  const existingPayment = await prisma.payment.findFirst({
+    where: {
+      transactionId,
+      status: 'PAID',
+    },
+    include: { order: true },
+  });
+  if (existingPayment) {
+    return {
+      success: true,
+      message: 'Payment has already been verified and processed.',
+      order: existingPayment.order,
+    };
+  }
+
+  if (order.paymentStatus === 'PAID') {
+    return {
+      success: true,
+      message: 'This order has already been marked as fully paid.',
+      order,
+    };
+  }
+
+  // Cryptographic Signature Verification using timingSafeEqual
   const isValidSignature = verifyRazorpaySignature({
     orderId: paymentOrderId,
     paymentId: transactionId,
@@ -120,14 +189,14 @@ export async function verifyPayment({ orderId, paymentOrderId, transactionId, si
         transactionId: transactionId || null,
         paymentOrderId: paymentOrderId || null,
         signature: signature || null,
-        amount: order.total,
+        amount: order.isPartialPayment && order.advanceAmount ? order.advanceAmount : order.total,
         currency: 'INR',
         status: 'FAILED',
         rawResponse: { error: 'Cryptographic HMAC signature verification failed.' },
       },
     });
 
-    const error = new Error('Payment verification failed. Invalid gateway signature.');
+    const error = new Error('Payment verification failed: Invalid gateway signature.');
     error.statusCode = 400;
     throw error;
   }
@@ -137,17 +206,17 @@ export async function verifyPayment({ orderId, paymentOrderId, transactionId, si
   let statusNote = '';
 
   if (order.isPartialPayment) {
-    if (order.paymentStatus === 'UNPAID') {
-      newPaymentStatus = 'PARTIALLY_PAID';
-      paymentAmount = Number(order.advanceAmount || (Number(order.total) * 0.2).toFixed(2));
-      statusNote = `Partial advance payment of ₹${paymentAmount.toLocaleString('en-IN')} confirmed via Razorpay (Txn: ${transactionId}). Balance ₹${Number(order.balanceDue || 0).toLocaleString('en-IN')} due on delivery.`;
-    } else if (order.paymentStatus === 'PARTIALLY_PAID') {
+    if (order.paymentStatus === 'PARTIALLY_PAID') {
       newPaymentStatus = 'PAID';
       paymentAmount = Number(order.balanceDue || 0);
-      statusNote = `Final balance payment of ₹${paymentAmount.toLocaleString('en-IN')} confirmed via Razorpay (Txn: ${transactionId}). Full payment complete.`;
+      statusNote = `Final balance payment of ₹${paymentAmount.toLocaleString('en-IN')} confirmed via Razorpay test gateway (Txn: ${transactionId}). Full payment complete.`;
+    } else {
+      newPaymentStatus = 'PARTIALLY_PAID';
+      paymentAmount = Number(order.advanceAmount || (Number(order.total) * 0.2).toFixed(2));
+      statusNote = `Partial advance payment of ₹${paymentAmount.toLocaleString('en-IN')} confirmed via Razorpay test gateway (Txn: ${transactionId}). Balance ₹${Number(order.balanceDue || 0).toLocaleString('en-IN')} due on delivery.`;
     }
   } else {
-    statusNote = `Online payment of ₹${Number(order.total).toLocaleString('en-IN')} confirmed via Razorpay (Txn: ${transactionId}).`;
+    statusNote = `Online payment of ₹${Number(order.total).toLocaleString('en-IN')} confirmed via Razorpay test gateway (Txn: ${transactionId}).`;
   }
 
   // Transactionally update Order, Payment, and Status History
@@ -187,12 +256,14 @@ export async function verifyPayment({ orderId, paymentOrderId, transactionId, si
         orderId: order.id,
         status: updated.orderStatus,
         notes: statusNote,
-        changedBy: 'Payment Gateway',
+        changedBy: 'Razorpay Gateway',
       },
     });
 
     return updated;
   });
+
+  console.log(`[TradeExpress Payment] Payment verified for order #${order.orderNumber} (Txn: ${transactionId})`);
 
   // Automatically send order confirmation email
   sendOrderConfirmationEmail(updatedOrder).catch((err) => {
@@ -206,12 +277,16 @@ export async function verifyPayment({ orderId, paymentOrderId, transactionId, si
   };
 }
 
-export async function simulateSandboxPayment({ orderId, paymentOrderId }) {
-  if (ENV.PAYMENT_GATEWAY_MODE !== 'sandbox') {
-    const error = new Error('Sandbox simulation is only allowed in sandbox mode.');
-    error.statusCode = 403;
-    throw error;
-  }
+/**
+ * Simulates sandbox payment in development environments using valid HMAC signature.
+ */
+export async function simulateSandboxPayment({
+  orderId,
+  paymentOrderId,
+  userId,
+  userRole,
+}) {
+  assertSandboxMode();
 
   const transactionId = `pay_test_${Date.now().toString(36)}`;
   const signature = createSandboxSignature({
@@ -224,10 +299,23 @@ export async function simulateSandboxPayment({ orderId, paymentOrderId }) {
     paymentOrderId,
     transactionId,
     signature,
+    userId,
+    userRole,
   });
 }
 
+/**
+ * Handles incoming Razorpay webhooks with raw body signature verification and idempotent processing.
+ */
 export async function handleRazorpayWebhook({ rawBody, signature }) {
+  assertSandboxMode();
+
+  if (!ENV.RAZORPAY_WEBHOOK_SECRET) {
+    const error = new Error('Razorpay webhook secret is not configured.');
+    error.statusCode = 503;
+    throw error;
+  }
+
   const isValid = verifyWebhookSignature({ rawBody, signature });
   if (!isValid) {
     const error = new Error('Invalid Razorpay webhook signature');
@@ -235,9 +323,14 @@ export async function handleRazorpayWebhook({ rawBody, signature }) {
     throw error;
   }
 
-  const payload = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
+  const payload = Buffer.isBuffer(rawBody)
+    ? JSON.parse(rawBody.toString('utf8'))
+    : typeof rawBody === 'string'
+      ? JSON.parse(rawBody)
+      : rawBody;
+
   const event = payload.event;
-  console.log(`[TradeExpress Webhook] Received Razorpay event: ${event}`);
+  console.log(`[TradeExpress Webhook] Received validated Razorpay event: ${event}`);
 
   if (event === 'payment.captured' || event === 'order.paid') {
     const paymentEntity = payload.payload?.payment?.entity;
@@ -246,6 +339,18 @@ export async function handleRazorpayWebhook({ rawBody, signature }) {
     const gatewayOrderId = paymentEntity?.order_id || orderEntity?.id;
     const transactionId = paymentEntity?.id;
     const orderIdNote = paymentEntity?.notes?.orderId || orderEntity?.notes?.orderId;
+
+    if (!transactionId) {
+      return { received: true, ignored: true, reason: 'Missing transaction ID' };
+    }
+
+    // Idempotency: skip if already processed
+    const existing = await prisma.payment.findFirst({
+      where: { transactionId, status: 'PAID' },
+    });
+    if (existing) {
+      return { received: true, duplicate: true };
+    }
 
     let order = null;
     if (orderIdNote) {
@@ -274,12 +379,20 @@ export async function handleRazorpayWebhook({ rawBody, signature }) {
           data: {
             orderId: order.id,
             gateway: 'razorpay_webhook',
-            transactionId: transactionId || 'webhook_' + Date.now(),
+            transactionId: transactionId,
             paymentOrderId: gatewayOrderId,
             amount: paymentEntity?.amount ? paymentEntity.amount / 100 : order.total,
             currency: 'INR',
             status: 'PAID',
-            rawResponse: payload,
+            rawResponse: { event, paymentId: transactionId },
+          },
+        });
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: order.id,
+            status: 'ORDER_CONFIRMED',
+            notes: `Payment confirmed via Razorpay webhook (${event}: ${transactionId})`,
+            changedBy: 'Razorpay Webhook',
           },
         });
       });
