@@ -22,11 +22,16 @@ export default function ProductGallery({ product }) {
 
   return (
     <div>
-      <div className="ts-photo-stage overflow-hidden rounded-[2rem] p-2.5 shadow-card ring-1 ring-navy-900/[0.05] sm:p-3">
+      <div className="ts-photo-stage relative overflow-hidden rounded-[2rem] p-2.5 shadow-card ring-1 ring-navy-900/[0.05] sm:p-3">
         <Image
           key={current.key} photo={current.photo} illustration={product.illustration} width={current.width} height={current.height} crop={current.crop} eager
           alt={`${product.name} — ${current.label.toLowerCase()}`} className="ts-fade-in aspect-square w-full rounded-[1.5rem] object-cover"
         />
+        {(product.stock <= 0 || product.status !== 'Active') && (
+          <span className="absolute top-4 right-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-rose-600 text-white px-3.5 py-1.5 text-xs font-bold shadow-xl ring-2 ring-white">
+            Product is not available
+          </span>
+        )}
       </div>
       {views.length > 1 ? (
         <ul className="mt-3 flex gap-3" aria-label="Product images">

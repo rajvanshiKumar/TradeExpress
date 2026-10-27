@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowUpRight, Check, FileText, Heart, Layers, Plus, Scale, ShieldCheck, ShoppingCart, Users, Zap } from 'lucide-react';
+import { ArrowUpRight, Check, FileText, Heart, Layers, Plus, ShieldCheck, ShoppingCart, Users, Zap } from 'lucide-react';
 import Image from '../common/Image';
 import Rating from '../common/Rating';
 import VerificationBadge from '../common/VerificationBadge';
@@ -102,7 +102,6 @@ export default function ProductCard({ product, layout = 'grid' }) {
   const supplierName = product.supplier?.company || product.supplier?.name || company?.name;
   const supplierSlug = company?.slug || (supplierName ? supplierName.toLowerCase().replace(/[^a-z0-9]+/g, '-') : '');
   const isVerified = Boolean(product.supplier?.isVerified || company?.verification?.status === 'reviewed');
-  const supplierCount = product.supplierCount || (product.supplier ? 1 : 0);
 
   return (
     <article className={`group relative flex overflow-hidden rounded-[1.75rem] bg-white p-2 shadow-card ring-1 ring-navy-900/[0.05] transition-all duration-300 hover:-translate-y-1 hover:shadow-lift ${isList ? 'flex-col sm:flex-row' : 'flex-col'}`}>
@@ -114,7 +113,13 @@ export default function ProductCard({ product, layout = 'grid' }) {
           />
         </Link>
         <div className="absolute left-3 top-3"><StatusChip product={product} /></div>
-        <WishlistButton product={product} className="absolute right-3 top-3" />
+        {outOfStock || product.status !== 'Active' ? (
+          <span className="absolute top-3 right-3 z-10 inline-flex items-center gap-1 rounded-full bg-rose-600 text-white px-2.5 py-1 text-[11px] font-bold shadow-md">
+            Product is not available
+          </span>
+        ) : (
+          <WishlistButton product={product} className="absolute right-3 top-3" />
+        )}
         {company || product.supplier ? (
           <span className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-[0.6875rem] font-semibold text-navy-900 shadow-sm backdrop-blur">
             <span aria-hidden="true">{company?.flag || '🇮🇳'}</span><span className="sr-only">Origin: </span>{product.supplier?.country || company?.country || 'India'}
@@ -135,17 +140,6 @@ export default function ProductCard({ product, layout = 'grid' }) {
               )}
             </p>
           ) : <span />}
-
-          {supplierCount > 1 && (
-            <Link
-              to={`${href}#suppliers-listing`}
-              className="inline-flex items-center gap-1 shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[0.6875rem] font-bold text-brand-700 hover:bg-brand-100 transition-colors border border-brand-200/60"
-              title={`Compare ${supplierCount} TradeExpress suppliers offering this product`}
-            >
-              <Scale className="size-3 text-brand-600" />
-              {supplierCount} Suppliers
-            </Link>
-          )}
         </div>
 
         <h3 className="mt-1.5 line-clamp-2 min-h-[2.7em] font-display text-[1rem] font-bold leading-snug tracking-[-0.01em] text-navy-900">
