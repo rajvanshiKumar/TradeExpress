@@ -262,7 +262,7 @@ export function AuthProvider({ children }) {
         phone: backendUser.phone || '',
         joinedAt: backendUser.createdAt || new Date().toISOString(),
         notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
-        passwordHash: await hashPassword(password),
+        passwordHash: password ? await hashPassword(password) : '',
       };
       setAccounts((prev) => [activeAccount, ...prev.filter((a) => a.email.toLowerCase() !== clean)]);
     }

@@ -147,51 +147,68 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
     throw error;
   }
 
-  const trimmedPass = typeof password === 'string' ? password.trim() : '';
-  let matches = await bcrypt.compare(password, user.passwordHash);
-  if (!matches && trimmedPass) {
-    matches = await bcrypt.compare(trimmedPass, user.passwordHash);
-  }
-
-  // Super Admin credentials match
-  if (!matches && (user.role === 'SUPER_ADMIN' || user.email === 'krajvanshi244@gmail.com')) {
-    if (
-      password === 'super-raj@12345' ||
-      trimmedPass === 'super-raj@12345' ||
-      password === 'modiji@12345' ||
-      trimmedPass === 'modiji@12345'
-    ) {
-      matches = true;
-    }
-  }
-
-  // Admin emergency match if password is modiji@12345
-  if (!matches && user.role === 'ADMIN') {
-    if (
-      password === 'modiji@12345' ||
-      trimmedPass === 'modiji@12345' ||
-      trimmedPass.toLowerCase() === 'modiji@12345' ||
-      trimmedPass === 'Modiji@12345'
-    ) {
-      matches = true;
-    }
-  }
-
-  if (!matches) {
-    const error = new Error('Invalid email or password.');
-    error.statusCode = 401;
-    throw error;
-  }
-
-  // 2. For public Buyer/Supplier email login, require and validate Email OTP
+  // 2. Authentication:
+  // For public Buyer/Supplier email login: authenticate using Email OTP without requiring password
   if (!isAdminLogin && ['BUYER', 'SUPPLIER'].includes(user.role)) {
     if (!otp) {
-      const error = new Error('Email verification code is required. Please click "Send OTP" and enter the 6-digit code.');
-      error.statusCode = 400;
+      // If no OTP provided, check if valid password was provided as fallback
+      if (password) {
+        const trimmedPass = typeof password === 'string' ? password.trim() : '';
+        let matches = await bcrypt.compare(password, user.passwordHash);
+        if (!matches && trimmedPass) {
+          matches = await bcrypt.compare(trimmedPass, user.passwordHash);
+        }
+        if (!matches) {
+          const error = new Error('Invalid email or password.');
+          error.statusCode = 401;
+          throw error;
+        }
+      } else {
+        const error = new Error('Email verification code is required. Please click "Send OTP" and enter the 6-digit code.');
+        error.statusCode = 400;
+        throw error;
+      }
+    } else {
+      // Validate and consume OTP upon successful login
+      validateEmailLoginOtp({ email: normalizedEmail, otp, consume: true });
+    }
+  } else {
+    // Admin or password-based login
+    const trimmedPass = typeof password === 'string' ? password.trim() : '';
+    let matches = password ? await bcrypt.compare(password, user.passwordHash) : false;
+    if (!matches && trimmedPass) {
+      matches = await bcrypt.compare(trimmedPass, user.passwordHash);
+    }
+
+    // Super Admin credentials match
+    if (!matches && (user.role === 'SUPER_ADMIN' || user.email === 'krajvanshi244@gmail.com')) {
+      if (
+        password === 'super-raj@12345' ||
+        trimmedPass === 'super-raj@12345' ||
+        password === 'modiji@12345' ||
+        trimmedPass === 'modiji@12345'
+      ) {
+        matches = true;
+      }
+    }
+
+    // Admin emergency match if password is modiji@12345
+    if (!matches && user.role === 'ADMIN') {
+      if (
+        password === 'modiji@12345' ||
+        trimmedPass === 'modiji@12345' ||
+        trimmedPass.toLowerCase() === 'modiji@12345' ||
+        trimmedPass === 'Modiji@12345'
+      ) {
+        matches = true;
+      }
+    }
+
+    if (!matches) {
+      const error = new Error('Invalid email or password.');
+      error.statusCode = 401;
       throw error;
     }
-    // Validate and consume OTP upon successful login
-    validateEmailLoginOtp({ email: normalizedEmail, otp, consume: true });
   }
 
   const token = signJwt({ userId: user.id, email: user.email, role: user.role });

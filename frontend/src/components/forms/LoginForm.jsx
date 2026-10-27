@@ -279,20 +279,16 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
         fieldErrors.emailOtp = "Please enter the 6-digit verification code.";
       }
 
-      if (!values.password) {
-        fieldErrors.password = "Password is required.";
-      }
-
       if (Object.keys(fieldErrors).length > 0) {
         setErrors(fieldErrors);
         return;
       }
 
       setBusy(true);
-      const result = await login(cleanEmail, values.password, role, { otp: cleanOtp });
+      const result = await login(cleanEmail, null, role, { otp: cleanOtp });
       setBusy(false);
       if (!result.ok) {
-        setValues((previous) => ({ ...previous, password: "" }));
+        setValues((previous) => ({ ...previous, emailOtp: "" }));
         setFormError(result.error);
         return;
       }
@@ -379,7 +375,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
               </span>
               <span>
                 <span className="block text-sm font-bold text-navy-900">Sign in with Email</span>
-                <span className="block text-xs text-muted">Email OTP &amp; password</span>
+                <span className="block text-xs text-muted">Instant email OTP</span>
               </span>
             </button>
 
@@ -565,53 +561,6 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
             ) : null}
           </div>
 
-          {/* Password Field + FORGET PASSWORD link placed after password field on right side */}
-          <div>
-            <label htmlFor={`${prefix}password`} className="ts-label">
-              Password <span className="text-danger">*</span>
-            </label>
-            <div className="relative">
-              <input
-                id={`${prefix}password`}
-                type={showPassword ? "text" : "password"}
-                required
-                autoComplete="new-password"
-                name={`ts_auth_password_${role || 'user'}`}
-                data-lpignore="true"
-                data-form-type="other"
-                value={values.password}
-                onChange={set("password")}
-                className="ts-input pr-10"
-                aria-invalid={errors.password ? "true" : undefined}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-navy-400 hover:text-navy-800"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? (
-                  <EyeOff className="size-4" aria-hidden="true" />
-                ) : (
-                  <Eye className="size-4" aria-hidden="true" />
-                )}
-              </button>
-            </div>
-            {errors.password ? (
-              <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                {errors.password}
-              </p>
-            ) : null}
-            <div className="mt-2.5 flex justify-end">
-              <Link
-                to="/forgot-password"
-                className="text-xs font-bold uppercase tracking-wider text-brand-600 hover:text-brand-700 hover:underline"
-              >
-                FORGET PASSWORD
-              </Link>
-            </div>
-          </div>
         </>
       ) : null}
 
