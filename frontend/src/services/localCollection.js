@@ -40,5 +40,25 @@ export function createCollection(key, seed) {
       writeStorage(key, records);
       return records;
     },
+    /** Saves or updates a single record in the collection. */
+    async save(item) {
+      if (!item) return item;
+      const current = readInstant();
+      const records = Array.isArray(current) ? [...current] : [];
+      const index = records.findIndex(
+        (r) =>
+          r &&
+          ((item.id && r.id === item.id) ||
+            (item.orderNumber && r.orderNumber === item.orderNumber) ||
+            (item.slug && r.slug === item.slug))
+      );
+      if (index >= 0) {
+        records[index] = { ...records[index], ...item };
+      } else {
+        records.unshift(item);
+      }
+      writeStorage(key, records);
+      return item;
+    },
   };
 }

@@ -40,6 +40,16 @@ import useNotifications from '../../hooks/useNotifications';
 import useContactSupplier from '../../hooks/useContactSupplier';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { apiGet } from '../../services/apiClient';
+import { slugify } from '../../utils/validators';
+
+const safeSlug = (text) => {
+  if (!text) return 'supplier';
+  try {
+    return slugify(String(text)) || 'supplier';
+  } catch {
+    return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'supplier';
+  }
+};
 
 const COUNTRY_FLAGS = {
   china: '🇨🇳',
@@ -182,11 +192,15 @@ export default function ProductComparison() {
       let remoteMatches = [];
       try {
         const searchRes = await apiGet(`products?search=${encodeURIComponent(query)}&limit=50`);
-        if (searchRes && searchRes.success && Array.isArray(searchRes.data)) {
-          remoteMatches = searchRes.data;
+        if (searchRes && searchRes.success) {
+          if (Array.isArray(searchRes.data)) {
+            remoteMatches = searchRes.data;
+          } else if (Array.isArray(searchRes.data?.products)) {
+            remoteMatches = searchRes.data.products;
+          }
         }
       } catch (err) {
-        // Fallback to local memory catalogue
+        console.warn('[TradeExpress] Remote search failed, falling back to local catalogue:', err.message);
       }
 
       // 2. Search active catalogue / seed items in memory
@@ -223,7 +237,13 @@ export default function ProductComparison() {
           || null;
 
         // 2. Accurately resolve country & flag (prevent foreign suppliers defaulting to India flag)
-        const companyName = company?.name || supRaw.company || supRaw.name || 'Verified Supplier';
+        const companyName =
+          company?.name ||
+          supRaw.company ||
+          supRaw.name ||
+          (item.companyId && !item.companyId.startsWith('TS-CO-') ? item.companyId : '') ||
+          'Verified Supplier';
+
         const detected = detectCountryFromName(companyName || item.name);
         const country = company?.country || supRaw.country || detected?.country || 'India';
         const city = company?.city || supRaw.city || detected?.city || 'Mumbai';
@@ -238,10 +258,10 @@ export default function ProductComparison() {
         );
 
         const supplierObj = {
-          id: company?.id || supRaw.id || `sup-${item.id}`,
+          id: company?.id || supRaw.id || item.supplierId || `sup-${item.id}`,
           company: companyName,
           name: companyName,
-          slug: company?.slug || supRaw.slug || slugify(companyName),
+          slug: company?.slug || supRaw.slug || safeSlug(companyName),
           isVerified,
           location: city ? `${city}, ${country}` : country,
           city,
@@ -255,7 +275,16 @@ export default function ProductComparison() {
         };
 
         // Strict company key: deduplicate by company ID or name
-        const companyKey = (company?.id || supRaw.id || companyName || '').toLowerCase().trim();
+        const companyKey = (
+          company?.id ||
+          company?.slug ||
+          supRaw.id ||
+          supRaw.slug ||
+          (item.companyId && !item.companyId.startsWith('TS-CO-') ? item.companyId : null) ||
+          companyName ||
+          item.id ||
+          ''
+        ).toLowerCase().trim();
         
         if (companyKey && !seenCompanyKeys.has(companyKey)) {
           seenCompanyKeys.add(companyKey);
@@ -274,7 +303,27 @@ export default function ProductComparison() {
 
       setComparedProducts(combined);
     } catch (err) {
-      console.error('Search error:', err);
+      console.error('Search error in ProductComparison:', err);
+      // Fallback: If any processing error occurs, provide local matches safely
+      try {
+        const qLower = query.toLowerCase();
+        const fallbackList = (products || [])
+          .filter((p) => p && p.name && (p.name.toLowerCase().includes(qLower) || (p.categoryName || '').toLowerCase().includes(qLower)))
+          .map((p) => ({
+            ...p,
+            supplier: p.supplier || { company: 'Verified Supplier', country: 'India', flag: '🇮🇳', isVerified: true, rating: 4.6, reviewCount: 20 },
+            price: parseNumeric(p.price, 0),
+            moq: parseNumeric(p.moq, 1),
+            stock: parseNumeric(p.stock, 100),
+            leadTimeDays: parseNumeric(p.leadTimeDays, 14),
+          }));
+        if (fallbackList.length > 0) {
+          setComparedProducts(fallbackList);
+          return;
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback failed:', fallbackErr);
+      }
       showToast('Search encountered an error. Please try again.', 'error');
     } finally {
       setSearching(false);
@@ -743,7 +792,7 @@ export default function ProductComparison() {
                         <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200/60">
                           <span className="text-muted block text-[11px]">Minimum Order</span>
                           <span className="font-bold text-sm text-navy-950">
-                            {product.moq.toLocaleString()} {product.unit || 'pieces'}
+                            {Number(product.moq || 1).toLocaleString()} {product.unit || 'pieces'}
                           </span>
                         </div>
 
@@ -757,7 +806,7 @@ export default function ProductComparison() {
                         <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200/60">
                           <span className="text-muted block text-[11px]">Stock in Warehouse</span>
                           <span className="font-bold text-sm text-navy-950">
-                            {product.stock.toLocaleString()} {product.unit || 'units'}
+                            {Number(product.stock || 0).toLocaleString()} {product.unit || 'units'}
                           </span>
                         </div>
 
@@ -778,11 +827,11 @@ export default function ProductComparison() {
                       </div>
 
                       {/* Product Specifications Preview */}
-                      {product.specifications && Object.keys(product.specifications).length > 0 && (
+                      {product.specifications && typeof product.specifications === 'object' && Object.keys(product.specifications).length > 0 && (
                         <div className="flex flex-wrap gap-1.5 text-[11px]">
                           {Object.entries(product.specifications).slice(0, 4).map(([key, val]) => (
                             <span key={key} className="inline-flex items-center rounded-md bg-navy-50 px-2 py-0.5 text-navy-700 font-medium border border-navy-100">
-                              <span className="text-muted mr-1">{key}:</span> {Array.isArray(val) ? val.join(', ') : String(val)}
+                              <span className="text-muted mr-1">{key}:</span> {Array.isArray(val) ? val.join(', ') : String(val ?? '')}
                             </span>
                           ))}
                         </div>
@@ -802,15 +851,15 @@ export default function ProductComparison() {
                         </div>
 
                         {/* Volume Price Tiers */}
-                        {product.priceTiers && product.priceTiers.length > 0 && (
+                        {product.priceTiers && Array.isArray(product.priceTiers) && product.priceTiers.length > 0 && (
                           <div className="mt-2.5 rounded-lg bg-white p-2.5 border border-navy-100 space-y-1 text-xs">
                             <span className="text-[11px] font-bold text-navy-900 block border-b pb-1">
                               Volume Discount Tiers:
                             </span>
                             {product.priceTiers.map((tier, idx) => (
                               <div key={idx} className="flex justify-between text-navy-700">
-                                <span>{tier.minQty.toLocaleString()}+ {product.unit}s:</span>
-                                <span className="font-bold text-navy-900">{money(tier.price)}</span>
+                                <span>{Number(tier?.minQty ?? 1).toLocaleString()}+ {product.unit || 'piece'}s:</span>
+                                <span className="font-bold text-navy-900">{money(tier?.price ?? product.price)}</span>
                               </div>
                             ))}
                           </div>

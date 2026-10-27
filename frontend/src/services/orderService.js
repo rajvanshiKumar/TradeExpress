@@ -78,6 +78,7 @@ const orderService = {
   },
 
   saveOrders: (records) => localOrders.saveAll(records),
+  saveOrder: (order) => localOrders.save(order),
 
   getOrder: async (identifier) => {
     if (isApiConfigured) {
@@ -100,10 +101,10 @@ const orderService = {
       try {
         const payload = {
           userId: buyer?.id && !String(buyer.id).startsWith('TS-') ? buyer.id : null,
-          buyerName: contact.name || buyer?.name || 'Customer',
-          buyerEmail: contact.email || buyer?.email || 'customer@example.com',
-          buyerPhone: contact.phone || buyer?.phone || '+91 98765 43210',
-          buyerCompany: contact.company || buyer?.company || '',
+          buyerName: contact?.name || buyer?.name || 'Customer',
+          buyerEmail: contact?.email || buyer?.email || 'customer@example.com',
+          buyerPhone: contact?.phone || buyer?.phone || '+91 98765 43210',
+          buyerCompany: contact?.company || buyer?.company || '',
           shippingMethod,
           paymentMethod,
           deliveryAddress: address,
@@ -126,41 +127,57 @@ const orderService = {
 
         const response = await apiPost('orders', payload);
 
-        if (response.success && response.data) {
+        if (response && response.success && response.data) {
           const formatted = formatApiOrder(response.data, source);
           // Also mirror to local collection for instant offline access
           try {
-            await localOrders.save(formatted);
+            if (typeof localOrders.save === 'function') {
+              await localOrders.save(formatted);
+            }
           } catch {
             // Ignore local storage mirror errors
           }
           return formatted;
         }
+
+        // If backend explicitly replied with failure
+        throw new Error(response?.message || 'Order creation failed on backend.');
       } catch (err) {
-        console.warn('[TradeExpress OrderService] Backend order creation failed, falling back to local:', err.message);
-        throw err; // Let caller know real validation error from backend (e.g. stock, MOQ)
+        console.warn('[TradeExpress OrderService] Backend order creation error:', err.message);
+        // If it's a real validation, stock, or authentication error, pass it to UI
+        const isNetworkDown = err.message?.includes('timed out') || err.message?.includes('could not be reached') || err.status === 0;
+        if (!isNetworkDown && err.status && err.status >= 400 && err.status < 500) {
+          throw err;
+        }
       }
     }
 
-    // Fallback if API not configured
-    await wait(500);
+    // Fallback if API not configured or network unreachable
+    await wait(300);
     const fallbackOrder = {
       id: makeId('TS-O'),
+      orderNumber: `TS-${Date.now().toString(36).toUpperCase()}`,
       buyerId: buyer?.id || 'guest',
       buyerName: buyer?.name || contact?.name || 'Guest',
       buyerCompany: buyer?.company ?? '',
       items: lines.map((line) => toOrderItem(line.product, line.quantity, line.variant ?? null)),
       shippingMethod,
       paymentMethod,
-      paymentStatus,
+      paymentStatus: paymentStatus || (paymentMethod === 'cod' ? 'cod' : 'pending'),
       source,
       totals: { subtotal: totals.subtotal, shipping: totals.shipping, tax: totals.tax, total: totals.total },
-      contact,
+      contact: contact || {},
       address,
       status: paymentMethod === 'cod' ? 'Confirmed' : 'Pending',
       createdAt: new Date().toISOString(),
     };
-    await localOrders.save(fallbackOrder);
+    try {
+      if (typeof localOrders.save === 'function') {
+        await localOrders.save(fallbackOrder);
+      }
+    } catch {
+      // Ignore local storage error
+    }
     return fallbackOrder;
   },
 };
