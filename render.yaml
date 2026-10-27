@@ -1,0 +1,13 @@
+services:
+  # Frontend Static Site configuration for Render
+  - type: web
+    name: tradeexpress-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      # SPA fallback: Rewrite all routes to index.html so React Router handles them on refresh
+      - type: rewrite
+        source: /*
+        destination: /index.html
