@@ -147,7 +147,8 @@ router.post(
   '/login',
   validate([
     body('email').custom((val) => val === 'admin' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)).withMessage('Valid email is required.'),
-    body('password').notEmpty().withMessage('Password is required.'),
+    body('otp').optional({ nullable: true }).trim(),
+    body('password').optional({ nullable: true }),
   ]),
   authController.login
 );

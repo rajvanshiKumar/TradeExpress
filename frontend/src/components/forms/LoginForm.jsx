@@ -71,11 +71,13 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [sendingEmailOtp, setSendingEmailOtp] = useState(false);
   const [emailCooldown, setEmailCooldown] = useState(0);
+  const [emailDevOtp, setEmailDevOtp] = useState("");
 
   // Mobile OTP state
   const [mobileOtpSent, setMobileOtpSent] = useState(false);
   const [sendingMobileOtp, setSendingMobileOtp] = useState(false);
   const [mobileCooldown, setMobileCooldown] = useState(0);
+  const [mobileDevOtp, setMobileDevOtp] = useState("");
 
   // Custom Country Code Dropdown state
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
@@ -94,6 +96,10 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       phone: "",
       mobileOtp: "",
     }));
+    setEmailOtpSent(false);
+    setMobileOtpSent(false);
+    setEmailDevOtp("");
+    setMobileDevOtp("");
     setErrors({});
     setFormError("");
   }, [role, loginMethod]);
@@ -170,7 +176,12 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       } else {
         setEmailOtpSent(true);
         setEmailCooldown(data.cooldownSeconds || 60);
-        showToast("Verification code dispatched to your email inbox.");
+        if (data.devOtp) {
+          setEmailDevOtp(data.devOtp);
+          showToast(`Verification code sent! (Code: ${data.devOtp})`);
+        } else {
+          showToast("Verification code dispatched to your email inbox.");
+        }
       }
     } catch {
       setFormError("Unable to contact authentication server. Please check your connection.");
@@ -209,7 +220,12 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       } else {
         setMobileOtpSent(true);
         setMobileCooldown(data.cooldownSeconds || 60);
-        showToast("Verification code dispatched to your mobile number.");
+        if (data.devOtp) {
+          setMobileDevOtp(data.devOtp);
+          showToast(`Verification code sent! (Code: ${data.devOtp})`);
+        } else {
+          showToast("Verification code dispatched to your mobile number.");
+        }
       }
     } catch {
       setFormError("Unable to contact authentication server. Please check your connection.");
@@ -272,9 +288,20 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
         fieldErrors.email = "Enter a valid email address.";
       }
 
+      if (fieldErrors.email) {
+        setErrors(fieldErrors);
+        return;
+      }
+
+      // If OTP hasn't been sent yet, trigger send OTP when submitting
+      if (!emailOtpSent) {
+        handleSendEmailOtp();
+        return;
+      }
+
       const cleanOtp = values.emailOtp.trim();
       if (!cleanOtp) {
-        fieldErrors.emailOtp = "Email verification code is required. Click 'Send OTP' and enter the 6-digit code.";
+        fieldErrors.emailOtp = "Please enter the 6-digit verification code.";
       } else if (cleanOtp.length !== 6) {
         fieldErrors.emailOtp = "Please enter the 6-digit verification code.";
       }
@@ -303,9 +330,20 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
         fieldErrors.phone = `Enter a valid ${values.country} mobile number.`;
       }
 
+      if (fieldErrors.phone) {
+        setErrors(fieldErrors);
+        return;
+      }
+
+      // If OTP hasn't been sent yet, trigger send OTP when submitting
+      if (!mobileOtpSent) {
+        handleSendMobileOtp();
+        return;
+      }
+
       const cleanOtp = values.mobileOtp.trim();
       if (!cleanOtp) {
-        fieldErrors.mobileOtp = "Mobile verification code is required. Click 'Send OTP' and enter the 6-digit code.";
+        fieldErrors.mobileOtp = "Please enter the 6-digit verification code.";
       } else if (cleanOtp.length !== 6) {
         fieldErrors.mobileOtp = "Please enter the 6-digit verification code.";
       }
@@ -537,29 +575,49 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
             ) : null}
           </div>
 
-          {/* Email OTP Verification Step */}
-          <div>
-            <label htmlFor={`${prefix}email-otp`} className="ts-label">
-              Email Verification Code (OTP) <span className="text-danger">*</span>
-            </label>
-            <input
-              id={`${prefix}email-otp`}
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              autoComplete="off"
-              value={values.emailOtp}
-              onChange={set("emailOtp")}
-              className="ts-input tracking-widest text-center sm:text-left font-mono font-bold"
-              aria-invalid={errors.emailOtp ? "true" : undefined}
-            />
-            {errors.emailOtp ? (
-              <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                {errors.emailOtp}
-              </p>
-            ) : null}
-          </div>
+          {/* Email OTP Verification Step - Only displayed after OTP is dispatched */}
+          {emailOtpSent ? (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-200 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label htmlFor={`${prefix}email-otp`} className="ts-label !mb-0">
+                  Email Verification Code (OTP) <span className="text-danger">*</span>
+                </label>
+                {emailDevOtp ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setValues((prev) => ({ ...prev, emailOtp: emailDevOtp }));
+                      if (errors.emailOtp) setErrors((prev) => ({ ...prev, emailOtp: "" }));
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
+                    title="Click to auto-fill code"
+                  >
+                    <span>Code: <strong className="font-mono">{emailDevOtp}</strong></span>
+                    <span className="text-[10px] text-emerald-700 underline font-normal">(Click to fill)</span>
+                  </button>
+                ) : null}
+              </div>
+              <input
+                id={`${prefix}email-otp`}
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                autoComplete="one-time-code"
+                placeholder="Enter 6-digit code"
+                value={values.emailOtp}
+                onChange={set("emailOtp")}
+                className="ts-input tracking-widest text-center sm:text-left font-mono font-bold text-base"
+                aria-invalid={errors.emailOtp ? "true" : undefined}
+                autoFocus
+              />
+              {errors.emailOtp ? (
+                <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
+                  <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+                  {errors.emailOtp}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
         </>
       ) : null}
@@ -708,29 +766,49 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
             ) : null}
           </div>
 
-          {/* Mobile OTP Verification Step */}
-          <div>
-            <label htmlFor={`${prefix}mobile-otp`} className="ts-label">
-              Mobile Verification Code (OTP) <span className="text-danger">*</span>
-            </label>
-            <input
-              id={`${prefix}mobile-otp`}
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              autoComplete="off"
-              value={values.mobileOtp}
-              onChange={set("mobileOtp")}
-              className="ts-input tracking-widest text-center sm:text-left font-mono font-bold"
-              aria-invalid={errors.mobileOtp ? "true" : undefined}
-            />
-            {errors.mobileOtp ? (
-              <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                {errors.mobileOtp}
-              </p>
-            ) : null}
-          </div>
+          {/* Mobile OTP Verification Step - Only displayed after OTP is dispatched */}
+          {mobileOtpSent ? (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-200 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label htmlFor={`${prefix}mobile-otp`} className="ts-label !mb-0">
+                  Mobile Verification Code (OTP) <span className="text-danger">*</span>
+                </label>
+                {mobileDevOtp ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setValues((prev) => ({ ...prev, mobileOtp: mobileDevOtp }));
+                      if (errors.mobileOtp) setErrors((prev) => ({ ...prev, mobileOtp: "" }));
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
+                    title="Click to auto-fill code"
+                  >
+                    <span>Code: <strong className="font-mono">{mobileDevOtp}</strong></span>
+                    <span className="text-[10px] text-emerald-700 underline font-normal">(Click to fill)</span>
+                  </button>
+                ) : null}
+              </div>
+              <input
+                id={`${prefix}mobile-otp`}
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                autoComplete="one-time-code"
+                placeholder="Enter 6-digit code"
+                value={values.mobileOtp}
+                onChange={set("mobileOtp")}
+                className="ts-input tracking-widest text-center sm:text-left font-mono font-bold text-base"
+                aria-invalid={errors.mobileOtp ? "true" : undefined}
+                autoFocus
+              />
+              {errors.mobileOtp ? (
+                <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
+                  <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+                  {errors.mobileOtp}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </>
       ) : null}
 
@@ -740,19 +818,23 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
           full
           size="lg"
           icon={isAdmin ? ShieldCheck : LogIn}
-          loading={busy}
+          loading={busy || sendingEmailOtp || sendingMobileOtp}
           className={
             isAdmin && adminType === "super_admin"
               ? "!bg-emerald-950 !text-emerald-300 hover:!bg-emerald-900 border border-emerald-500/40"
               : ""
           }
         >
-          {busy
-            ? "Signing in…"
+          {busy || sendingEmailOtp || sendingMobileOtp
+            ? "Please wait…"
             : isAdmin
             ? adminType === "super_admin"
               ? "Sign in as Super Admin"
               : "Sign in as Admin"
+            : !isAdmin && loginMethod === "email" && !emailOtpSent
+            ? "Send Verification Code"
+            : !isAdmin && loginMethod === "mobile" && !mobileOtpSent
+            ? "Send Verification Code"
             : role
             ? `Sign in as ${ROLE_NAMES[role] || role}`
             : "Sign In"}

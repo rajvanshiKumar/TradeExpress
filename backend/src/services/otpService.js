@@ -536,6 +536,9 @@ export async function requestEmailLoginOtp({ email, role }) {
     message: 'Verification code has been sent to your email address.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     email: normalizedEmail,
+    ...(process.env.NODE_ENV !== 'production' || process.env.DEV_OTP_ENABLED === 'true'
+      ? { devOtp: generatedOtp }
+      : {}),
   };
 }
 
@@ -708,6 +711,9 @@ export async function requestMobileLoginOtp({ phone, country = 'India', role }) 
     message: 'OTP has been sent to your mobile number via SMS.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     phone: formattedPhone,
+    ...(process.env.NODE_ENV !== 'production' || process.env.DEV_OTP_ENABLED === 'true'
+      ? { devOtp: generatedOtp || '123456' }
+      : {}),
   };
 }
 
