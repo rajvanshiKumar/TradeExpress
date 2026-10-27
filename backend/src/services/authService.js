@@ -92,6 +92,385 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
   return { user, token };
 }
 
+/**
+ * Production-ready Enterprise Supplier Registration
+ */
+export async function registerSupplier({
+  name,
+  email,
+  password,
+  confirmPassword,
+  company,
+  companyName,
+  phone,
+  country = 'India',
+  businessType,
+  businessTypeOther,
+  gstStatus,
+  gstin,
+  pan,
+  panNumber,
+  taxId,
+  businessPhone,
+  yearEstablished,
+  companyDescription,
+  logoUrl,
+  businessImages,
+  state,
+  city,
+  postalCode,
+  businessAddress,
+  factoryAddress,
+  factoryAddressSame = true,
+  aadhaarConsent = false,
+  aadhaarNumber,
+  aadhaarLast4,
+  documents = [],
+  verificationToken,
+  emailVerificationToken,
+  agree = true,
+  req,
+}) {
+  // 1. Validate required fields
+  if (!name || name.trim().length < 2) {
+    const error = new Error('Full name is required (minimum 2 characters).');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const legalCompany = (company || companyName || '').trim();
+  if (!legalCompany || legalCompany.length < 2) {
+    const error = new Error('Legal Company Name is required (minimum 2 characters).');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  if (!normalizedEmail || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(normalizedEmail)) {
+    const error = new Error('A valid email address is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const existingEmail = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+  if (existingEmail) {
+    const error = new Error('An account with this email address already exists.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  if (!phone) {
+    const error = new Error('Mobile number is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalized = normalizeMobile(phone, country);
+  const storedPhone = normalized.ok ? normalized.formattedPhone : phone;
+
+  // Uniqueness check for mobile
+  const existingPhone = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { phone: storedPhone },
+        ...(normalized.msg91Mobile ? [{ phone: normalized.msg91Mobile }, { phone: `+${normalized.msg91Mobile}` }] : []),
+      ],
+    },
+  });
+  if (existingPhone) {
+    const error = new Error('An account with this mobile number already exists.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  // Password validation
+  if (!password || password.length < 8) {
+    const error = new Error('Password must be at least 8 characters.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    const error = new Error('Password must contain at least one letter and one number.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (confirmPassword && password !== confirmPassword) {
+    const error = new Error('Password and confirm password do not match.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Business Type
+  if (!businessType) {
+    const error = new Error('Business Type is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (businessType === 'Other' && (!businessTypeOther || !businessTypeOther.trim())) {
+    const error = new Error('Please specify your business type description.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Country-based GST & Tax rules
+  const isIndia = (country || 'India').trim().toLowerCase() === 'india';
+  let cleanGstin = null;
+  let cleanPan = null;
+  const rawGstin = gstin || (isIndia ? taxId : '');
+  const rawPan = pan || panNumber;
+
+  if (isIndia) {
+    // Indian GST handling
+    const taxableGstStatuses = [
+      'Regular GST Registration',
+      'Composition Scheme',
+      'Casual Taxable Person',
+      'Non-Resident Taxable Person',
+      'Input Service Distributor (ISD)',
+      'SEZ Unit',
+      'SEZ Developer',
+      'TDS Deductor',
+      'TCS Collector',
+    ];
+
+    if (taxableGstStatuses.includes(gstStatus)) {
+      if (!rawGstin || !rawGstin.trim()) {
+        const error = new Error(`GSTIN is required for ${gstStatus}.`);
+        error.statusCode = 400;
+        throw error;
+      }
+      cleanGstin = rawGstin.trim().toUpperCase();
+      const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstinRegex.test(cleanGstin)) {
+        const error = new Error('Invalid Indian GSTIN format. Expected 15-character alphanumeric format.');
+        error.statusCode = 400;
+        throw error;
+      }
+    } else if (rawGstin && rawGstin.trim()) {
+      cleanGstin = rawGstin.trim().toUpperCase();
+      const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstinRegex.test(cleanGstin)) {
+        const error = new Error('Invalid Indian GSTIN format.');
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+
+    if (rawPan && rawPan.trim()) {
+      cleanPan = rawPan.trim().toUpperCase();
+      const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+      if (!panRegex.test(cleanPan)) {
+        const error = new Error('Invalid Indian PAN format. Expected 10-character format (e.g. ABCDE1234F).');
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+  }
+
+  // Year established validation
+  let parsedYear = null;
+  if (yearEstablished) {
+    parsedYear = parseInt(yearEstablished, 10);
+    const currentYear = new Date().getFullYear();
+    if (isNaN(parsedYear) || parsedYear < 1800 || parsedYear > currentYear) {
+      const error = new Error(`Year established must be between 1800 and ${currentYear}.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  // Company description
+  const cleanDesc = (companyDescription || '').trim();
+  if (!cleanDesc || cleanDesc.length < 10) {
+    const error = new Error('Company description is required (at least 10 characters).');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Address validation
+  if (!country) {
+    const error = new Error('Country is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!state || !state.trim()) {
+    const error = new Error('State / Province / Region is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!city || !city.trim()) {
+    const error = new Error('City is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!postalCode || !postalCode.trim()) {
+    const error = new Error(isIndia ? 'PIN Code is required.' : 'Postal Code is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (isIndia && !/^[1-9][0-9]{5}$/.test(postalCode.trim())) {
+    const error = new Error('Please enter a valid 6-digit Indian PIN Code.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!businessAddress || !businessAddress.trim()) {
+    const error = new Error('Full Business Address is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const sameFactory = factoryAddressSame === true || factoryAddressSame === 'true';
+  const cleanFactory = sameFactory ? businessAddress.trim() : (factoryAddress || '').trim();
+  if (!sameFactory && !cleanFactory) {
+    const error = new Error('Factory Address is required when factory address is different from business address.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Terms and Privacy acceptance
+  if (!agree) {
+    const error = new Error('You must accept the Supplier Terms and Privacy Notice to proceed.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // 2. Generate unique supplier ID
+  let supplierCode;
+  let codeUnique = false;
+  let attempts = 0;
+  while (!codeUnique && attempts < 10) {
+    attempts++;
+    const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+    supplierCode = `SUP-${randomSuffix}`;
+    const collision = await prisma.user.findUnique({ where: { supplierCode } });
+    if (!collision) codeUnique = true;
+  }
+
+  // 3. Hash password
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  // 4. Create User
+  const user = await prisma.user.create({
+    data: {
+      email: normalizedEmail,
+      passwordHash,
+      name: name.trim(),
+      role: 'SUPPLIER',
+      company: legalCompany,
+      phone: storedPhone,
+      city: city.trim(),
+      state: state.trim(),
+      postalCode: postalCode.trim(),
+      country: country.trim(),
+      supplierCode,
+      businessType,
+      businessTypeOther: businessType === 'Other' ? (businessTypeOther || '').trim() : null,
+      gstStatus: isIndia ? gstStatus : null,
+      gstin: cleanGstin,
+      pan: cleanPan,
+      taxId: !isIndia ? (taxId || '').trim() : null,
+      businessPhone: businessPhone ? businessPhone.trim() : null,
+      yearEstablished: parsedYear,
+      companyDescription: cleanDesc,
+      logoUrl: logoUrl || null,
+      businessImages: Array.isArray(businessImages) ? businessImages : [],
+      businessAddress: businessAddress.trim(),
+      factoryAddress: cleanFactory,
+      factoryAddressSame: sameFactory,
+      warehouseAddress: cleanFactory,
+      warehouseState: state.trim(),
+      warehousePincode: postalCode.trim(),
+      kycStatus: 'PENDING',
+      isVerified: false,
+      isPhoneVerified: Boolean(verificationToken),
+      aadhaarConsent: Boolean(aadhaarConsent),
+      aadhaarLast4: aadhaarNumber ? String(aadhaarNumber).replace(/\D/g, '').slice(-4) : (aadhaarLast4 || null),
+    },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      company: true,
+      phone: true,
+      city: true,
+      state: true,
+      postalCode: true,
+      country: true,
+      supplierCode: true,
+      businessType: true,
+      gstStatus: true,
+      gstin: true,
+      pan: true,
+      taxId: true,
+      companyDescription: true,
+      logoUrl: true,
+      businessImages: true,
+      kycStatus: true,
+      isVerified: true,
+      isPhoneVerified: true,
+      createdAt: true,
+    },
+  });
+
+  // 5. Save uploaded KYC / Business Documents if provided
+  let validDocsCount = 0;
+  if (Array.isArray(documents) && documents.length > 0) {
+    const validDocs = documents
+      .filter((d) => d && d.fileUrl && d.fileName)
+      .map((d) => ({
+        userId: user.id,
+        docType: d.docType || d.type || 'BUSINESS_REG',
+        docNumber: d.docNumber ? String(d.docNumber).trim() : null,
+        fileName: String(d.fileName).slice(0, 255),
+        fileUrl: String(d.fileUrl),
+        fileSize: typeof d.fileSize === 'number' ? d.fileSize : null,
+        status: 'PENDING',
+      }));
+
+    if (validDocs.length > 0) {
+      await prisma.kycDocument.createMany({
+        data: validDocs,
+      });
+      validDocsCount = validDocs.length;
+    }
+  }
+
+  // 6. Audit log
+  try {
+    const { logAuditAction } = await import('./auditService.js');
+    await logAuditAction({
+      req,
+      action: 'SUPPLIER_REGISTRATION',
+      resource: 'USERS',
+      targetId: user.id,
+      details: {
+        supplierCode,
+        company: legalCompany,
+        email: normalizedEmail,
+        country: country.trim(),
+      },
+    });
+  } catch {
+    // Non-blocking
+  }
+
+  const token = signJwt({ userId: user.id, email: user.email, role: user.role });
+  return {
+    user: {
+      ...user,
+      panNumber: user.pan,
+      taxId: user.taxId || user.gstin,
+    },
+    token,
+    supplierCode,
+    documentsCount: validDocsCount,
+  };
+}
+
 export async function loginUser({ email, password, role, otp, isAdminLogin = false }) {
   const normalizedEmail = (email || '').toLowerCase().trim();
   let user = await prisma.user.findUnique({

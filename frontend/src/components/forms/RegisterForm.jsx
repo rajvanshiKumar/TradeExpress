@@ -541,8 +541,8 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
                           setCountrySearch('');
                         }}
                         className={`w-full px-3 py-2 text-left text-xs sm:text-sm flex items-center justify-between rounded-lg transition-colors cursor-pointer ${isSelected
-                            ? 'bg-brand-50 text-navy-950 font-bold'
-                            : 'text-navy-800 hover:bg-navy-50'
+                          ? 'bg-brand-50 text-navy-950 font-bold'
+                          : 'text-navy-800 hover:bg-navy-50'
                           }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -646,8 +646,8 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
                               setBusinessTypeSearch('');
                             }}
                             className={`w-full px-3 py-2 text-left text-xs sm:text-sm flex items-center justify-between rounded-lg transition-colors cursor-pointer ${isSelected
-                                ? 'bg-brand-50 text-brand-900 font-bold'
-                                : 'text-navy-800 hover:bg-navy-50'
+                              ? 'bg-brand-50 text-brand-900 font-bold'
+                              : 'text-navy-800 hover:bg-navy-50'
                               }`}
                           >
                             <span className="truncate">{type}</span>
@@ -728,8 +728,8 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
                             setPhoneCountrySearch('');
                           }}
                           className={`w-full px-2.5 py-2 text-left text-xs sm:text-sm flex items-center justify-between rounded-lg transition-colors cursor-pointer ${isSelected
-                              ? 'bg-brand-50 text-navy-950 font-bold'
-                              : 'text-navy-800 hover:bg-navy-50'
+                            ? 'bg-brand-50 text-navy-950 font-bold'
+                            : 'text-navy-800 hover:bg-navy-50'
                             }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
@@ -789,8 +789,8 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
                 {phoneCooldown > 0
                   ? `Enter OTP (${phoneCooldown}s)`
                   : phoneOtpSent
-                  ? 'Enter OTP'
-                  : 'Send OTP'}
+                    ? 'Enter OTP'
+                    : 'Send OTP'}
               </button>
             )}
           </div>
@@ -849,8 +849,8 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
                 {emailCooldown > 0
                   ? `Enter OTP (${emailCooldown}s)`
                   : emailOtpSent
-                  ? 'Enter OTP'
-                  : 'Send OTP'}
+                    ? 'Enter OTP'
+                    : 'Send OTP'}
               </button>
             )}
           </div>

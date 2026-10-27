@@ -49,10 +49,27 @@ model User {
   company             String?
   phone               String?
   city                String?
+  state               String?
+  postalCode          String?
   country             String?              @default("India")
+  supplierCode        String?              @unique
+  businessType        String?
+  businessTypeOther   String?
+  gstStatus           String?
   gstin               String?
   pan                 String?
-  bankAccountNumber    String?
+  taxId               String?
+  businessPhone       String?
+  yearEstablished     Int?
+  companyDescription  String?              @db.Text
+  logoUrl             String?              @db.Text
+  businessImages      Json?
+  businessAddress     String?              @db.Text
+  factoryAddress      String?              @db.Text
+  factoryAddressSame  Boolean              @default(true)
+  aadhaarConsent      Boolean?             @default(false)
+  aadhaarLast4        String?
+  bankAccountNumber   String?
   bankIfsc            String?
   bankName            String?
   warehouseAddress    String?              @db.Text

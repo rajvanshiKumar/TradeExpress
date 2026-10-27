@@ -34,10 +34,15 @@ export default function CustomSelect({
   const searchInputRef = useRef(null);
   const selectId = useId();
 
-  // Normalize options into { value, label } objects
+  // Normalize options into { value, label, description, badge } objects
   const normalizedOptions = options.map((opt) => {
     if (typeof opt === 'object' && opt !== null) {
-      return { value: opt.value, label: opt.label ?? String(opt.value) };
+      return {
+        value: opt.value,
+        label: opt.label ?? String(opt.value),
+        description: opt.description,
+        badge: opt.badge || opt.taxpayerType,
+      };
     }
     return { value: opt, label: String(opt) };
   });
@@ -47,7 +52,8 @@ export default function CustomSelect({
   );
 
   const filteredOptions = normalizedOptions.filter((opt) =>
-    opt.label.toLowerCase().includes(query.toLowerCase())
+    opt.label.toLowerCase().includes(query.toLowerCase()) ||
+    (opt.description && opt.description.toLowerCase().includes(query.toLowerCase()))
   );
 
   // Focus search input when opened
@@ -182,15 +188,29 @@ export default function CustomSelect({
                     role="option"
                     aria-selected={isSelected}
                     onClick={() => handleSelect(opt.value)}
-                    className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold transition-all ${
+                    className={`group flex w-full items-start justify-between rounded-xl px-3 py-2.5 text-left text-xs transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-emerald-50 text-emerald-950 font-bold border border-emerald-300/70 shadow-2xs'
                         : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
                     }`}
                   >
-                    <span className="truncate">{opt.label}</span>
+                    <div className="flex flex-col min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`truncate ${isSelected ? 'text-emerald-950 font-bold' : 'text-slate-900 font-semibold'}`}>{opt.label}</span>
+                        {opt.badge && (
+                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">
+                            {opt.badge}
+                          </span>
+                        )}
+                      </div>
+                      {opt.description && (
+                        <span className="text-[11px] text-slate-500 font-normal line-clamp-2 mt-0.5 leading-snug">
+                          {opt.description}
+                        </span>
+                      )}
+                    </div>
                     {isSelected && (
-                      <span className="flex size-4.5 items-center justify-center rounded-full bg-emerald-600 text-white shadow-2xs shrink-0">
+                      <span className="flex size-4.5 items-center justify-center rounded-full bg-emerald-600 text-white shadow-2xs shrink-0 mt-0.5">
                         <Check className="size-3" strokeWidth={3} />
                       </span>
                     )}

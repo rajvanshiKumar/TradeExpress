@@ -87,6 +87,7 @@ export default function AppRoutes() {
         <Route path="/wishlist" element={<BuyerWishlist standalone />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/supplier/register" element={<Register defaultRole="supplier" />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/admin/login" element={<Navigate to="/super-admin/login" replace />} />
         <Route path="/super-admin/login" element={<AdminLogin />} />

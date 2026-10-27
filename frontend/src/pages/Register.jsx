@@ -2,17 +2,20 @@ import { useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import AuthShell from './AuthShell';
 import RegisterForm from '../components/forms/RegisterForm';
+import SupplierRegisterForm from '../components/forms/SupplierRegisterForm';
 import useAuth from '../hooks/useAuth';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { ROLE_HOME } from '../utils/constants';
+import { Building2, ShoppingBag } from 'lucide-react';
 
-export default function Register() {
+export default function Register({ defaultRole }) {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [role, setRole] = useState(
-    searchParams.get('role') === 'supplier' ? 'supplier' : 'buyer'
+    defaultRole || (searchParams.get('role') === 'supplier' ? 'supplier' : 'buyer')
   );
-  useDocumentTitle('Join Free');
+
+  useDocumentTitle(role === 'supplier' ? 'Supplier Registration — TradeExpress' : 'Join Free — TradeExpress');
   if (user) return <Navigate to={ROLE_HOME[user.role]} replace />;
 
   const handleRoleChange = (newRole) => {
@@ -20,18 +23,52 @@ export default function Register() {
     setSearchParams({ role: newRole }, { replace: true });
   };
 
+  const isSupplier = role === 'supplier';
+
   return (
     <AuthShell
       wide
       role={role}
-      title="Join TradeExpress free"
+      above={
+        <div className="mb-6 flex rounded-xl border border-slate-200/80 bg-slate-100/70 p-1 select-none">
+          <button
+            type="button"
+            onClick={() => handleRoleChange('buyer')}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition ${
+              !isSupplier
+                ? 'bg-white text-emerald-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ShoppingBag className="h-4 w-4" />
+            Join as Buyer
+          </button>
+          <button
+            type="button"
+            onClick={() => handleRoleChange('supplier')}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition ${
+              isSupplier
+                ? 'bg-white text-emerald-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Building2 className="h-4 w-4" />
+            Become a Supplier
+          </button>
+        </div>
+      }
+      title={isSupplier ? 'Create Your Supplier Account' : 'Join TradeExpress free'}
       subtitle={
-        role === 'supplier'
-          ? 'Register as a Supplier to list products and reach verified global buyers.'
+        isSupplier
+          ? 'Join TradeExpress to showcase your business and connect with B2B buyers.'
           : 'Register as a Buyer to source products and connect with verified suppliers.'
       }
     >
-      <RegisterForm role={role} onRoleChange={handleRoleChange} />
+      {isSupplier ? (
+        <SupplierRegisterForm />
+      ) : (
+        <RegisterForm role={role} onRoleChange={handleRoleChange} />
+      )}
     </AuthShell>
   );
 }

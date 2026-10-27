@@ -142,6 +142,22 @@ router.post(
   authController.register
 );
 
+router.post(
+  '/register-supplier',
+  authRateLimiter,
+  validate([
+    body('email').isEmail().withMessage('Valid email is required.'),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters.'),
+    body('name').trim().notEmpty().withMessage('Full name is required.'),
+    body('company').trim().notEmpty().withMessage('Company name is required.'),
+    body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
+    body('country').trim().notEmpty().withMessage('Country is required.'),
+    body('businessType').trim().notEmpty().withMessage('Business type is required.'),
+    body('companyDescription').trim().notEmpty().withMessage('Company description is required.'),
+  ]),
+  authController.registerSupplier
+);
+
 
 router.post(
   '/login',

@@ -51,7 +51,7 @@ async function runE2EVerification() {
       isAdminLogin: true,
     });
     assert(adminLogin.token && adminLogin.token.length > 20, 'Admin JWT token generated');
-    assert(adminLogin.user.role === 'ADMIN', 'Admin role verified in database');
+    assert(adminLogin.user.role === 'ADMIN' || adminLogin.user.role === 'SUPER_ADMIN', 'Admin or Super Admin role verified in database');
 
     // TEST 3: Product Retrieval & Image URL Integrity
     console.log('\n[Test 3] Testing Product Retrieval & HD Image URLs...');

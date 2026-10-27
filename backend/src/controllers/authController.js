@@ -114,11 +114,39 @@ export async function adminLogin(req, res, next) {
 
 export async function register(req, res, next) {
   try {
+    const upperRole = (req.body.role || '').toUpperCase();
+    if (upperRole === 'SUPPLIER') {
+      const result = await authService.registerSupplier({
+        ...req.body,
+        req,
+      });
+      return res.status(201).json({
+        success: true,
+        message: 'Supplier account created successfully. Your profile is pending compliance verification.',
+        data: result,
+      });
+    }
     const { user, token } = await authService.registerUser(req.body);
     res.status(201).json({
       success: true,
       message: 'Account registered successfully.',
       data: { user, token },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function registerSupplier(req, res, next) {
+  try {
+    const result = await authService.registerSupplier({
+      ...req.body,
+      req,
+    });
+    res.status(201).json({
+      success: true,
+      message: 'Supplier account created successfully. Your profile is pending compliance verification.',
+      data: result,
     });
   } catch (error) {
     next(error);

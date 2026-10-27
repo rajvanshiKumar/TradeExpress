@@ -68,6 +68,37 @@ export const rules = {
     return '';
   },
   matches: (otherKey, message) => (value, values) => (value === values[otherKey] ? '' : message),
+  gstin: () => (value) => {
+    const text = String(value ?? '').trim().toUpperCase();
+    if (!text) return 'GSTIN is required for this registration category.';
+    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    return gstinRegex.test(text) ? '' : 'Enter a valid 15-character GSTIN (e.g. 27ABCDE1234F1Z5).';
+  },
+  pan: () => (value) => {
+    const text = String(value ?? '').trim().toUpperCase();
+    if (!text) return '';
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    return panRegex.test(text) ? '' : 'Enter a valid 10-character PAN (e.g. ABCDE1234F).';
+  },
+  pinCode: (countryField = 'country') => (value, values) => {
+    const text = String(value ?? '').trim();
+    if (!text) return 'Postal code is required.';
+    const country = values?.[countryField] || 'India';
+    if (country === 'India') {
+      const pinRegex = /^[1-9][0-9]{5}$/;
+      return pinRegex.test(text) ? '' : 'Enter a valid 6-digit Indian PIN code (e.g. 400001).';
+    }
+    const generalPostalRegex = /^[A-Za-z0-9\s-]{3,10}$/;
+    return generalPostalRegex.test(text) ? '' : 'Enter a valid postal / ZIP code.';
+  },
+  establishedYear: () => (value) => {
+    if (!value) return '';
+    const num = Number(value);
+    const currentYear = new Date().getFullYear();
+    if (Number.isNaN(num) || !Number.isInteger(num)) return 'Enter a valid 4-digit year.';
+    if (num < 1800 || num > currentYear) return `Year must be between 1800 and ${currentYear}.`;
+    return '';
+  },
 };
 
 /**
