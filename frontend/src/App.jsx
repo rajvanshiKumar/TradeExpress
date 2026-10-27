@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import AppRoutes from './routes/AppRoutes';
 import ScrollToTop from './components/common/ScrollToTop';
+import BackToTop from './components/common/BackToTop';
 import ToastViewport from './components/common/Toast';
 import { PageSkeleton } from './components/common/Skeleton';
 import { AuthProvider } from './contexts/AuthContext';
@@ -31,6 +32,7 @@ export default function App() {
                         <AppRoutes />
                       </Suspense>
                       <ToastViewport />
+                      <BackToTop />
                     </OrderProvider>
                   </MessageProvider>
                 </InquiryProvider>
