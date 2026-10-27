@@ -1,6 +1,7 @@
 import { Zap } from 'lucide-react';
 import Button from '../common/Button';
 import useBuyNow from '../../hooks/useBuyNow';
+import { useTranslation } from '../../hooks/useTranslation';
 
 /**
  * Orange "Buy Now" button. Goes straight to checkout with this one product and leaves
@@ -8,11 +9,12 @@ import useBuyNow from '../../hooks/useBuyNow';
  */
 export default function BuyNowButton({ product, quantity, variant, size = 'sm', className = '', full = false }) {
   const buyNow = useBuyNow();
+  const { t } = useTranslation();
 
   if (!product) {
     return (
       <Button variant="primary" size={size} icon={Zap} full={full} className={className} disabled>
-        Buy Now
+        {t('common.buyNow', {}, 'Buy Now')}
       </Button>
     );
   }
@@ -33,7 +35,7 @@ export default function BuyNowButton({ product, quantity, variant, size = 'sm', 
       }}
       aria-label={`Buy ${product.name} now`}
     >
-      {outOfStock ? 'Out of stock' : 'Buy Now'}
+      {outOfStock ? t('common.outOfStock', {}, 'Out of stock') : t('common.buyNow', {}, 'Buy Now')}
     </Button>
   );
 }

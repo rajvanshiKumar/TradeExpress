@@ -15,10 +15,12 @@ import {
   ShoppingCart,
   Twitter,
   Youtube,
+  Globe,
 } from 'lucide-react';
 import Logo from '../common/Logo';
 import ResetDataButton from '../common/ResetDataButton';
 import { BRAND } from '../../utils/constants';
+import { useTranslation } from '../../i18n/LanguageContext';
 
 const SOCIAL_LINKS = [
   { label: 'LinkedIn', icon: Linkedin, href: 'https://www.linkedin.com' },
@@ -130,6 +132,7 @@ function MaritimeWatermark() {
 
 export default function Footer() {
   const location = useLocation();
+  const { t, currentLanguage, currentCountry } = useTranslation();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/forgot-password';
   const buyerResources = isAuthPage
     ? BUYER_RESOURCES.filter((item) => !item.label.toLowerCase().includes('quote') && !item.to.includes('compare'))
@@ -325,24 +328,47 @@ export default function Footer() {
         </div>
       </div>
 
+      {/* Global Country/Region and Language Bar (Amazon style) */}
+      <div className="relative z-10 border-t border-[#b7cbb5] bg-[#c3d3c1]/85 py-3.5 text-xs text-slate-800">
+        <div className="ts-container flex flex-wrap items-center justify-center gap-3 sm:gap-6">
+          <Logo size="xs" />
+          <Link
+            to="/country-region"
+            title="Change Language & Market"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-400/80 bg-white/95 px-3 py-1.5 font-bold text-slate-800 shadow-2xs hover:bg-white hover:border-emerald-700 hover:text-emerald-950 transition-all"
+          >
+            <Globe className="size-3.5 text-emerald-800" aria-hidden="true" />
+            <span>{currentLanguage.nativeName} ({currentLanguage.short})</span>
+          </Link>
+          <Link
+            to="/country-region"
+            title="Change Country / Region"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-400/80 bg-white/95 px-3 py-1.5 font-bold text-slate-800 shadow-2xs hover:bg-white hover:border-emerald-700 hover:text-emerald-950 transition-all"
+          >
+            <span className="text-sm select-none" aria-hidden="true">{currentCountry.flag}</span>
+            <span>{currentCountry.name}</span>
+          </Link>
+        </div>
+      </div>
+
       {/* Bottom Legal & Sample Data Reset Bar */}
       <div className="relative z-10 border-t border-[#c5d5c3] bg-[#ccd9cb]/85 py-4 text-xs text-slate-700">
         <div className="ts-container flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <p className="leading-relaxed font-medium">
-            © {new Date().getFullYear()} {BRAND.name}. India's Premier Online B2B Marketplace. All rights reserved.
+            © {new Date().getFullYear()} {BRAND.name}. {t('footer.tagline', {}, "India's Premier Online B2B Marketplace.")} {t('footer.allRightsReserved', {}, 'All rights reserved.')}
           </p>
 
           <div className="flex flex-wrap items-center gap-4 text-xs font-medium">
             <Link to="/info/terms" className="hover:text-emerald-950 hover:underline">
-              Terms of Use
+              {t('footer.terms', {}, 'Terms of Use')}
             </Link>
             <span className="text-slate-400">|</span>
             <Link to="/info/privacy" className="hover:text-emerald-950 hover:underline">
-              Privacy Policy
+              {t('footer.privacy', {}, 'Privacy Policy')}
             </Link>
             <span className="text-slate-400">|</span>
             <Link to="/info/buyer-protection" className="hover:text-emerald-950 hover:underline">
-              Buyer Protection
+              {t('footer.buyerProtection', {}, 'Buyer Protection')}
             </Link>
             <span className="text-slate-400">|</span>
             <ResetDataButton

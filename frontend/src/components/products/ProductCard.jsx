@@ -10,6 +10,7 @@ import useProducts from '../../hooks/useProducts';
 import useWishlist from '../../hooks/useWishlist';
 import useAuth from '../../hooks/useAuth';
 import useCurrency from '../../hooks/useCurrency';
+import { useTranslation } from '../../hooks/useTranslation';
 import { getPriceRange } from '../../utils/calculateTotals';
 import { formatNumber } from '../../utils/formatCurrency';
 import { quantityLabel } from '../../utils/units';
@@ -59,10 +60,11 @@ export function WishlistButton({ product, className = '' }) {
 
 /** One status chip at most, so cards stay calm: ready-to-ship, then wholesale deal, then new. */
 function StatusChip({ product }) {
+  const { t } = useTranslation();
   const chip = product.readyToShip
-    ? { icon: Zap, label: 'Ready to ship', className: 'bg-navy-900 text-white' }
-    : product.deal ? { icon: Layers, label: 'Volume pricing', className: 'bg-accent-500 text-white' }
-      : product.isNew ? { icon: null, label: 'New', className: 'bg-white text-navy-900 ring-1 ring-navy-900/10' } : null;
+    ? { icon: Zap, label: t('common.readyToShip', {}, 'Ready to ship'), className: 'bg-navy-900 text-white' }
+    : product.deal ? { icon: Layers, label: t('product.volumePricing', {}, 'Volume pricing'), className: 'bg-accent-500 text-white' }
+      : product.isNew ? { icon: null, label: t('product.new', {}, 'New'), className: 'bg-white text-navy-900 ring-1 ring-navy-900/10' } : null;
   if (!chip) return null;
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[0.6875rem] font-semibold tracking-wide shadow-sm ${chip.className}`}>
@@ -73,10 +75,15 @@ function StatusChip({ product }) {
 
 /** Stock line shown under the rating. Uses the listing's real stock figure. */
 function Availability({ product }) {
+  const { t } = useTranslation();
   const outOfStock = product.stock <= 0;
   const low = !outOfStock && product.stock < product.moq * 3;
   const tone = outOfStock ? 'bg-danger' : low ? 'bg-accent-500' : 'bg-success';
-  const label = outOfStock ? 'Out of stock' : low ? 'Limited stock' : 'In stock';
+  const label = outOfStock
+    ? t('common.outOfStock', {}, 'Out of stock')
+    : low
+      ? t('common.limitedStock', {}, 'Limited stock')
+      : t('common.inStock', {}, 'In stock');
   return (
     <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
       <span className={`size-1.5 shrink-0 rounded-full ${tone}`} aria-hidden="true" />
@@ -92,6 +99,7 @@ export default function ProductCard({ product, layout = 'grid' }) {
   const { getCompany } = useProducts();
   const { addToCart, removeFromCart, inCart } = useCart();
   const { money } = useCurrency();
+  const { t } = useTranslation();
   const company = getCompany(product.companyId);
   const href = `/products/${product.slug}`;
   const isList = layout === 'list';
@@ -115,7 +123,7 @@ export default function ProductCard({ product, layout = 'grid' }) {
         <div className="absolute left-3 top-3"><StatusChip product={product} /></div>
         {outOfStock || product.status !== 'Active' ? (
           <span className="absolute top-3 right-3 z-10 inline-flex items-center gap-1 rounded-full bg-rose-600 text-white px-2.5 py-1 text-[11px] font-bold shadow-md">
-            Product is not available
+            {t('product.notAvailable', {}, 'Product is not available')}
           </span>
         ) : (
           <WishlistButton product={product} className="absolute right-3 top-3" />
@@ -125,7 +133,7 @@ export default function ProductCard({ product, layout = 'grid' }) {
             <span aria-hidden="true">{company?.flag || '🇮🇳'}</span><span className="sr-only">Origin: </span>{product.supplier?.country || company?.country || 'India'}
           </span>
         ) : null}
-        {outOfStock ? <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 bg-navy-950/80 py-1.5 text-center text-xs font-semibold text-white">Out of stock</span> : null}
+        {outOfStock ? <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 bg-navy-950/80 py-1.5 text-center text-xs font-semibold text-white">{t('common.outOfStock', {}, 'Out of stock')}</span> : null}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col px-2.5 pb-2.5 pt-3.5 sm:px-3.5">
@@ -211,7 +219,7 @@ export default function ProductCard({ product, layout = 'grid' }) {
           <BuyNowButton product={product} className="w-full !px-3" />
           <div className="mt-3 flex items-center justify-center border-t border-navy-900/[0.06] pt-3 text-[0.8125rem] font-semibold">
             <Link to={href} className="inline-flex items-center justify-center gap-1.5 text-navy-900 hover:text-brand-600 transition-colors">
-              View product details <ArrowUpRight className="size-3.5" aria-hidden="true" />
+              {t('common.viewDetails', {}, 'View product details')} <ArrowUpRight className="size-3.5" aria-hidden="true" />
             </Link>
           </div>
         </div>

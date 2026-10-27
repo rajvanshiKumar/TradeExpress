@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import useProducts from '../../hooks/useProducts';
 import VisualSearchModal from '../common/VisualSearchModal';
+import { useTranslation } from '../../i18n/LanguageContext';
 
 const SCOPES = [
   { value: 'products', label: 'Products', icon: Package, desc: 'Find wholesale products' },
@@ -36,6 +37,7 @@ export default function SearchForm({
   const navigate = useNavigate();
   const location = useLocation();
   const { categories, products } = useProducts();
+  const { t } = useTranslation();
   const isHero = variant === 'hero';
 
   const [query, setQuery] = useState('');
@@ -113,10 +115,10 @@ export default function SearchForm({
 
   const placeholder =
     isHero || scope === 'products'
-      ? 'Search wholesale products, e.g. wireless earbuds, cotton fabrics...'
+      ? t('header.searchPlaceholder', {}, 'Search wholesale products, e.g. wireless earbuds, cotton fabrics...')
       : scope === 'suppliers'
-        ? 'Search suppliers by product, industry or capability...'
-        : 'Search by verified company name or city...';
+        ? t('header.searchPlaceholder', {}, 'Search suppliers by product, industry or capability...')
+        : t('header.searchPlaceholder', {}, 'Search by verified company name or city...');
 
   const currentScope = SCOPES.find((s) => s.value === scope) || SCOPES[0];
   const ScopeIcon = currentScope.icon;
@@ -416,7 +418,7 @@ export default function SearchForm({
         }`}
       >
         <Search className="size-4" aria-hidden="true" />
-        <span className={isHero ? 'inline' : 'hidden lg:inline'}>Search</span>
+        <span className={isHero ? 'inline' : 'hidden lg:inline'}>{t('common.search', {}, 'Search')}</span>
       </button>
 
       {/* Visual Search Modal */}

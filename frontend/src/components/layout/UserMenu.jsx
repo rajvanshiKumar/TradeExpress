@@ -16,6 +16,7 @@ import {
 import Dropdown from '../common/Dropdown';
 import useAuth from '../../hooks/useAuth';
 import useNotifications from '../../hooks/useNotifications';
+import { useTranslation } from '../../i18n/LanguageContext';
 import { ordersPathFor, ROLE_HOME } from '../../utils/constants';
 
 const ROLE_BADGES = {
@@ -43,6 +44,7 @@ const ROLE_BADGES = {
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
   const { showToast } = useNotifications();
   const navigate = useNavigate();
 
@@ -53,13 +55,13 @@ export default function UserMenu() {
           to="/login"
           className="hidden xs:inline-flex items-center justify-center whitespace-nowrap rounded-full px-2.5 sm:px-3 py-1 text-xs xl:text-[13px] font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
         >
-          Sign In
+          {t('common.signIn', {}, 'Sign In')}
         </Link>
         <Link
           to="/register"
           className="inline-flex items-center justify-center whitespace-nowrap rounded-full bg-slate-900 text-white hover:bg-emerald-700 px-3 sm:px-4 py-1.5 text-xs xl:text-[13px] font-bold shadow-xs hover:shadow-md transition-all duration-200 active:scale-95 shrink-0"
         >
-          Get Started
+          {t('common.register', {}, 'Get Started')}
         </Link>
       </div>
     );

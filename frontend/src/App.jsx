@@ -5,6 +5,7 @@ import ScrollToTop from './components/common/ScrollToTop';
 import BackToTop from './components/common/BackToTop';
 import ToastViewport from './components/common/Toast';
 import { PageSkeleton } from './components/common/Skeleton';
+import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { ProductProvider } from './contexts/ProductContext';
@@ -19,28 +20,30 @@ import { OrderProvider } from './contexts/OrderContext';
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <NotificationProvider>
-          <ProductProvider>
-            <WishlistProvider>
-              <CartProvider>
-                <InquiryProvider>
-                  <MessageProvider>
-                    <OrderProvider>
-                      <ScrollToTop />
-                      <Suspense fallback={<PageSkeleton />}>
-                        <AppRoutes />
-                      </Suspense>
-                      <ToastViewport />
-                      <BackToTop />
-                    </OrderProvider>
-                  </MessageProvider>
-                </InquiryProvider>
-              </CartProvider>
-            </WishlistProvider>
-          </ProductProvider>
-        </NotificationProvider>
-      </AuthProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <ProductProvider>
+              <WishlistProvider>
+                <CartProvider>
+                  <InquiryProvider>
+                    <MessageProvider>
+                      <OrderProvider>
+                        <ScrollToTop />
+                        <Suspense fallback={<PageSkeleton />}>
+                          <AppRoutes />
+                        </Suspense>
+                        <ToastViewport />
+                        <BackToTop />
+                      </OrderProvider>
+                    </MessageProvider>
+                  </InquiryProvider>
+                </CartProvider>
+              </WishlistProvider>
+            </ProductProvider>
+          </NotificationProvider>
+        </AuthProvider>
+      </LanguageProvider>
     </BrowserRouter>
   );
 }

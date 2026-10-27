@@ -10,10 +10,12 @@ import useMessages from '../../hooks/useMessages';
 import useWishlist from '../../hooks/useWishlist';
 import { mainNav, quickLinks } from '../../data/navigation';
 import { ordersPathFor, ROLE_HOME } from '../../utils/constants';
+import { useTranslation } from '../../i18n/LanguageContext';
 import Logo from '../common/Logo';
 
 export default function MobileMenu({ open, onClose }) {
   const { user, logout } = useAuth();
+  const { t, currentCountry, currentLanguage } = useTranslation();
   const location = useLocation();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/forgot-password';
   const { categories } = useProducts();
@@ -61,8 +63,8 @@ export default function MobileMenu({ open, onClose }) {
         ) : (
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-              <Button to="/login" variant="outline" size="sm" onClick={onClose} className="flex-1">Sign In</Button>
-              <Button to="/register" variant="navy" size="sm" onClick={onClose} className="flex-1">Get Started</Button>
+              <Button to="/login" variant="outline" size="sm" onClick={onClose} className="flex-1">{t('common.signIn', {}, 'Sign In')}</Button>
+              <Button to="/register" variant="navy" size="sm" onClick={onClose} className="flex-1">{t('common.register', {}, 'Get Started')}</Button>
             </div>
             <Link
               to="/super-admin/login"
@@ -115,8 +117,19 @@ export default function MobileMenu({ open, onClose }) {
           <li><Link to={ordersPathFor(user)} onClick={onClose} className={row}><span className="flex items-center gap-2.5"><Package className="size-4 text-muted" aria-hidden="true" />Orders</span></Link></li>
           <li><Link to="/wishlist" onClick={onClose} className={row}><span className="flex items-center gap-2.5"><Heart className="size-4 text-muted" aria-hidden="true" />Saved products</span>{wishlistCount ? <span className="rounded-full bg-navy-50 px-2 text-xs font-bold text-navy-900">{wishlistCount}</span> : null}</Link></li>
           <li>
+            <Link to="/country-region" onClick={onClose} className={row}>
+              <span className="flex items-center gap-2.5">
+                <span className="text-base select-none" aria-hidden="true">{currentCountry.flag}</span>
+                <span>{t('country.change', {}, 'Change country/region')}</span>
+              </span>
+              <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-900">
+                {currentCountry.name}
+              </span>
+            </Link>
+          </li>
+          <li>
             <button type="button" className={row} onClick={() => setShowPrefs((value) => !value)} aria-expanded={showPrefs} aria-controls="mobile-prefs">
-              Region, language & currency
+              <span>{t('language.title', {}, 'Region, language & currency')}</span>
               <ChevronDown className={`size-4 text-muted transition-transform ${showPrefs ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
             {showPrefs ? <div id="mobile-prefs" className="bg-surface p-4"><PreferenceFields idPrefix="mobile-pref" /></div> : null}

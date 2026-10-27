@@ -92,7 +92,16 @@ export const COUNTRY_FLAGS = {
   Nigeria: '🇳🇬',
 };
 
-export const LANGUAGES = [{ code: 'en', label: 'English' }];
+export const LANGUAGES = [
+  { code: 'en', label: 'English', nativeName: 'English', short: 'EN' },
+  { code: 'hi', label: 'Hindi', nativeName: 'हिन्दी', short: 'HI' },
+  { code: 'ta', label: 'Tamil', nativeName: 'தமிழ்', short: 'TA' },
+  { code: 'te', label: 'Telugu', nativeName: 'తెలుగు', short: 'TE' },
+  { code: 'kn', label: 'Kannada', nativeName: 'ಕನ್ನಡ', short: 'KN' },
+  { code: 'ml', label: 'Malayalam', nativeName: 'മലയാളം', short: 'ML' },
+  { code: 'bn', label: 'Bengali', nativeName: 'বাংলা', short: 'BN' },
+  { code: 'mr', label: 'Marathi', nativeName: 'मराठी', short: 'MR' },
+];
 
 export const DEFAULT_PREFERENCES = { country: 'India', language: 'en' };
 

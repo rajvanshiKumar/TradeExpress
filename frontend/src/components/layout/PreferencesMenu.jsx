@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { Check, ChevronDown, Coins, Globe, MapPin, Sparkles } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Check, ChevronDown, Coins, Globe, MapPin, Sparkles, ExternalLink } from 'lucide-react';
 import Dropdown from '../common/Dropdown';
 import useAuth from '../../hooks/useAuth';
 import useCurrency from '../../hooks/useCurrency';
+import { useTranslation } from '../../i18n/LanguageContext';
 import { COUNTRIES, COUNTRY_FLAGS, LANGUAGES } from '../../utils/constants';
 
 /** Region, language and currency selects, shared by the header dropdown and the mobile menu. */
 export function PreferenceFields({ idPrefix = 'pref' }) {
   const { preferences, setPreferences } = useAuth();
+  const { language, setLanguage, country, setCountry } = useTranslation();
   const { currency, setCurrency, currencies } = useCurrency();
   const [activeTab, setActiveTab] = useState('currency'); // 'currency' | 'country' | 'language'
 
@@ -104,13 +107,16 @@ export function PreferenceFields({ idPrefix = 'pref' }) {
           </div>
           <div className="max-h-56 overflow-y-auto space-y-1 pr-1 ts-no-scrollbar">
             {COUNTRIES.map((c) => {
-              const isSelected = preferences.country === c;
+              const isSelected = (country || preferences.country) === c;
               const flag = COUNTRY_FLAGS[c] || '🌐';
               return (
                 <button
                   key={c}
                   type="button"
-                  onClick={() => setPreferences({ country: c })}
+                  onClick={() => {
+                    setCountry(c);
+                    setPreferences({ country: c });
+                  }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-semibold transition-all ${
                     isSelected
                       ? 'bg-emerald-50 text-emerald-950 border border-emerald-300/80 shadow-2xs'
@@ -130,6 +136,15 @@ export function PreferenceFields({ idPrefix = 'pref' }) {
               );
             })}
           </div>
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+            <Link
+              to="/country-region"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 hover:text-emerald-950 hover:underline"
+            >
+              <span>Change country/region website</span>
+              <ExternalLink className="size-3" />
+            </Link>
+          </div>
         </div>
       )}
 
@@ -141,12 +156,15 @@ export function PreferenceFields({ idPrefix = 'pref' }) {
           </div>
           <div className="max-h-56 overflow-y-auto space-y-1 pr-1 ts-no-scrollbar">
             {LANGUAGES.map((item) => {
-              const isSelected = preferences.language === item.code;
+              const isSelected = (language || preferences.language) === item.code;
               return (
                 <button
                   key={item.code}
                   type="button"
-                  onClick={() => setPreferences({ language: item.code })}
+                  onClick={() => {
+                    setLanguage(item.code);
+                    setPreferences({ language: item.code });
+                  }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-semibold transition-all ${
                     isSelected
                       ? 'bg-emerald-50 text-emerald-950 border border-emerald-300/80 shadow-2xs'
@@ -154,13 +172,25 @@ export function PreferenceFields({ idPrefix = 'pref' }) {
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <span className="font-bold text-slate-900">{item.label}</span>
-                  </div>
-                  {isSelected && (
-                    <span className="flex size-5 items-center justify-center rounded-full bg-emerald-600 text-white shadow-2xs shrink-0">
-                      <Check className="size-3" strokeWidth={3} />
+                    <span className="font-bold text-slate-900">
+                      {item.nativeName || item.label}
                     </span>
-                  )}
+                    {item.label !== item.nativeName && (
+                      <span className="text-[11px] text-slate-500 font-normal">
+                        ({item.label})
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                      {item.short || item.code.toUpperCase()}
+                    </span>
+                    {isSelected && (
+                      <span className="flex size-5 items-center justify-center rounded-full bg-emerald-600 text-white shadow-2xs shrink-0">
+                        <Check className="size-3" strokeWidth={3} />
+                      </span>
+                    )}
+                  </div>
                 </button>
               );
             })}

@@ -18,6 +18,7 @@ import SearchForm from "../forms/SearchForm";
 import MegaMenu from "./MegaMenu";
 import MobileMenu from "./MobileMenu";
 import PreferencesMenu from "./PreferencesMenu";
+import LanguageSelector from "./LanguageSelector";
 import NotificationsMenu, { CountDot } from "./NotificationsMenu";
 import UserMenu from "./UserMenu";
 import useAuth from "../../hooks/useAuth";
@@ -25,6 +26,7 @@ import useCart from "../../hooks/useCart";
 import useWishlist from "../../hooks/useWishlist";
 import useDisclosure from "../../hooks/useDisclosure";
 import useScrolled from "../../hooks/useScrolled";
+import { useTranslation } from "../../i18n/LanguageContext";
 import { mainNav } from "../../data/navigation";
 
 function IconLink({ to, icon: Icon, label, count, className = "" }) {
@@ -63,6 +65,7 @@ export default function Header() {
   const location = useLocation();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/forgot-password';
   const { user } = useAuth();
+  const { t } = useTranslation();
   const { count: cartCount } = useCart();
   const { count: wishlistCount } = useWishlist();
   const mobileMenu = useDisclosure();
@@ -227,7 +230,7 @@ export default function Header() {
                     return (
                       <span className="inline-flex items-center gap-1.5">
                         <BadgePercent className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
-                        <span>Deals</span>
+                        <span>{t('nav.deals', {}, 'Deals')}</span>
                       </span>
                     );
                   }
@@ -235,15 +238,36 @@ export default function Header() {
                     return (
                       <span className="inline-flex items-center gap-1.5">
                         <HelpCircle className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
-                        <span>Help Center</span>
+                        <span>{t('nav.help', {}, 'Help Center')}</span>
                       </span>
                     );
                   }
                   if (label === "Find Suppliers") {
-                    return "Suppliers";
+                    return t('nav.findSuppliers', {}, 'Suppliers');
                   }
                   if (label === "Explore Products") {
-                    return "Products";
+                    return t('nav.exploreProducts', {}, 'Products');
+                  }
+                  if (label === "Categories") {
+                    return t('nav.categories', {}, 'Categories');
+                  }
+                  if (label === "Exporters") {
+                    return t('nav.exporters', {}, 'Exporters');
+                  }
+                  if (label === "Request For Quotation") {
+                    return t('nav.rfq', {}, 'RFQ');
+                  }
+                  if (label === "Compare Products") {
+                    return t('nav.compareProducts', {}, 'Compare');
+                  }
+                  if (label === "Wishlist") {
+                    return t('nav.wishlist', {}, 'Wishlist');
+                  }
+                  if (label === "About Us") {
+                    return t('nav.about', {}, 'About Us');
+                  }
+                  if (label === "Become a Supplier") {
+                    return t('nav.becomeSupplier', {}, 'Become a Supplier');
                   }
                   return label;
                 };
@@ -310,6 +334,7 @@ export default function Header() {
               size="sm"
               className={`!size-7.5 sm:!size-8 xl:!size-8.5 shrink-0 ${scrolled ? "" : "max-lg:hidden"}`}
             />
+            <LanguageSelector />
             <div className="hidden md:block">
               <PreferencesMenu />
             </div>

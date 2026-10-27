@@ -23,6 +23,7 @@ import AdminLogin from '../pages/AdminLogin';
 import Info from '../pages/Info';
 import NotFound from '../pages/NotFound';
 import BuyerWishlist from '../pages/buyer/BuyerWishlist';
+import CountryRegion from '../pages/CountryRegion';
 
 const Messages = lazy(() => import('../pages/Messages'));
 const Checkout = lazy(() => import('../pages/Checkout'));
@@ -94,6 +95,9 @@ export default function AppRoutes() {
         <Route path="/info/:slug" element={<Info />} />
         <Route path="/track" element={<OrderTracking />} />
         <Route path="/track/:orderNumber" element={<OrderTracking />} />
+        <Route path="/country-region" element={<CountryRegion />} />
+        <Route path="/country" element={<Navigate to="/country-region" replace />} />
+        <Route path="/region" element={<Navigate to="/country-region" replace />} />
         <Route path="/compare-products" element={<ProductComparison />} />
         <Route path="/compare-products/:productId" element={<ProductComparison />} />
         <Route path="/compare-quotes" element={<Navigate to="/rfq" replace />} />
