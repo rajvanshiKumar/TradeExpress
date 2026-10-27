@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Clock, FileText, MessageSquare, PackageCheck, PackageX, Scale, Share2, ShoppingCart, Truck, Zap, CheckCircle2 } from 'lucide-react';
+import { Clock, FileText, MessageSquare, PackageCheck, PackageX, Share2, ShoppingCart, Truck, Zap, CheckCircle2 } from 'lucide-react';
 import Breadcrumbs from '../components/common/Breadcrumbs';
 import Button from '../components/common/Button';
 import Badge from '../components/common/Badge';
@@ -217,14 +217,6 @@ export default function ProductDetails() {
                   Request Sample ({money(product.samplePrice || product.price)} / {product.unit})
                 </Button>
               )}
-              <Button
-                variant="outline"
-                icon={Scale}
-                to={`/compare-products/${product.id}`}
-                className="sm:col-span-2 border-brand-500/30 hover:border-brand-500 hover:bg-brand-50/40 text-navy-950 font-semibold shadow-xs"
-              >
-                Compare Similar Products
-              </Button>
               <Button variant="outline" icon={FileText} to={`/rfq?product=${product.id}`}>Request a Quote</Button>
               <Button variant="outline" icon={MessageSquare} onClick={() => targetCompany && contact(targetCompany, product)} disabled={!product}>Contact Supplier</Button>
               <div className="flex gap-2.5 sm:col-span-2">
