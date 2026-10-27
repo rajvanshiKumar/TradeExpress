@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import frontendProducts from '../../frontend/src/data/products.js';
 
 const prisma = new PrismaClient();
 
@@ -370,86 +371,87 @@ async function main() {
   });
   console.log(`Seeded default users (buyer, admin, and ${suppliersSeedData.length} TradeExpress verified suppliers).`);
 
-  // 3. Seed Products
-  for (let i = 0; i < productsRaw.length; i++) {
-    const [name, companyId, categorySlug, subcategory, price, unit, moq, stock, leadTimeDays, flags, photo, summary, variants] = productsRaw[i];
-    const number = 1001 + i;
-    const sku = `TS-${categorySlug.slice(0, 3).toUpperCase()}-${number}`;
-    const slug = slugify(name);
-    const isNew = flags.includes('N');
-    const featured = flags.includes('F');
-    const trending = flags.includes('T');
-    const readyToShip = flags.includes('R');
-    const deal = flags.includes('D');
+  // 3. Seed Products (152 items across all 12 categories)
+  for (let i = 0; i < frontendProducts.length; i++) {
+    const p = frontendProducts[i];
+    const sku = p.sku;
+    const slug = p.slug;
+    const isNew = !!p.isNew;
+    const featured = !!p.featured;
+    const trending = !!p.trending;
+    const readyToShip = !!p.readyToShip;
+    const deal = !!p.deal;
 
-    const supplierInfo = supplierByCompanyId.get(companyId);
+    const supplierInfo = supplierByCompanyId.get(p.companyId);
     const supplierId = supplierInfo?.user?.id || null;
     const certs = supplierInfo?.certs || ['ISO 9001:2015', 'TradeExpress Verified'];
 
-    const specs = {
-      'Model no.': `TS-${number}`,
+    const specs = p.specifications || {
+      'Model no.': `TS-${p.sku}`,
       Origin: 'Verified TradeSphere Factory',
       Certifications: certs,
       'Payment Terms': 'TradeExpress Escrow Protection (100% Secure)',
-      'Estimated Dispatch': `${leadTimeDays} business days`,
+      'Estimated Dispatch': `${p.leadTimeDays || 10} business days`,
     };
 
     await prisma.product.upsert({
       where: { sku },
       update: {
-        name,
+        name: p.name,
         slug,
-        companyId,
+        companyId: p.companyId,
         supplierId,
-        categorySlug,
-        subcategory,
-        summary,
-        description: `${summary} Specifications, packaging and branding can be discussed with the supplier through a quote request, and a pre-production sample can be arranged before a bulk order.`,
-        photo,
-        currency: 'INR',
-        price,
-        unit,
-        moq,
-        stock,
-        leadTimeDays,
+        categorySlug: p.category,
+        subcategory: p.subcategory,
+        summary: p.summary,
+        description: p.description,
+        photo: p.photo,
+        currency: p.currency || 'INR',
+        price: p.price,
+        unit: p.unit,
+        moq: p.moq,
+        stock: p.stock,
+        leadTimeDays: p.leadTimeDays,
         status: 'Active',
+        moderationStatus: 'APPROVED',
         featured,
         trending,
         readyToShip,
         isNew,
         deal,
-        variants,
-        priceTiers: buildPriceTiers(price, moq),
+        variants: p.variants || null,
+        priceTiers: p.priceTiers || buildPriceTiers(p.price, p.moq),
         specifications: specs,
-        packaging: { unitPack: `One ${unit} per standard packaging`, note: 'Custom export packing available.' },
+        packaging: p.packaging || { unitPack: `One ${p.unit} per standard packaging`, note: 'Custom export packing available.' },
       },
       create: {
         sku,
-        name,
+        name: p.name,
         slug,
-        companyId,
+        companyId: p.companyId,
         supplierId,
-        categorySlug,
-        subcategory,
-        summary,
-        description: `${summary} Specifications, packaging and branding can be discussed with the supplier through a quote request, and a pre-production sample can be arranged before a bulk order.`,
-        photo,
-        currency: 'INR',
-        price,
-        unit,
-        moq,
-        stock,
-        leadTimeDays,
+        categorySlug: p.category,
+        subcategory: p.subcategory,
+        summary: p.summary,
+        description: p.description,
+        photo: p.photo,
+        currency: p.currency || 'INR',
+        price: p.price,
+        unit: p.unit,
+        moq: p.moq,
+        stock: p.stock,
+        leadTimeDays: p.leadTimeDays,
         status: 'Active',
+        moderationStatus: 'APPROVED',
         featured,
         trending,
         readyToShip,
         isNew,
         deal,
-        variants,
-        priceTiers: buildPriceTiers(price, moq),
+        variants: p.variants || null,
+        priceTiers: p.priceTiers || buildPriceTiers(p.price, p.moq),
         specifications: specs,
-        packaging: { unitPack: `One ${unit} per standard packaging`, note: 'Custom export packing available.' },
+        packaging: p.packaging || { unitPack: `One ${p.unit} per standard packaging`, note: 'Custom export packing available.' },
       },
     });
   }
@@ -660,7 +662,7 @@ async function main() {
       },
     });
   }
-  console.log(`Seeded ${productsRaw.length} primary products and ${competingListings.length} competing supplier listings.`);
+  console.log(`Seeded ${frontendProducts.length} primary products and ${competingListings.length} competing supplier listings.`);
   console.log('Seeding completed successfully!');
 }
 

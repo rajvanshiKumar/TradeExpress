@@ -25,7 +25,7 @@ export default function WholesaleDeals() {
     () =>
       products
         .filter((product) => product.status === "Active" && product.deal)
-        .slice(0, 3),
+        .slice(0, 12),
     [products],
   );
   if (!loading && !deals.length) return null;
@@ -47,7 +47,7 @@ export default function WholesaleDeals() {
         opacity={0.22}
       />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.8fr_2fr]">
-        <ol className="space-y-3">
+        <ol className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           {STEPS.map(([label, text], index) => (
             <li
               key={label}
@@ -68,9 +68,9 @@ export default function WholesaleDeals() {
             </li>
           ))}
         </ol>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {loading && !deals.length
-            ? Array.from({ length: 3 }, (_, index) => (
+            ? Array.from({ length: 6 }, (_, index) => (
                 <Skeleton
                   key={index}
                   className="h-80 w-full rounded-3xl opacity-20"

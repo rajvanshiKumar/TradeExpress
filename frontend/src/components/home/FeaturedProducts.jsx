@@ -17,12 +17,12 @@ export default function FeaturedProducts() {
   const lists = useMemo(() => {
     const active = products.filter((product) => product.status === "Active");
     return {
-      best: [...active].sort((a, b) => b.orderCount - a.orderCount).slice(0, 8),
+      best: [...active].sort((a, b) => b.orderCount - a.orderCount).slice(0, 12),
       new: active
         .filter((product) => product.isNew)
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, 8),
-      deals: active.filter((product) => product.deal).slice(0, 8),
+        .slice(0, 12),
+      deals: active.filter((product) => product.deal).slice(0, 12),
     };
   }, [products]);
 

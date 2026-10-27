@@ -92,7 +92,7 @@ export default function ProductDetails() {
     return companies.filter((item) => ids.has(item.id) && item.status !== 'Suspended').slice(0, 3);
   }, [product, products, companies]);
 
-  const supplierProducts = product && company ? products.filter((item) => item.companyId === company.id && item.id !== product.id && item.status === 'Active').slice(0, 4) : [];
+  const supplierProducts = product && company ? products.filter((item) => item.companyId === company.id && item.id !== product.id && item.status === 'Active').slice(0, 12) : [];
 
   if (loading) return <PageSkeleton />;
   if (error) return <div className="ts-container py-12"><div className="ts-card"><ErrorState text={error} onRetry={reload} /></div></div>;

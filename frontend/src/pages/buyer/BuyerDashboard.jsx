@@ -30,7 +30,7 @@ export default function BuyerDashboard() {
   const myOrders = orders.filter((order) => order.buyerId === user.id);
   const myQuotes = inquiries.filter((inquiry) => inquiry.buyerId === user.id);
   const openQuotes = myQuotes.filter((inquiry) => inquiry.status !== 'Closed');
-  const viewed = recentlyViewed.map((id) => products.find((product) => product.id === id && product.status === 'Active')).filter(Boolean).slice(0, 4);
+  const viewed = recentlyViewed.map((id) => products.find((product) => product.id === id && product.status === 'Active')).filter(Boolean).slice(0, 12);
 
   return (
     <div className="space-y-8">

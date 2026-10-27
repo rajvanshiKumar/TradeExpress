@@ -73,7 +73,7 @@ export default function SupplierCard({ company }) {
 
         {listed.length ? (
           <ul className="mt-4 flex gap-2" aria-label={`Products from ${company.name}`}>
-            {listed.slice(0, 3).map((product) => (
+            {listed.slice(0, 4).map((product) => (
               <li key={product.id} className="min-w-0 flex-1">
                 <Link to={`/products/${product.slug}`} title={product.name} className="block overflow-hidden rounded-xl bg-ivory ring-1 ring-navy-900/5">
                   <Image photo={product.photo} illustration={product.illustration} width={180} height={180} alt={product.name} className="aspect-square w-full object-cover transition-transform duration-500 hover:scale-105" />

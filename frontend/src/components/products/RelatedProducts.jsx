@@ -3,7 +3,7 @@ import ProductCard from './ProductCard';
 import useProducts from '../../hooks/useProducts';
 
 /** Other active products from the same category (then the same supplier) as `product`. */
-export default function RelatedProducts({ product, limit = 4, title = 'Related products' }) {
+export default function RelatedProducts({ product, limit = 12, title = 'Related products' }) {
   const { products } = useProducts();
   const related = useMemo(() => {
     const others = products.filter((item) => item.id !== product.id && item.status === 'Active');
