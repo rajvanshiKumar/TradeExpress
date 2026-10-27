@@ -813,16 +813,29 @@ export async function getSimilarProductsForComparison({
     }
   }
 
+  // Ensure distinct suppliers/companies: Don't repeat same company product at the time of comparing
+  const seenSupplierKeys = new Set();
+  const distinctCandidates = [];
+  for (const c of formattedCandidates) {
+    const key = c.supplier?.id || c.supplier?.company || c.companyId || c.supplierId;
+    if (key && !seenSupplierKeys.has(key)) {
+      seenSupplierKeys.add(key);
+      distinctCandidates.push(c);
+    } else if (!key) {
+      distinctCandidates.push(c);
+    }
+  }
+
   const resultLimit = parseInt(limit, 10) || 12;
-  const slicedResults = formattedCandidates.slice(0, resultLimit);
+  const slicedResults = distinctCandidates.slice(0, resultLimit);
 
   const availableCategories = [...new Set(filtered.map((c) => c.categorySlug))];
-  const availableMaterials = [...new Set(formattedCandidates.map((c) => c.material).filter(Boolean))];
+  const availableMaterials = [...new Set(distinctCandidates.map((c) => c.material).filter(Boolean))];
 
   return {
     referenceProduct,
     similarProducts: slicedResults,
-    totalMatches: formattedCandidates.length,
+    totalMatches: distinctCandidates.length,
     availableFilters: {
       categories: availableCategories,
       materials: availableMaterials,

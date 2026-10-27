@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Boxes, CircleDollarSign, FileText, MessageSquare, Package, Plus, TriangleAlert, Crown, Check } from 'lucide-react';
+import { Boxes, CircleDollarSign, FileText, MessageSquare, Package, Plus, TriangleAlert, Crown, Check, Scale, TrendingUp, ShieldCheck } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import StatCard from '../../components/common/StatCard';
 import Button from '../../components/common/Button';
@@ -12,6 +12,7 @@ import useOrders from '../../hooks/useOrders';
 import useInquiries from '../../hooks/useInquiries';
 import useMessages from '../../hooks/useMessages';
 import useCurrency from '../../hooks/useCurrency';
+import useProducts from '../../hooks/useProducts';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { companyOrderValue } from '../../utils/analytics';
 import { formatDate } from '../../utils/formatDate';
@@ -22,6 +23,7 @@ function Overview({ company, products }) {
   const { inquiries } = useInquiries();
   const { unreadCount } = useMessages();
   const { money } = useCurrency();
+  const { products: allCatalogueProducts, getCompany } = useProducts();
 
   const myOrders = orders.filter((order) => order.items.some((item) => item.companyId === company.id));
   const revenue = myOrders.filter((order) => order.status !== 'Cancelled').reduce((sum, order) => sum + companyOrderValue(order, company.id), 0);
@@ -29,6 +31,46 @@ function Overview({ company, products }) {
   const openInquiries = myInquiries.filter((inquiry) => ['Submitted', 'Viewed'].includes(inquiry.status));
   const lowStock = products.filter((product) => product.stock < product.moq * LOW_STOCK_FACTOR);
   const [showPlansModal, setShowPlansModal] = useState(false);
+
+  // Competitor benchmarking / similar products in the marketplace from other sellers
+  const marketCompetitors = useMemo(() => {
+    if (!products || products.length === 0) return [];
+    const otherProducts = (allCatalogueProducts || []).filter((p) => p.companyId !== company.id);
+    const results = [];
+
+    for (const myProd of products.slice(0, 3)) {
+      const qTokens = myProd.name.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+      const competing = otherProducts.filter((other) => {
+        const sameCat = (other.categorySlug || other.category) === (myProd.categorySlug || myProd.category);
+        const nameMatch = qTokens.some((t) => other.name.toLowerCase().includes(t));
+        return sameCat || nameMatch;
+      });
+
+      if (competing.length > 0) {
+        // Enforce distinct companies: Don't repeat same company product
+        const seenCompanies = new Set();
+        const distinct = [];
+        for (const c of competing) {
+          const cCompany = c.companyId ? getCompany(c.companyId) : null;
+          const key = c.companyId || cCompany?.id;
+          if (key && !seenCompanies.has(key)) {
+            seenCompanies.add(key);
+            distinct.push({
+              ...c,
+              companyName: cCompany?.name || 'TradeExpress Seller',
+              flag: cCompany?.flag || '🇮🇳',
+              location: cCompany?.country || 'India',
+            });
+          }
+        }
+        results.push({
+          myProduct: myProd,
+          competingListings: distinct.slice(0, 4),
+        });
+      }
+    }
+    return results;
+  }, [products, allCatalogueProducts, company.id, getCompany]);
 
   return (
     <div className="space-y-8">
@@ -145,6 +187,79 @@ function Overview({ company, products }) {
           )}
         </section>
       </div>
+
+      {/* Real-time Market Competitor Benchmarking Section */}
+      {marketCompetitors.length > 0 && (
+        <section className="ts-card overflow-hidden" aria-labelledby="supplier-competitor-intelligence">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-navy-900/[0.08] bg-navy-50/30">
+            <div>
+              <h2 id="supplier-competitor-intelligence" className="text-base font-bold text-navy-950 flex items-center gap-2">
+                <Scale className="size-4 text-brand-600" />
+                <span>Live Marketplace Competitor Intelligence & Benchmarking</span>
+              </h2>
+              <p className="text-xs text-muted mt-0.5">
+                Real-time wholesale pricing and MOQ comparison against other verified suppliers selling similar products.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              icon={Scale}
+              to="/compare-products"
+              className="text-xs font-semibold shrink-0"
+            >
+              Full Comparison View
+            </Button>
+          </div>
+
+          <div className="p-5 space-y-4">
+            {marketCompetitors.map(({ myProduct, competingListings }) => (
+              <div key={myProduct.id} className="rounded-xl border border-navy-900/[0.08] p-4 bg-white space-y-3 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2.5">
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-bold text-brand-700 uppercase tracking-wider">Your Product</span>
+                    <h3 className="font-bold text-sm text-navy-950 truncate">{myProduct.name}</h3>
+                    <p className="text-xs text-navy-600">
+                      Your Base Price: <span className="font-bold text-navy-950">{money(myProduct.price)}</span> · MOQ: <span className="font-bold">{myProduct.moq} {myProduct.unit}s</span>
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    to={`/compare-products?search=${encodeURIComponent(myProduct.name)}`}
+                    className="text-xs font-semibold shrink-0"
+                  >
+                    Compare Sellers
+                  </Button>
+                </div>
+
+                <div>
+                  <span className="text-[11px] font-semibold text-muted block mb-2">Competing Sellers in this Category:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    {competingListings.map((comp) => {
+                      const isLowerPrice = comp.price < myProduct.price;
+                      return (
+                        <div key={comp.id} className="rounded-lg border bg-slate-50/60 p-2.5 text-xs space-y-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-navy-900 truncate">{comp.flag} {comp.companyName}</span>
+                          </div>
+                          <p className="text-[11px] text-muted truncate">{comp.name}</p>
+                          <div className="flex items-baseline justify-between pt-1 border-t">
+                            <span className={`font-black ${isLowerPrice ? 'text-amber-700' : 'text-emerald-700'}`}>
+                              {money(comp.price)}
+                            </span>
+                            <span className="text-[10px] text-muted">MOQ: {comp.moq}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="ts-card overflow-hidden" aria-labelledby="supplier-recent-inquiries">
         <div className="flex items-center justify-between px-5 py-4">
