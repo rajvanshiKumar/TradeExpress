@@ -183,11 +183,13 @@ export async function requestMobileOtp({ phone, country = 'India' }) {
     },
   });
 
+  const isDev = process.env.NODE_ENV !== 'production' || process.env.DEV_OTP_ENABLED === 'true';
   return {
     success: true,
     message: 'OTP has been sent to your mobile number via SMS.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     phone: formattedPhone,
+    ...(isDev ? { devOtp: generatedOtp || '123456' } : {}),
   };
 }
 
@@ -902,11 +904,13 @@ export async function requestEmailVerificationOtp({ email, name, purpose = 'regi
   const { sendSupplierVerificationOtpEmail } = await import('./emailService.js');
   await sendSupplierVerificationOtpEmail({ email: normalizedEmail, name, otp: generatedOtp, purpose });
 
+  const isDev = process.env.NODE_ENV !== 'production' || process.env.DEV_OTP_ENABLED === 'true';
   return {
     success: true,
     message: `Verification code sent to ${normalizedEmail}.`,
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     email: normalizedEmail,
+    ...(isDev ? { devOtp: generatedOtp } : {}),
   };
 }
 

@@ -5,6 +5,7 @@ import { Building2, CheckCircle2, ChevronDown, CircleAlert, Mail, RefreshCw, Sea
 import Input, { Checkbox } from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
+import OtpModal from '../common/OtpModal';
 import useAuth from '../../hooks/useAuth';
 import useProducts from '../../hooks/useProducts';
 import useNotifications from '../../hooks/useNotifications';
@@ -70,11 +71,22 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [phoneOtpSending, setPhoneOtpSending] = useState(false);
   const [phoneCooldown, setPhoneCooldown] = useState(0);
+  const [phoneDevOtp, setPhoneDevOtp] = useState('');
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [phoneToken, setPhoneToken] = useState('');
 
   // Email OTP States
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [emailOtpSending, setEmailOtpSending] = useState(false);
   const [emailCooldown, setEmailCooldown] = useState(0);
+  const [emailDevOtp, setEmailDevOtp] = useState('');
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [emailToken, setEmailToken] = useState('');
+
+  // OTP Popup Modal States
+  const [otpModalType, setOtpModalType] = useState(null); // 'phone' | 'email' | null
+  const [otpModalError, setOtpModalError] = useState('');
+  const [otpModalVerifying, setOtpModalVerifying] = useState(false);
 
   // Countdown timers for OTP resend cooldowns
   useEffect(() => {
@@ -172,7 +184,7 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
     setFormError('');
   };
 
-  /** Sends verification OTP to the entered mobile number */
+  /** Sends verification OTP to the entered mobile number and opens popup modal */
   const handleSendMobileOtp = async () => {
     const parsed = parseMobile(values.phone, values.country);
     if (!values.phone || !parsed.ok) {
@@ -184,8 +196,9 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
     }
 
     setPhoneOtpSending(true);
-    setErrors((prev) => ({ ...prev, phone: '', phoneOtp: '' }));
+    setErrors((prev) => ({ ...prev, phone: '' }));
     setFormError('');
+    setOtpModalError('');
 
     try {
       const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
@@ -201,7 +214,13 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
       if (res.ok && data.success) {
         setPhoneOtpSent(true);
         setPhoneCooldown(data.cooldownSeconds || 60);
-        showToast('Verification code dispatched to your mobile number.');
+        if (data.devOtp) {
+          setPhoneDevOtp(data.devOtp);
+          showToast(`Verification code sent! (Code: ${data.devOtp})`);
+        } else {
+          showToast('Verification code dispatched to your mobile number.');
+        }
+        setOtpModalType('phone');
       } else {
         setErrors((prev) => ({ ...prev, phone: data.message || 'Unable to dispatch mobile OTP.' }));
       }
@@ -215,7 +234,7 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
     }
   };
 
-  /** Sends verification OTP to the entered work email */
+  /** Sends verification OTP to the entered work email and opens popup modal */
   const handleSendEmailOtp = async () => {
     const cleanEmail = normalizeEmail(values.email);
     if (!cleanEmail || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(cleanEmail)) {
@@ -227,8 +246,9 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
     }
 
     setEmailOtpSending(true);
-    setErrors((prev) => ({ ...prev, email: '', emailOtp: '' }));
+    setErrors((prev) => ({ ...prev, email: '' }));
     setFormError('');
+    setOtpModalError('');
 
     try {
       const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
@@ -246,7 +266,13 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
       if (res.ok && data.success) {
         setEmailOtpSent(true);
         setEmailCooldown(data.cooldownSeconds || 60);
-        showToast(`Verification code sent to ${cleanEmail}.`);
+        if (data.devOtp) {
+          setEmailDevOtp(data.devOtp);
+          showToast(`Verification code sent! (Code: ${data.devOtp})`);
+        } else {
+          showToast(`Verification code sent to ${cleanEmail}.`);
+        }
+        setOtpModalType('email');
       } else {
         const errMsg = data.message || 'Unable to dispatch verification email.';
         setErrors((prev) => ({ ...prev, email: errMsg }));
@@ -258,6 +284,61 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
       }));
     } finally {
       setEmailOtpSending(false);
+    }
+  };
+
+  /** Verifies submitted OTP inside the popup modal for registration */
+  const handleVerifyRegisterOtp = async (code) => {
+    setOtpModalVerifying(true);
+    setOtpModalError('');
+
+    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+
+    try {
+      if (otpModalType === 'phone') {
+        const res = await fetch(`${baseUrl}/auth/verify-mobile-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            phone: values.phone,
+            country: values.country,
+            otp: code,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          setOtpModalError(data.message || 'Invalid mobile verification code.');
+          return;
+        }
+        setPhoneVerified(true);
+        setPhoneToken(data.data?.verificationToken || 'evt_test_123456');
+        setOtpModalType(null);
+        showToast('Mobile number verified successfully!');
+      } else if (otpModalType === 'email') {
+        const cleanEmail = normalizeEmail(values.email);
+        const res = await fetch(`${baseUrl}/auth/verify-email-verification-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            otp: code,
+            purpose: 'registration',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          setOtpModalError(data.message || 'Invalid email verification code.');
+          return;
+        }
+        setEmailVerified(true);
+        setEmailToken(data.verificationToken || 'evt_test_123456');
+        setOtpModalType(null);
+        showToast('Work email verified successfully!');
+      }
+    } catch {
+      setOtpModalError('Failed to verify OTP. Please try again.');
+    } finally {
+      setOtpModalVerifying(false);
     }
   };
 
@@ -275,107 +356,42 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
     if (!['buyer', 'supplier'].includes(values.role)) found.role = 'Choose Buyer or Supplier.';
     if (!values.agree) found.agree = 'Please accept the terms of use to continue.';
 
-    // Mobile OTP Validation
-    const cleanPhoneOtp = (values.phoneOtp || '').trim();
-    if (!cleanPhoneOtp) {
-      found.phoneOtp = 'Please enter mobile verification code.';
-    } else if (cleanPhoneOtp !== '123456' && cleanPhoneOtp.length !== 6) {
-      found.phoneOtp = 'Please enter a valid 6-digit OTP.';
-    }
-
-    // Email OTP Validation
-    const cleanEmailOtp = (values.emailOtp || '').trim();
-    if (!cleanEmailOtp) {
-      found.emailOtp = 'Please enter email verification code.';
-    } else if (cleanEmailOtp !== '123456' && cleanEmailOtp.length !== 6) {
-      found.emailOtp = 'Please enter a valid 6-digit OTP.';
-    }
-
     setErrors(found);
     if (hasErrors(found)) return focusFirstError(found, 'register-');
 
+    // Ensure phone is verified via popup modal
+    if (!phoneVerified) {
+      setErrors((prev) => ({ ...prev, phone: 'Please verify your mobile number.' }));
+      if (phoneOtpSent) {
+        setOtpModalType('phone');
+        setOtpModalError('');
+      } else {
+        handleSendMobileOtp();
+      }
+      return;
+    }
+
+    // Ensure email is verified via popup modal
+    if (!emailVerified) {
+      setErrors((prev) => ({ ...prev, email: 'Please verify your work email address.' }));
+      if (emailOtpSent) {
+        setOtpModalType('email');
+        setOtpModalError('');
+      } else {
+        handleSendEmailOtp();
+      }
+      return;
+    }
+
     setBusy(true);
-
-    let verificationToken = 'evt_test_123456';
-    let emailVerificationToken = 'evt_test_123456';
-
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
-
-    // Verify Mobile OTP if not bypass 123456
-    if (cleanPhoneOtp !== '123456') {
-      try {
-        const res = await fetch(`${baseUrl}/auth/verify-mobile-otp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({
-            phone: values.phone,
-            country: values.country,
-            otp: cleanPhoneOtp,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          setBusy(false);
-          setErrors((prev) => ({
-            ...prev,
-            phoneOtp: data.message || 'Invalid mobile verification code.',
-          }));
-          return;
-        }
-        if (data.data?.verificationToken) {
-          verificationToken = data.data.verificationToken;
-        }
-      } catch {
-        setBusy(false);
-        setErrors((prev) => ({
-          ...prev,
-          phoneOtp: 'Could not verify mobile OTP. Please try again.',
-        }));
-        return;
-      }
-    }
-
-    // Verify Email OTP if not bypass 123456
-    if (cleanEmailOtp !== '123456') {
-      try {
-        const res = await fetch(`${baseUrl}/auth/verify-email-verification-otp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({
-            email: trimmed.email,
-            otp: cleanEmailOtp,
-            purpose: 'registration',
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          setBusy(false);
-          setErrors((prev) => ({
-            ...prev,
-            emailOtp: data.message || 'Invalid email verification code.',
-          }));
-          return;
-        }
-        if (data.verificationToken) {
-          emailVerificationToken = data.verificationToken;
-        }
-      } catch {
-        setBusy(false);
-        setErrors((prev) => ({
-          ...prev,
-          emailOtp: 'Could not verify email OTP. Please try again.',
-        }));
-        return;
-      }
-    }
 
     const phone = parseMobile(values.phone, values.country).international;
     const result = await register({
       ...trimmed,
       phone,
       role: values.role,
-      verificationToken,
-      emailVerificationToken,
+      verificationToken: phoneToken || 'evt_test_123456',
+      emailVerificationToken: emailToken || 'evt_test_123456',
     });
 
     // The passwords were only needed to create the hash. They are cleared from the form now.
@@ -738,28 +754,45 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
               autoComplete="tel"
               required
               value={values.phone}
-              onChange={set('phone')}
+              onChange={(e) => {
+                set('phone')(e);
+                setPhoneVerified(false);
+              }}
               placeholder={COUNTRY_PHONE_RULES[values.country]?.example || '98765 43210'}
               className={`ts-input flex-1 min-w-0 ${errors.phone ? '!border-danger' : ''}`}
               aria-invalid={errors.phone ? 'true' : undefined}
             />
 
-            {/* otp */}
-            <button
-              type="button"
-              onClick={handleSendMobileOtp}
-              disabled={phoneOtpSending || phoneCooldown > 0}
-              className="shrink-0 px-3.5 sm:px-4 py-2 rounded-lg bg-navy-900 text-white text-xs sm:text-sm font-semibold hover:bg-navy-800 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-            >
-              {phoneOtpSending ? (
-                <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
-              ) : null}
-              {phoneCooldown > 0
-                ? `Resend in ${phoneCooldown}s`
-                : phoneOtpSent
-                  ? 'Resend OTP'
+            {/* OTP Action Button or Verified Badge */}
+            {phoneVerified ? (
+              <span className="shrink-0 px-3 sm:px-3.5 py-2 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs sm:text-sm font-semibold flex items-center gap-1.5 shadow-xs">
+                <CheckCircle2 className="size-4 text-emerald-600" />
+                Verified
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (phoneOtpSent && phoneCooldown > 0) {
+                    setOtpModalType('phone');
+                    setOtpModalError('');
+                  } else {
+                    handleSendMobileOtp();
+                  }
+                }}
+                disabled={phoneOtpSending}
+                className="shrink-0 px-3.5 sm:px-4 py-2 rounded-lg bg-navy-900 text-white text-xs sm:text-sm font-semibold hover:bg-navy-800 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              >
+                {phoneOtpSending ? (
+                  <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+                ) : null}
+                {phoneCooldown > 0
+                  ? `Enter OTP (${phoneCooldown}s)`
+                  : phoneOtpSent
+                  ? 'Enter OTP'
                   : 'Send OTP'}
-            </button>
+              </button>
+            )}
           </div>
 
           {errors.phone ? (
@@ -768,38 +801,14 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
               {errors.phone}
             </p>
           ) : null}
-
-          {/* here input box for otp */}
-          <div className="mt-2.5">
-            <input
-              id="register-phone-otp"
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              autoComplete="one-time-code"
-              value={values.phoneOtp}
-              onChange={set('phoneOtp')}
-              placeholder="Enter mobile OTP"
-              className={`ts-input tracking-widest text-center sm:text-left font-mono font-bold ${errors.phoneOtp ? '!border-danger' : ''
-                }`}
-              aria-invalid={errors.phoneOtp ? 'true' : undefined}
-            />
-            {errors.phoneOtp ? (
-              <p role="alert" className="mt-1 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                {errors.phoneOtp}
-              </p>
-            ) : null}
-          </div>
         </div>
 
-        {/* Work Email : */}
+        {/* Work Email */}
         <div className="sm:col-span-2">
           <label htmlFor="register-email" className="ts-label">
             Work Email <span className="text-danger">*</span>
           </label>
 
-          {/* input field for email     otp */}
           <div className="flex gap-2">
             <input
               id="register-email"
@@ -807,26 +816,43 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
               autoComplete="email"
               required
               value={values.email}
-              onChange={set('email')}
+              onChange={(e) => {
+                set('email')(e);
+                setEmailVerified(false);
+              }}
               placeholder="e.g. name@company.com"
               className={`ts-input flex-1 ${errors.email ? '!border-danger' : ''}`}
               aria-invalid={errors.email ? 'true' : undefined}
             />
-            <button
-              type="button"
-              onClick={handleSendEmailOtp}
-              disabled={emailOtpSending || emailCooldown > 0}
-              className="shrink-0 px-3.5 sm:px-4 py-2 rounded-lg bg-navy-900 text-white text-xs sm:text-sm font-semibold hover:bg-navy-800 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-            >
-              {emailOtpSending ? (
-                <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
-              ) : null}
-              {emailCooldown > 0
-                ? `Resend in ${emailCooldown}s`
-                : emailOtpSent
-                  ? 'Resend OTP'
+            {emailVerified ? (
+              <span className="shrink-0 px-3 sm:px-3.5 py-2 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs sm:text-sm font-semibold flex items-center gap-1.5 shadow-xs">
+                <CheckCircle2 className="size-4 text-emerald-600" />
+                Verified
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (emailOtpSent && emailCooldown > 0) {
+                    setOtpModalType('email');
+                    setOtpModalError('');
+                  } else {
+                    handleSendEmailOtp();
+                  }
+                }}
+                disabled={emailOtpSending}
+                className="shrink-0 px-3.5 sm:px-4 py-2 rounded-lg bg-navy-900 text-white text-xs sm:text-sm font-semibold hover:bg-navy-800 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              >
+                {emailOtpSending ? (
+                  <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+                ) : null}
+                {emailCooldown > 0
+                  ? `Enter OTP (${emailCooldown}s)`
+                  : emailOtpSent
+                  ? 'Enter OTP'
                   : 'Send OTP'}
-            </button>
+              </button>
+            )}
           </div>
 
           {errors.email ? (
@@ -835,29 +861,6 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
               {errors.email}
             </p>
           ) : null}
-
-          {/* input field for otp */}
-          <div className="mt-2.5">
-            <input
-              id="register-email-otp"
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              autoComplete="one-time-code"
-              value={values.emailOtp}
-              onChange={set('emailOtp')}
-              placeholder="Enter email OTP"
-              className={`ts-input tracking-widest text-center sm:text-left font-mono font-bold ${errors.emailOtp ? '!border-danger' : ''
-                }`}
-              aria-invalid={errors.emailOtp ? 'true' : undefined}
-            />
-            {errors.emailOtp ? (
-              <p role="alert" className="mt-1 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                {errors.emailOtp}
-              </p>
-            ) : null}
-          </div>
         </div>
 
         <Input id="register-password" label="Password" required type="password" autoComplete="new-password" value={values.password} onChange={set('password')} error={errors.password} hint="At least 8 characters, with a letter and a number." />
@@ -871,6 +874,27 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
 
       <Button type="submit" full size="lg" icon={UserPlus} loading={busy}>{busy ? 'Creating account…' : 'Create account'}</Button>
       <p className="text-center text-sm text-muted">Already have an account? <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">Sign in</Link></p>
+
+      {/* Universal OTP Verification Popup Modal for Registration */}
+      <OtpModal
+        open={Boolean(otpModalType)}
+        onClose={() => setOtpModalType(null)}
+        type={otpModalType || 'email'}
+        title={otpModalType === 'phone' ? 'Verify Mobile Number' : 'Verify Work Email'}
+        destination={
+          otpModalType === 'phone'
+            ? `${COUNTRY_PHONE_RULES[values.country]?.dial ? '+' + COUNTRY_PHONE_RULES[values.country].dial + ' ' : ''}${values.phone}`
+            : values.email
+        }
+        devOtp={otpModalType === 'phone' ? phoneDevOtp : emailDevOtp}
+        cooldown={otpModalType === 'phone' ? phoneCooldown : emailCooldown}
+        onResend={otpModalType === 'phone' ? handleSendMobileOtp : handleSendEmailOtp}
+        resending={otpModalType === 'phone' ? phoneOtpSending : emailOtpSending}
+        onVerify={handleVerifyRegisterOtp}
+        verifying={otpModalVerifying}
+        error={otpModalError}
+        submitLabel="Verify Code"
+      />
     </form>
   );
 }
