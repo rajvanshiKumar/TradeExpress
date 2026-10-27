@@ -3,12 +3,21 @@ import app from './app.js';
 import { ENV } from './config/env.js';
 import prisma from './config/db.js';
 import { initSocket } from './services/socketService.js';
+import { bootstrapSuperAdmin } from '../scripts/bootstrapSuperAdmin.js';
 
 async function startServer() {
   try {
     // Verify database connection
     await prisma.$connect();
     console.log('✓ Successfully connected to MySQL database via Prisma.');
+
+    // Ensure Super Admin exists in MySQL on startup
+    try {
+      await bootstrapSuperAdmin();
+      console.log('✓ Super Admin account ensured and verified.');
+    } catch (bootstrapErr) {
+      console.warn('⚠️ Super Admin bootstrap notice:', bootstrapErr?.message || bootstrapErr);
+    }
 
     const httpServer = http.createServer(app);
     initSocket(httpServer);

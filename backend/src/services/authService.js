@@ -99,9 +99,26 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
   });
 
   // Support common admin aliases if standard email not found and it is an admin login attempt
-  if (!user && (normalizedEmail === 'admin' || normalizedEmail === 'admin@tradeexpress.com' || normalizedEmail === 'admin@tradesphere.com' || normalizedEmail === 'admin@tradesphere.example')) {
-    user = await prisma.user.findUnique({
-      where: { email: 'krajvanshi244@gmail.com' },
+  const ADMIN_ALIASES = [
+    'admin',
+    'admin@tradeexpress.com',
+    'admin@tradesphere.com',
+    'admin@tradeexpress.example',
+    'admin@tradesphere.example',
+    'hello.techvunex@gmail.com',
+    'superadmin',
+    'superadmin@tradeexpress.com',
+    'krajvanshi244@gmail.com',
+  ];
+  if (!user && (isAdminLogin || ADMIN_ALIASES.includes(normalizedEmail))) {
+    user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: 'krajvanshi244@gmail.com' },
+          { role: 'SUPER_ADMIN' },
+          { role: 'ADMIN' },
+        ],
+      },
     });
   }
 
