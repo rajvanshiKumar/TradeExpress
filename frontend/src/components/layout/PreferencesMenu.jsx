@@ -209,9 +209,10 @@ export function PreferenceFields({ idPrefix = 'pref' }) {
 
 export default function PreferencesMenu() {
   const { preferences } = useAuth();
+  const { currentCountry } = useTranslation();
   const { currency, currencies } = useCurrency();
   const activeCur = currencies.find((c) => c.code === currency) || { symbol: '₹', code: 'INR' };
-  const flag = COUNTRY_FLAGS[preferences.country] || '🌐';
+  const flag = currentCountry.flag || COUNTRY_FLAGS[preferences.country] || '🇮🇳';
 
   return (
     <Dropdown

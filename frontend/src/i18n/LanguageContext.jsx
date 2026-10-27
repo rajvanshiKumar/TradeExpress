@@ -111,7 +111,14 @@ export function LanguageProvider({ children }) {
   );
 
   const currentCountry = useMemo(
-    () => SUPPORTED_COUNTRIES.find((item) => item.name === country) || SUPPORTED_COUNTRIES[0],
+    () =>
+      SUPPORTED_COUNTRIES.find(
+        (item) =>
+          item.name === country ||
+          item.code === country ||
+          item.name.toLowerCase() === (country || '').toLowerCase() ||
+          item.code.toLowerCase() === (country || '').toLowerCase()
+      ) || SUPPORTED_COUNTRIES[0],
     [country]
   );
 

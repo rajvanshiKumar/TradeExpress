@@ -50,12 +50,9 @@ export default function LanguageSelector({ className = '' }) {
         aria-label={`Language selector: Currently ${currentLanguage.label}`}
         title={`Change Language: ${currentLanguage.label} (${currentLanguage.short})`}
       >
-        <Globe
-          className={`size-3.5 sm:size-4 transition-colors ${
-            isOpen ? 'text-emerald-700' : 'text-slate-600 group-hover:text-emerald-700'
-          }`}
-          aria-hidden="true"
-        />
+        <span className="text-sm select-none leading-none shrink-0" aria-hidden="true">
+          {currentCountry.flag || '🇮🇳'}
+        </span>
         <span className="text-xs font-black tracking-tight text-slate-900 uppercase">
           {currentLanguage.short}
         </span>
@@ -166,8 +163,12 @@ export default function LanguageSelector({ className = '' }) {
                 <span>{t('country.change', {}, 'Change country/region')}</span>
                 <ArrowRight className="size-3 text-emerald-700 transition-transform group-hover:translate-x-0.5" />
               </Link>
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-600 bg-slate-200/80 px-1.5 py-0.5 rounded">
-                {currentCountry.code}
+              <span
+                className="text-base select-none leading-none shrink-0"
+                aria-label={currentCountry.name}
+                title={currentCountry.name}
+              >
+                {currentCountry.flag || '🇮🇳'}
               </span>
             </div>
           </div>
