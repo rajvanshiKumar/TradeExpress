@@ -1,0 +1,253 @@
+@import "tailwindcss";
+@import "./components.css";
+
+/* ------------------------------------------------------------------
+   TradeExpress design tokens (Tailwind v4 reads these from @theme)
+------------------------------------------------------------------- */
+@theme {
+  --app-header-height: 4.75rem;
+  /* Typography: Manrope for headings, Inter for text, DM Serif Display for rare editorial accents */
+  --font-display: "Manrope", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "DM Serif Display", Georgia, "Times New Roman", serif;
+
+  /* Deep forest greens. The scale keeps its historical "navy" name so every
+     existing component (headings, dark buttons, panels) picks up the new palette. */
+  --color-navy-950: #0b2716;
+  --color-navy-900: #123f25;
+  --color-navy-800: #1a5133;
+  --color-navy-700: #2b6644;
+  --color-navy-600: #4a7a5c;
+  --color-navy-200: #c9d9c0;
+  --color-navy-100: #e3ecdd;
+  --color-navy-50: #f1f5ee;
+  --color-charcoal: #142a1c;
+
+  /* Soft sage accents (formerly champagne gold). 600/700 are dark enough for text on light surfaces. */
+  --color-brand-700: #1f4d2e;
+  --color-brand-600: #2f6b3f;
+  --color-brand-500: #a8c494;
+  --color-brand-400: #bcd3ab;
+  --color-brand-100: #dfead5;
+  --color-brand-50: #eef4e8;
+
+  /* Restrained warm orange, for small highlights only (deals, ratings, a hero accent) */
+  --color-accent-700: #9c4613;
+  --color-accent-600: #c25a1c;
+  --color-accent-500: #e3803c;
+  --color-accent-100: #fbe2cf;
+  --color-accent-50: #fdf3ea;
+
+  /* Named furniture-palette colours */
+  --color-sage: #a8c494;
+  --color-sage-soft: #e7efe0;
+  --color-forest: #123f25;
+
+  /* Light neutral canvas, ink and muted text */
+  --color-surface: #f4f5f0;
+  --color-ivory: #f6f6f1;
+  --color-ink: #17251c;
+  --color-muted: #5a6a5e;
+  --color-line: #e1e5da;
+
+  --color-success: #1d7a4a;
+  --color-success-50: #e8f4ec;
+  --color-danger: #c2362b;
+  --color-danger-50: #fcefed;
+  --color-warning: #94620f;
+  --color-warning-50: #fbf4e6;
+
+  --shadow-card: 0 1px 2px rgb(18 63 37 / 0.04), 0 10px 28px -16px rgb(18 63 37 / 0.16);
+  --shadow-lift: 0 2px 6px rgb(18 63 37 / 0.06), 0 28px 54px -24px rgb(18 63 37 / 0.30);
+  --shadow-pop: 0 30px 70px -26px rgb(11 39 22 / 0.40);
+  --shadow-gold: 0 12px 28px -14px rgb(18 63 37 / 0.55);
+
+  --breakpoint-xs: 26rem;
+
+  --animate-reveal: ts-reveal 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-line);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: clip;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    color: var(--color-navy-900);
+    letter-spacing: -0.022em;
+    line-height: 1.15;
+    font-weight: 800;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background: var(--color-brand-400);
+    color: var(--color-navy-950);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  button,
+  [role="button"],
+  select,
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  img {
+    max-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Furniture theme helpers
+   The sage-and-forest palette is now global (see @theme above). .ts-home is
+   kept as the homepage wrapper so existing markup keeps working.
+------------------------------------------------------------------- */
+.ts-home {
+  background-color: var(--color-ivory);
+}
+
+/* Accent words stay in the clean sans-serif, lighter rather than italic. */
+.ts-serif {
+  font-family: var(--font-display);
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+/* Forest panels with a soft sage glow */
+.ts-navy-texture {
+  background-color: var(--color-forest);
+  background-image:
+    radial-gradient(ellipse 60% 55% at 90% 0%, rgb(168 196 148 / 0.28), transparent 70%),
+    radial-gradient(ellipse 50% 60% at 0% 100%, rgb(168 196 148 / 0.14), transparent 70%);
+  background-size: auto;
+}
+
+/* Section backgrounds */
+.ts-hero-trending-banner {
+  background: linear-gradient(
+    180deg,
+    #1c683e 0%,
+    #217446 16%,
+    #2a8451 32%,
+    #389c65 48%,
+    #4eaf7a 62%,
+    #6ec392 74%,
+    #98d9b3 84%,
+    #c2ecd3 91%,
+    #daf3e5 96%,
+    #eef8f2 100%
+  );
+}
+.ts-sage {
+  background-color: #a8c494;
+  background-image: linear-gradient(180deg, #b3cca1 0%, #a8c494 55%, #9dbb88 100%);
+}
+.ts-sage-soft {
+  background-color: #e7efe0;
+}
+
+/* Post-banner radiant aurora mesh background */
+.ts-post-banner {
+  background-color: #f0f5ec;
+  background-image:
+    radial-gradient(ellipse 85% 60% at 50% -8%, rgb(168 196 148 / 0.50), transparent 75%),
+    radial-gradient(circle 550px at 10% 25%, rgb(168 196 148 / 0.28), transparent 70%),
+    radial-gradient(circle 500px at 90% 45%, rgb(227 128 60 / 0.09), transparent 65%),
+    radial-gradient(circle 600px at 50% 90%, rgb(18 63 37 / 0.08), transparent 70%),
+    linear-gradient(180deg, #eaf2e5 0%, #f6faf3 22%, #f2f7ef 60%, #e8f1e4 100%);
+}
+
+.ts-grid-pattern {
+  background-image: radial-gradient(rgb(18 63 37 / 0.065) 1.2px, transparent 1.2px);
+  background-size: 28px 28px;
+}
+
+/* Decorative leaves sit behind content and never catch the pointer */
+.ts-botanical {
+  pointer-events: none;
+  position: absolute;
+  color: var(--color-forest);
+}
+
+/* =========================================
+   Furniture hero: featured product on an organic blob
+========================================= */
+.ts-hero-blob {
+  border-radius: 58% 42% 46% 54% / 52% 44% 56% 48%;
+  animation: ts-blob 14s ease-in-out infinite alternate;
+}
+.ts-hero-float {
+  animation: ts-float 6s ease-in-out infinite;
+}
+.ts-hero-float-slow {
+  animation: ts-float 8s ease-in-out 1.2s infinite;
+}
+
+@keyframes ts-blob {
+  0% {
+    border-radius: 58% 42% 46% 54% / 52% 44% 56% 48%;
+  }
+  50% {
+    border-radius: 44% 56% 58% 42% / 46% 58% 42% 54%;
+  }
+  100% {
+    border-radius: 52% 48% 40% 60% / 58% 42% 58% 42%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ts-hero-blob,
+  .ts-hero-float,
+  .ts-hero-float-slow {
+    animation: none;
+  }
+}

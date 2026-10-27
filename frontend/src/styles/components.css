@@ -1,0 +1,344 @@
+/* Shared component classes for the TradeExpress design system.
+   Tailwind utilities do most of the work; these cover patterns used everywhere. */
+
+@layer components {
+  /* Page container */
+  .ts-container {
+    width: 100%;
+    max-width: 86rem;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 640px) {
+    .ts-container {
+      padding-inline: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .ts-container {
+      padding-inline: 2rem;
+    }
+  }
+
+  /* Cards */
+  .ts-card {
+    background: #fff;
+    border: 1px solid rgb(18 63 37 / 0.06);
+    border-radius: 1.5rem;
+    box-shadow: var(--shadow-card);
+  }
+  .ts-card-hover {
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .ts-card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lift);
+    border-color: rgb(47 107 63 / 0.25);
+  }
+
+  /* Section headings */
+  .ts-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-brand-600);
+  }
+  .ts-eyebrow::before {
+    content: "";
+    width: 1.75rem;
+    height: 1px;
+    background: currentColor;
+  }
+  .ts-section-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(1.75rem, 1.2rem + 1.9vw, 2.75rem);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    color: var(--color-navy-900);
+  }
+  /* Editorial serif accent: use for one or two words in a heading, never body text */
+  .ts-serif {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: -0.01em;
+  }
+  .ts-gold-text {
+    color: var(--color-brand-500);
+  }
+
+  /* Form fields */
+  .ts-label {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .ts-input {
+    display: block;
+    width: 100%;
+    min-height: 3rem;
+    border-radius: 0.75rem;
+    border: 1px solid #d9dfd2;
+    background: #fff;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.9375rem;
+    color: var(--color-ink);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .ts-input::placeholder {
+    color: #94a3b8;
+  }
+  .ts-input:hover {
+    border-color: #b9c7b0;
+  }
+  .ts-input:focus {
+    outline: none;
+    border-color: var(--color-brand-600);
+    box-shadow: 0 0 0 4px rgb(168 196 148 / 0.35);
+  }
+  .ts-input[aria-invalid="true"] {
+    border-color: var(--color-danger);
+  }
+  .ts-input:disabled {
+    background: var(--color-surface);
+    color: var(--color-muted);
+  }
+  select.ts-input {
+    appearance: none;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+  }
+
+  /* Tables */
+  .ts-table {
+    position: relative; /* keeps visually hidden captions inside the scrolling wrapper */
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .ts-table th {
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    background: var(--color-surface);
+    padding: 0.75rem 1rem;
+    white-space: nowrap;
+  }
+  .ts-table td {
+    padding: 0.875rem 1rem;
+    border-top: 1px solid var(--color-line);
+    vertical-align: middle;
+  }
+  .ts-table tbody tr:hover {
+    background: #f7faf4;
+  }
+
+  /* Skeleton shimmer */
+  .ts-skeleton {
+    background-color: #e4eadf;
+    background-image: linear-gradient(100deg, rgb(255 255 255 / 0) 20%, rgb(255 255 255 / 0.7) 50%, rgb(255 255 255 / 0) 80%);
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: ts-shimmer 1.4s linear infinite;
+    border-radius: 0.5rem;
+  }
+
+  .ts-no-scrollbar {
+    scrollbar-width: none;
+  }
+  .ts-no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ts-slim-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(16 185 129 / 0.35) transparent;
+  }
+  .ts-slim-scrollbar::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  .ts-slim-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .ts-slim-scrollbar::-webkit-scrollbar-thumb {
+    background: rgb(16 185 129 / 0.35);
+    border-radius: 9999px;
+  }
+  .ts-slim-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgb(16 185 129 / 0.7);
+  }
+
+  /* Subtle world-grid texture used on navy sections */
+  .ts-navy-texture {
+    background-color: var(--color-navy-900);
+    background-image:
+      radial-gradient(ellipse 60% 50% at 85% 0%, rgb(168 196 148 / 0.22), transparent 70%),
+      radial-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1px);
+    background-size: auto, 24px 24px;
+  }
+  .ts-charcoal {
+    background-color: var(--color-charcoal);
+  }
+  /* Thin champagne rule used to separate editorial blocks */
+  .ts-gold-rule {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-brand-500), transparent);
+  }
+  /* Pill chips (category shortcuts, quick filters). Add .is-active for the selected one. */
+  .ts-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--color-navy-900);
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 0 0 1px rgb(18 63 37 / 0.09);
+    transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .ts-pill:hover {
+    box-shadow: 0 0 0 1px rgb(18 63 37 / 0.28);
+    transform: translateY(-1px);
+  }
+  .ts-pill.is-active {
+    background: var(--color-navy-900);
+    color: #fff;
+    box-shadow: 0 10px 22px -12px rgb(18 63 37 / 0.7);
+  }
+
+  /* Soft sage panel behind product photography */
+  .ts-photo-stage {
+    background: radial-gradient(120% 90% at 50% 15%, #f4f7f0 0%, #e7efe0 70%, #dde8d3 100%);
+  }
+
+  /* Section entry animation, added by <Reveal> once the element scrolls into view */
+  .ts-reveal {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  .ts-reveal.is-visible {
+    animation: var(--animate-reveal);
+  }
+  .ts-page-enter {
+    animation: ts-fade-in 0.4s ease both;
+  }
+
+  .ts-fade-in {
+    animation: ts-fade-in 0.35s ease both;
+  }
+  .ts-slide-up {
+    animation: ts-slide-up 0.3s ease both;
+  }
+
+  /* Premium Custom Dropdown styling */
+  .ts-dropdown-panel {
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow: 0 20px 48px -12px rgba(11, 39, 22, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.04), 0 3px 8px -2px rgba(0, 0, 0, 0.06);
+    border-radius: 1rem;
+  }
+  .ts-dropdown-anim {
+    animation: ts-dropdown-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+    transform-origin: top right;
+  }
+  .ts-dropdown-anim-left {
+    animation: ts-dropdown-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+    transform-origin: top left;
+  }
+  .ts-dropdown-anim-center {
+    animation: ts-dropdown-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+    transform-origin: top center;
+  }
+}
+
+@keyframes ts-dropdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes ts-drawer-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes ts-drawer-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes ts-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ts-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ts-reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Prominent, smooth horizontal scrollbar for admin tables */
+.custom-table-scrollbar {
+  overflow-x: auto;
+  scrollbar-width: auto;
+  scrollbar-color: #10b981 #e2e8f0;
+}
+.custom-table-scrollbar::-webkit-scrollbar {
+  height: 12px;
+  background-color: #f1f5f9;
+}
+.custom-table-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-top: 1px solid #e2e8f0;
+  border-radius: 0 0 0.75rem 0.75rem;
+}
+.custom-table-scrollbar::-webkit-scrollbar-thumb {
+  background: #10b981;
+  border-radius: 9999px;
+  border: 2px solid #f1f5f9;
+}
+.custom-table-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #059669;
+}
+
