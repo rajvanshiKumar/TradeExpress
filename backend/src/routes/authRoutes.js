@@ -143,6 +143,24 @@ router.post(
 );
 
 router.post(
+  '/register-buyer',
+  authRateLimiter,
+  validate([
+    body('email').isEmail().withMessage('Valid work email is required.'),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters.'),
+    body('name').trim().notEmpty().withMessage('Full name is required.'),
+    body('company').trim().notEmpty().withMessage('Business / Company name is required.'),
+    body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
+    body('country').trim().notEmpty().withMessage('Country is required.'),
+    body('city').trim().notEmpty().withMessage('City is required.'),
+    body('state').trim().notEmpty().withMessage('State / Province is required.'),
+    body('postalCode').trim().notEmpty().withMessage('Postal code is required.'),
+    body('businessAddress').trim().notEmpty().withMessage('Business address is required.'),
+  ]),
+  authController.registerBuyer
+);
+
+router.post(
   '/register-supplier',
   authRateLimiter,
   validate([

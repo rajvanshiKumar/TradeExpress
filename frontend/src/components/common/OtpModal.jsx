@@ -9,26 +9,33 @@ import Button from './Button';
  */
 export default function OtpModal({
   open,
+  isOpen,
   onClose,
   type = 'email', // 'email' | 'phone'
   destination = '',
+  target = '',
   devOtp = '',
   cooldown = 0,
   onResend,
   resending = false,
   onVerify,
   verifying = false,
+  isVerifying = false,
   error = '',
   title,
   submitLabel = 'Verify & Continue',
 }) {
+  const activeOpen = Boolean(open ?? isOpen);
+  const activeDestination = destination || target || '';
+  const activeVerifying = verifying || isVerifying || false;
+
   const [otp, setOtp] = useState('');
   const [localError, setLocalError] = useState('');
   const inputRef = useRef(null);
 
   // Reset and auto-focus when modal opens
   useEffect(() => {
-    if (open) {
+    if (activeOpen) {
       setOtp('');
       setLocalError('');
       const timer = setTimeout(() => {
@@ -38,7 +45,7 @@ export default function OtpModal({
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [open]);
+  }, [activeOpen]);
 
   const handleChange = (e) => {
     const val = e.target.value.replace(/\D/g, '').slice(0, 6);
@@ -46,12 +53,6 @@ export default function OtpModal({
     if (localError) setLocalError('');
   };
 
-  const handleFillDevCode = () => {
-    if (devOtp) {
-      setOtp(devOtp);
-      if (localError) setLocalError('');
-    }
-  };
 
   const handleSubmit = async (e) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
@@ -71,7 +72,7 @@ export default function OtpModal({
 
   return (
     <Modal
-      open={open}
+      open={activeOpen}
       onClose={onClose}
       size="sm"
       title={
@@ -90,25 +91,9 @@ export default function OtpModal({
         {/* Destination Information */}
         <p className="text-xs text-navy-700 leading-relaxed">
           We have dispatched a 6-digit verification code to{' '}
-          <strong className="font-bold text-navy-950 font-mono break-all">{destination}</strong>.
+          <strong className="font-bold text-navy-950 font-mono break-all">{activeDestination}</strong>.
           Please enter it below to proceed.
         </p>
-
-        {/* Demo / Dev Code Quick-fill Tag */}
-        {devOtp ? (
-          <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200 text-xs">
-            <span className="text-emerald-900 font-medium">Demo Code:</span>
-            <button
-              type="button"
-              onClick={handleFillDevCode}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-mono font-bold text-xs hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer active:scale-95"
-              title="Click to auto-fill verification code"
-            >
-              <span>{devOtp}</span>
-              <span className="text-[10px] opacity-90 font-sans font-normal">(Click to fill)</span>
-            </button>
-          </div>
-        ) : null}
 
         {/* 6-Digit OTP Input Field */}
         <div>

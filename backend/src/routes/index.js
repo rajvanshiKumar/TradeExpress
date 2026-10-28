@@ -18,10 +18,12 @@ import notificationRoutes from './notificationRoutes.js';
 import ticketRoutes from './ticketRoutes.js';
 import superAdminRoutes from './superAdminRoutes.js';
 import messageRoutes from './messageRoutes.js';
+import verificationRoutes from './verificationRoutes.js';
 
 const router = Router();
 
 router.use('/auth', authRoutes);
+router.use('/verification', verificationRoutes);
 router.use('/products', productRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/orders', orderRoutes);

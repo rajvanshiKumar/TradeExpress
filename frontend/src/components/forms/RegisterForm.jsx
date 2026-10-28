@@ -71,7 +71,6 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [phoneOtpSending, setPhoneOtpSending] = useState(false);
   const [phoneCooldown, setPhoneCooldown] = useState(0);
-  const [phoneDevOtp, setPhoneDevOtp] = useState('');
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [phoneToken, setPhoneToken] = useState('');
 
@@ -79,7 +78,6 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [emailOtpSending, setEmailOtpSending] = useState(false);
   const [emailCooldown, setEmailCooldown] = useState(0);
-  const [emailDevOtp, setEmailDevOtp] = useState('');
   const [emailVerified, setEmailVerified] = useState(false);
   const [emailToken, setEmailToken] = useState('');
 
@@ -214,12 +212,7 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
       if (res.ok && data.success) {
         setPhoneOtpSent(true);
         setPhoneCooldown(data.cooldownSeconds || 60);
-        if (data.devOtp) {
-          setPhoneDevOtp(data.devOtp);
-          showToast(`Verification code sent! (Code: ${data.devOtp})`);
-        } else {
-          showToast('Verification code dispatched to your mobile number.');
-        }
+        showToast('Verification code dispatched to your mobile number.');
         setOtpModalType('phone');
       } else {
         setErrors((prev) => ({ ...prev, phone: data.message || 'Unable to dispatch mobile OTP.' }));
@@ -266,12 +259,7 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
       if (res.ok && data.success) {
         setEmailOtpSent(true);
         setEmailCooldown(data.cooldownSeconds || 60);
-        if (data.devOtp) {
-          setEmailDevOtp(data.devOtp);
-          showToast(`Verification code sent! (Code: ${data.devOtp})`);
-        } else {
-          showToast(`Verification code sent to ${cleanEmail}.`);
-        }
+        showToast(`Verification code sent to ${cleanEmail}.`);
         setOtpModalType('email');
       } else {
         const errMsg = data.message || 'Unable to dispatch verification email.';
@@ -886,7 +874,6 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
             ? `${COUNTRY_PHONE_RULES[values.country]?.dial ? '+' + COUNTRY_PHONE_RULES[values.country].dial + ' ' : ''}${values.phone}`
             : values.email
         }
-        devOtp={otpModalType === 'phone' ? phoneDevOtp : emailDevOtp}
         cooldown={otpModalType === 'phone' ? phoneCooldown : emailCooldown}
         onResend={otpModalType === 'phone' ? handleSendMobileOtp : handleSendEmailOtp}
         resending={otpModalType === 'phone' ? phoneOtpSending : emailOtpSending}

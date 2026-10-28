@@ -139,17 +139,63 @@ export const BUSINESS_TYPES = [
 ];
 
 export const SUPPLIER_BUSINESS_TYPES = [
-  'Manufacturer',
+  'Gumasta Licence',
+  'Udyog Aadhaar',
+  'BRN Certificate',
+  'MSME Certificate',
+  'GST Certificate',
+  'Udyam Certificate',
+];
+
+export const BUYER_GST_STATUS_OPTIONS = [
+  'Gumasta Licence',
+  'Udyog Aadhaar',
+  'BRN Certificate',
+  'MSME Certificate',
+  'GST Certificate',
+  'Udyam Certificate',
+];
+
+export const BUYER_TYPES = [
+  'Corporate Procurement',
   'Wholesaler',
   'Distributor',
-  'Trader',
+  'Retailer',
   'Importer',
   'Exporter',
-  'Retailer',
+  'Trader',
   'Reseller',
   'E-commerce Seller',
-  'Service Provider',
+  'Manufacturer',
+  'Institutional Buyer',
   'Other',
+];
+
+export const BUYER_GST_REGISTRATION_TYPES = [
+  {
+    value: 'Regular GST Registration',
+    label: 'Registered (Regular GST)',
+    description: 'Standard taxable business filing regular GST returns with input tax credit.',
+    requiresGstin: true,
+  },
+  {
+    value: 'Composition Scheme',
+    label: 'Registered (Composition Scheme)',
+    description: 'Small enterprise operating under Section 10 turnover-based simplified scheme.',
+    requiresGstin: true,
+  },
+  {
+    value: 'GST Registration Applied / Pending',
+    label: 'Application Pending (ARN Generated)',
+    description: 'GST application submitted on GSTN portal; ARN generated, awaiting GSTIN issuance.',
+    requiresGstin: false,
+  },
+  {
+    value: 'Not Registered / Not Applicable',
+    label: 'Not Registered / Not Applicable (Exempt / Below Threshold)',
+    description: 'Annual turnover below statutory threshold limit (₹40L/₹20L) or deals in exempt goods.',
+    requiresGstin: false,
+  },
 ];
 
 export const GST_REGISTRATION_TYPES = [

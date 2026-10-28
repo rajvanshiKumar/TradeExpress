@@ -69,6 +69,10 @@ model User {
   factoryAddressSame  Boolean              @default(true)
   aadhaarConsent      Boolean?             @default(false)
   aadhaarLast4        String?
+  panAadhaarStatus    String?              @default("NOT_STARTED") // NOT_STARTED, PENDING, LINKED, NOT_LINKED, UNABLE_TO_VERIFY
+  panAadhaarLinked    Boolean?             @default(false)
+  panAadhaarCheckedAt DateTime?
+  panAadhaarMaskedPan String?
   bankAccountNumber   String?
   bankIfsc            String?
   bankName            String?

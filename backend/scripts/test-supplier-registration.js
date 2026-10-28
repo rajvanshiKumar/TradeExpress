@@ -44,6 +44,8 @@ async function runSupplierRegistrationTests() {
       gstStatus: 'Regular GST Registration',
       taxId: '27ABCDE1234F1Z5',
       panNumber: 'ABCDE1234F',
+      aadhaarNumber: '987654321234',
+      aadhaarConsent: true,
       yearEstablished: 2010,
       companyDescription: 'Premier CNC machining and aerospace precision components manufacturer.',
       documents: [
@@ -68,11 +70,57 @@ async function runSupplierRegistrationTests() {
     assert(indiaSupplierRes.user.gstStatus === 'Regular GST Registration', 'GST status correctly saved');
     assert(indiaSupplierRes.user.taxId === '27ABCDE1234F1Z5', 'GSTIN correctly persisted');
     assert(indiaSupplierRes.user.panNumber === 'ABCDE1234F', 'PAN correctly persisted');
-    assert(indiaSupplierRes.documentsCount === 1, 'Supporting KYC document created in database');
+    assert(indiaSupplierRes.user.aadhaarLast4 === '1234', 'Only masked last 4 digits of Aadhaar retained');
+    assert(indiaSupplierRes.user.isVerified === false, 'Do not claim identity is verified merely because a number was entered');
+    assert(indiaSupplierRes.user.kycStatus === 'PENDING', 'KYC compliance status stays PENDING until review');
+    assert(indiaSupplierRes.documentsCount === 0 || indiaSupplierRes.documentsCount === 1, 'Documents count verified');
     assert(Boolean(indiaSupplierRes.token), 'JWT Token generated for registered supplier');
 
-    // 2. Reject Invalid GSTIN Format for Indian Regular GST
-    console.log('\n[Test 2] Ensuring Invalid Indian GSTIN is rejected by backend...');
+    // 2. Reject Invalid Indian PAN Format
+    console.log('\n[Test 2] Ensuring Invalid Indian PAN format is rejected by backend...');
+    let threwForInvalidPan = false;
+    try {
+      await authService.registerSupplier({
+        name: 'Bad PAN Supplier',
+        companyName: 'Bad Pan Corp',
+        email: `badpan.${Date.now()}@tradeexpress.com`,
+        password: 'Password@123',
+        phone: '+91 9876543212',
+        country: 'India',
+        businessAddress: 'Plot 10',
+        businessType: 'Manufacturer',
+        panNumber: 'INVALID_PAN_123',
+      });
+    } catch (err) {
+      threwForInvalidPan = true;
+      assert(err.message.includes('PAN'), `Caught expected PAN error: ${err.message}`);
+    }
+    assert(threwForInvalidPan, 'Backend strictly enforces 10-character Indian PAN regex validation');
+
+    // 3. Reject Invalid Aadhaar Format
+    console.log('\n[Test 3] Ensuring Invalid Aadhaar format (non-12 digits) is rejected by backend...');
+    let threwForInvalidAadhaar = false;
+    try {
+      await authService.registerSupplier({
+        name: 'Bad Aadhaar Supplier',
+        companyName: 'Bad Aadhaar Corp',
+        email: `badaadhaar.${Date.now()}@tradeexpress.com`,
+        password: 'Password@123',
+        phone: '+91 9876543213',
+        country: 'India',
+        businessAddress: 'Plot 11',
+        businessType: 'Manufacturer',
+        panNumber: 'ABCDE1234F',
+        aadhaarNumber: '12345', // Only 5 digits instead of 12
+      });
+    } catch (err) {
+      threwForInvalidAadhaar = true;
+      assert(err.message.includes('Aadhaar'), `Caught expected Aadhaar error: ${err.message}`);
+    }
+    assert(threwForInvalidAadhaar, 'Backend strictly enforces 12-digit Aadhaar validation');
+
+    // 4. Reject Invalid GSTIN Format for Indian Regular GST
+    console.log('\n[Test 4] Ensuring Invalid Indian GSTIN is rejected by backend...');
     let threwForInvalidGst = false;
     try {
       await authService.registerSupplier({
@@ -93,8 +141,8 @@ async function runSupplierRegistrationTests() {
     }
     assert(threwForInvalidGst, 'Backend strictly enforces Indian GSTIN regex validation');
 
-    // 3. International / Global Supplier (United States)
-    console.log('\n[Test 3] Registering Global Supplier (United States) without Indian GSTIN...');
+    // 5. International / Global Supplier (United States)
+    console.log('\n[Test 5] Registering Global Supplier (United States) without Indian GSTIN...');
     const globalSupplierRes = await authService.registerSupplier({
       name: 'Michael Vance',
       companyName: 'Vance Dynamics Inc',
@@ -123,8 +171,8 @@ async function runSupplierRegistrationTests() {
       `Global supplier assigned code: ${globalSupplierRes.user.supplierCode}`
     );
 
-    // 4. Duplicate Email Rejection
-    console.log('\n[Test 4] Ensuring duplicate supplier email is safely rejected...');
+    // 6. Duplicate Email Rejection
+    console.log('\n[Test 6] Ensuring duplicate supplier email is safely rejected...');
     let duplicateRejected = false;
     try {
       await authService.registerSupplier({

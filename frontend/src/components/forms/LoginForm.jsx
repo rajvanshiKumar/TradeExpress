@@ -6,15 +6,16 @@ import {
   LogIn,
   ShieldCheck,
   Mail,
+  Lock,
   Smartphone,
   RefreshCw,
   CheckCircle2,
   CircleAlert,
   ChevronDown,
   Search,
+  ArrowRight,
 } from "lucide-react";
 import Button from "../common/Button";
-import OtpModal from "../common/OtpModal";
 import useAuth from "../../hooks/useAuth";
 import useNotifications from "../../hooks/useNotifications";
 import { ROLE_HOME, COUNTRIES, COUNTRY_FLAGS, COUNTRY_PHONE_RULES } from "../../utils/constants";
@@ -23,7 +24,6 @@ import {
   hasErrors,
   normalizeEmail,
   parseMobile,
-  mobileExample,
   rules,
   validate,
 } from "../../utils/validators";
@@ -36,14 +36,16 @@ const ROLE_NAMES = {
 };
 
 const adminSchema = {
-  email: [rules.required("Email"), rules.email()],
+  email: [rules.required("Admin Email"), rules.email()],
   password: [rules.required("Password")],
 };
 
+const emailRegex = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i;
+
 /**
- * Sign-in form. `mode="admin"` signs in against the dedicated Super Admin console at /super-admin/login;
- * the default mode signs in public Buyers and Suppliers using either Email (with OTP + password)
- * or Mobile (with SMS OTP).
+ * Enterprise B2B Sign-in form.
+ * Supports primary Email + Password authentication, optional Mobile SMS OTP authentication,
+ * and dedicated Admin / Super Admin console sign-in.
  */
 export default function LoginForm({ mode = "member", role = null, adminType = "admin" }) {
   const isAdmin = mode === "admin";
@@ -58,32 +60,20 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
   const [values, setValues] = useState({
     email: "",
     password: "",
-    emailOtp: "",
     country: "India",
     phone: "",
     mobileOtp: "",
+    rememberMe: true,
   });
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Email OTP state
-  const [emailOtpSent, setEmailOtpSent] = useState(false);
-  const [sendingEmailOtp, setSendingEmailOtp] = useState(false);
-  const [emailCooldown, setEmailCooldown] = useState(0);
-  const [emailDevOtp, setEmailDevOtp] = useState("");
-
-  // Mobile OTP state
+  // Mobile OTP state (inline, without dummy popups)
   const [mobileOtpSent, setMobileOtpSent] = useState(false);
   const [sendingMobileOtp, setSendingMobileOtp] = useState(false);
   const [mobileCooldown, setMobileCooldown] = useState(0);
-  const [mobileDevOtp, setMobileDevOtp] = useState("");
-
-  // OTP Popup Modal state
-  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
-  const [otpModalError, setOtpModalError] = useState("");
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   // Custom Country Code Dropdown state
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
@@ -92,25 +82,21 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
 
   const prefix = isAdmin ? "admin-login-" : "login-";
 
-  // Ensure all credentials are fully blank on mount or role/method change
+  // Reset form when role or login method changes
   useEffect(() => {
     setValues((prev) => ({
       ...prev,
       email: "",
       password: "",
-      emailOtp: "",
       phone: "",
       mobileOtp: "",
     }));
-    setEmailOtpSent(false);
     setMobileOtpSent(false);
-    setEmailDevOtp("");
-    setMobileDevOtp("");
     setErrors({});
     setFormError("");
   }, [role, loginMethod]);
 
-  // Click outside and ESC key listener for country dropdown
+  // Click outside and ESC listener for country dropdown
   useEffect(() => {
     if (!countryDropdownOpen) return;
     const handleClickOutside = (e) => {
@@ -129,15 +115,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     };
   }, [countryDropdownOpen]);
 
-  // Cooldown countdown timers
-  useEffect(() => {
-    if (emailCooldown <= 0) return;
-    const timer = setInterval(() => {
-      setEmailCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [emailCooldown]);
-
+  // Mobile OTP cooldown countdown timer
   useEffect(() => {
     if (mobileCooldown <= 0) return;
     const timer = setInterval(() => {
@@ -146,61 +124,22 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     return () => clearInterval(timer);
   }, [mobileCooldown]);
 
-  const set = (field) => (event) => {
-    const value = event.target.value;
-    setValues((previous) => ({ ...previous, [field]: value }));
-    if (errors[field]) setErrors((previous) => ({ ...previous, [field]: "" }));
-    setFormError("");
-  };
-
-  /** Sends real OTP to the entered email */
-  const handleSendEmailOtp = async () => {
-    const clean = normalizeEmail(values.email);
-    if (!clean || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(clean)) {
-      setErrors((prev) => ({
-        ...prev,
-        email: "Please enter a valid email address first.",
-      }));
-      return;
+  const handleChange = (field) => (event) => {
+    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    setValues((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: "" }));
     }
-
-    setSendingEmailOtp(true);
     setFormError("");
-    try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
-      const res = await fetch(`${baseUrl}/auth/send-email-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          email: clean,
-          role: role ? role.toUpperCase() : undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setFormError(data.message || "Failed to dispatch email verification code.");
-      } else {
-        setEmailOtpSent(true);
-        setEmailCooldown(data.cooldownSeconds || 60);
-        if (data.devOtp) {
-          setEmailDevOtp(data.devOtp);
-          showToast(`Verification code sent! (Code: ${data.devOtp})`);
-        } else {
-          showToast("Verification code dispatched to your email inbox.");
-        }
-        setIsOtpModalOpen(true);
-        setOtpModalError("");
-      }
-    } catch {
-      setFormError("Unable to contact authentication server. Please check your connection.");
-    } finally {
-      setSendingEmailOtp(false);
-    }
   };
 
   /** Sends real SMS OTP to the entered mobile number */
   const handleSendMobileOtp = async () => {
     const parsed = parseMobile(values.phone, values.country);
+    if (!values.phone.trim()) {
+      setErrors((prev) => ({ ...prev, phone: "Mobile number is required." }));
+      return;
+    }
     if (!parsed.ok) {
       setErrors((prev) => ({
         ...prev,
@@ -211,13 +150,15 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
 
     setSendingMobileOtp(true);
     setFormError("");
+    setErrors((prev) => ({ ...prev, phone: "" }));
+
     try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
+      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || "http://localhost:5000/api").replace(/\/+$/, "");
       const res = await fetch(`${baseUrl}/auth/send-mobile-login-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
-          phone: values.phone,
+          phone: values.phone.trim(),
           country: values.country,
           role: role ? role.toUpperCase() : undefined,
         }),
@@ -228,14 +169,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       } else {
         setMobileOtpSent(true);
         setMobileCooldown(data.cooldownSeconds || 60);
-        if (data.devOtp) {
-          setMobileDevOtp(data.devOtp);
-          showToast(`Verification code sent! (Code: ${data.devOtp})`);
-        } else {
-          showToast("Verification code dispatched to your mobile number.");
-        }
-        setIsOtpModalOpen(true);
-        setOtpModalError("");
+        showToast("Verification code dispatched to your mobile number.");
       }
     } catch {
       setFormError("Unable to contact authentication server. Please check your connection.");
@@ -244,45 +178,8 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     }
   };
 
-  /** Verifies submitted OTP inside the popup modal and signs the user in */
-  const handleVerifyModalOtp = async (code) => {
-    setVerifyingOtp(true);
-    setOtpModalError("");
-    try {
-      if (loginMethod === "email") {
-        const cleanEmail = normalizeEmail(values.email);
-        const result = await login(cleanEmail, null, role, { otp: code });
-        if (!result.ok) {
-          setOtpModalError(result.error || "Invalid verification code.");
-          return;
-        }
-        setIsOtpModalOpen(false);
-        handlePostAuthNavigation(result.user);
-      } else {
-        const result = await loginMobile({
-          phone: values.phone,
-          country: values.country,
-          otp: code,
-          role,
-        });
-        if (!result.ok) {
-          setOtpModalError(result.error || "Invalid verification code.");
-          return;
-        }
-        setIsOtpModalOpen(false);
-        handlePostAuthNavigation(result.user);
-      }
-    } catch {
-      setOtpModalError("Unable to verify OTP. Please try again.");
-    } finally {
-      setVerifyingOtp(false);
-    }
-  };
-
   const handlePostAuthNavigation = (authUser) => {
-    showToast(
-      `Signed in as ${authUser.name} (${ROLE_NAMES[authUser.role] || authUser.role}).`
-    );
+    showToast(`Welcome back, ${authUser.name}! Signed in successfully.`);
     const from = location.state?.from;
     const isLoginPath = from && (from.includes("/login") || from.includes("/sign-in"));
     const allowed =
@@ -294,17 +191,20 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
         ? from.startsWith("/super-admin") || from.startsWith("/admin") || from === "/messages"
         : !from.startsWith("/admin") && !from.startsWith("/super-admin"));
 
+    const targetHome = ROLE_HOME[authUser.role] || (authUser.role === "supplier" ? "/supplier" : "/buyer");
     startTransition(() => {
-      navigate(allowed ? from : (ROLE_HOME[authUser.role] || "/"), { replace: true });
+      navigate(allowed ? from : targetHome, { replace: true });
     });
   };
 
-  const submit = async (event) => {
+  /** Handles form submission for Email+Password, Mobile OTP, or Admin */
+  const handleSubmit = async (event) => {
     event.preventDefault();
     if (busy) return;
+    setFormError("");
 
+    // 1. Super Admin / Admin Flow
     if (isAdmin) {
-      // Super Admin form validation
       const found = validate(adminSchema, values);
       setErrors(found);
       if (hasErrors(found)) {
@@ -315,64 +215,98 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       const result = await loginAdmin(normalizeEmail(values.email), values.password);
       setBusy(false);
       if (!result.ok) {
-        setValues((previous) => ({ ...previous, password: "" }));
-        setFormError(result.error);
+        setValues((prev) => ({ ...prev, password: "" }));
+        setFormError(result.error || "Invalid admin credentials.");
         return;
       }
       handlePostAuthNavigation(result.user);
       return;
     }
 
-    // Public Buyer/Supplier login flows
-    if (loginMethod === "email") {
-      const fieldErrors = {};
-      const cleanEmail = normalizeEmail(values.email);
-      if (!cleanEmail) {
-        fieldErrors.email = "Email is required.";
-      } else if (!/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(cleanEmail)) {
-        fieldErrors.email = "Enter a valid email address.";
-      }
-
-      if (fieldErrors.email) {
-        setErrors(fieldErrors);
-        return;
-      }
-
-      // If OTP hasn't been sent yet, trigger send OTP which opens the modal popup
-      if (!emailOtpSent) {
-        handleSendEmailOtp();
-      } else {
-        setIsOtpModalOpen(true);
-        setOtpModalError("");
-      }
-    } else {
-      // Mobile login flow
+    // 2. Public Member Mobile OTP Flow
+    if (loginMethod === "mobile") {
       const fieldErrors = {};
       const parsed = parseMobile(values.phone, values.country);
-      if (!values.phone) {
+      if (!values.phone.trim()) {
         fieldErrors.phone = "Mobile number is required.";
       } else if (!parsed.ok) {
         fieldErrors.phone = `Enter a valid ${values.country} mobile number.`;
       }
 
-      if (fieldErrors.phone) {
+      if (!mobileOtpSent) {
+        if (fieldErrors.phone) {
+          setErrors(fieldErrors);
+          return;
+        }
+        await handleSendMobileOtp();
+        return;
+      }
+
+      if (!values.mobileOtp.trim()) {
+        fieldErrors.mobileOtp = "Please enter the 6-digit verification code.";
+      } else if (values.mobileOtp.trim().length < 4) {
+        fieldErrors.mobileOtp = "Verification code is incomplete.";
+      }
+
+      if (Object.keys(fieldErrors).length > 0) {
         setErrors(fieldErrors);
         return;
       }
 
-      // If OTP hasn't been sent yet, trigger send OTP which opens the modal popup
-      if (!mobileOtpSent) {
-        handleSendMobileOtp();
-      } else {
-        setIsOtpModalOpen(true);
-        setOtpModalError("");
+      setBusy(true);
+      const result = await loginMobile({
+        phone: values.phone.trim(),
+        country: values.country,
+        otp: values.mobileOtp.trim(),
+        role,
+      });
+      setBusy(false);
+
+      if (!result.ok) {
+        setFormError(result.error || "Mobile sign-in failed. Please verify your OTP code.");
+        return;
       }
+
+      handlePostAuthNavigation(result.user);
+      return;
     }
+
+    // 3. Public Member Email + Password Flow (Real B2B Standard)
+    const fieldErrors = {};
+    const cleanEmail = normalizeEmail(values.email);
+    if (!cleanEmail) {
+      fieldErrors.email = "Business email address is required.";
+    } else if (!emailRegex.test(cleanEmail)) {
+      fieldErrors.email = "Please enter a valid business email address (e.g. name@company.com).";
+    }
+
+    if (!values.password) {
+      fieldErrors.password = "Password is required.";
+    } else if (values.password.length < 8) {
+      fieldErrors.password = "Password must be at least 8 characters.";
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setErrors(fieldErrors);
+      return;
+    }
+
+    setBusy(true);
+    const result = await login(cleanEmail, values.password, role);
+    setBusy(false);
+
+    if (!result.ok) {
+      setValues((prev) => ({ ...prev, password: "" }));
+      setFormError(result.error || "The email or password you entered is incorrect.");
+      return;
+    }
+
+    handlePostAuthNavigation(result.user);
   };
 
   return (
     <form
-      onSubmit={submit}
+      onSubmit={handleSubmit}
       noValidate
       autoComplete="off"
       className="space-y-4"
@@ -381,41 +315,31 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       {isAdmin && !isAdminConfigured ? (
         <p
           role="status"
-          className="rounded-lg bg-warning-50 px-4 py-3 text-sm text-warning"
+          className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm font-medium text-amber-800"
         >
           Admin sign-in is not configured for this site yet.
         </p>
       ) : null}
 
-      {/* Login Method Switcher (Styled like the Sign Up / Get Started Buyer and Supplier buttons) */}
+      {/* Login Method Switcher for Public Members */}
       {!isAdmin ? (
         <div className="mb-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 border border-slate-200">
             <button
               type="button"
               onClick={() => {
                 setLoginMethod("email");
                 setFormError("");
+                setErrors({});
               }}
-              className={`flex items-center gap-3 rounded-xl border-2 p-3.5 text-left transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                 loginMethod === "email"
-                  ? "border-brand-500 bg-brand-50"
-                  : "border-navy-200 bg-white hover:border-navy-300"
+                  ? "bg-white text-emerald-950 shadow-xs border border-slate-200/80"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <span
-                className={`inline-flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                  loginMethod === "email"
-                    ? "bg-brand-500 text-navy-900"
-                    : "bg-navy-50 text-navy-800"
-                }`}
-              >
-                <Mail className="size-5" aria-hidden="true" />
-              </span>
-              <span>
-                <span className="block text-sm font-bold text-navy-900">Sign in with Email</span>
-                <span className="block text-xs text-muted">Instant email OTP</span>
-              </span>
+              <Mail className="h-4 w-4" />
+              <span>Email & Password</span>
             </button>
 
             <button
@@ -423,60 +347,73 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
               onClick={() => {
                 setLoginMethod("mobile");
                 setFormError("");
+                setErrors({});
               }}
-              className={`flex items-center gap-3 rounded-xl border-2 p-3.5 text-left transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                 loginMethod === "mobile"
-                  ? "border-brand-500 bg-brand-50"
-                  : "border-navy-200 bg-white hover:border-navy-300"
+                  ? "bg-white text-emerald-950 shadow-xs border border-slate-200/80"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <span
-                className={`inline-flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                  loginMethod === "mobile"
-                    ? "bg-brand-500 text-navy-900"
-                    : "bg-navy-50 text-navy-800"
-                }`}
-              >
-                <Smartphone className="size-5" aria-hidden="true" />
-              </span>
-              <span>
-                <span className="block text-sm font-bold text-navy-900">Sign in with Mobile</span>
-                <span className="block text-xs text-muted">Instant mobile OTP</span>
-              </span>
+              <Smartphone className="h-4 w-4" />
+              <span>Mobile OTP</span>
             </button>
           </div>
         </div>
       ) : null}
 
+      {/* Global Form Error Message */}
       {formError ? (
-        <p
+        <div
           role="alert"
-          className="rounded-lg bg-danger-50 px-4 py-3 text-sm font-medium text-red-700"
+          className="rounded-xl bg-red-50 border border-red-200 p-3.5 text-xs text-red-800 flex items-start gap-2.5 animate-in fade-in duration-200"
         >
-          {formError}
-        </p>
+          <CircleAlert className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold">{formError}</p>
+            {formError.toLowerCase().includes("no account found") && (
+              <p className="text-[11px] text-red-700">
+                Don't have an account yet?{" "}
+                <Link
+                  to={role === "supplier" ? "/supplier/register" : "/buyer/register"}
+                  className="font-bold underline text-red-900 hover:text-red-950"
+                >
+                  Create your {role === "supplier" ? "Supplier" : "Buyer"} account now
+                </Link>
+              </p>
+            )}
+          </div>
+        </div>
       ) : null}
 
       {/* ADMIN SIGN-IN FIELDS */}
       {isAdmin ? (
         <>
           <div>
-            <label htmlFor={`${prefix}email`} className="ts-label">
-              Admin Email <span className="text-danger">*</span>
+            <label htmlFor={`${prefix}email`} className="block text-xs font-semibold text-slate-800 mb-1.5">
+              Admin Email <span className="text-red-500">*</span>
             </label>
-            <input
-              id={`${prefix}email`}
-              type="email"
-              required
-              autoComplete="off"
-              value={values.email}
-              onChange={set("email")}
-              className="ts-input"
-              aria-invalid={errors.email ? "true" : undefined}
-            />
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                id={`${prefix}email`}
+                type="email"
+                required
+                autoComplete="off"
+                placeholder="admin@tradeexpress.com"
+                value={values.email}
+                onChange={handleChange("email")}
+                className={`w-full rounded-xl border bg-white pl-10 pr-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
+                  errors.email
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-500/20"
+                }`}
+                aria-invalid={errors.email ? "true" : undefined}
+              />
+            </div>
             {errors.email ? (
-              <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
+                <CircleAlert className="h-3.5 w-3.5 shrink-0" />
                 {errors.email}
               </p>
             ) : null}
@@ -484,37 +421,39 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor={`${prefix}password`} className="ts-label !mb-0">
-                Password <span className="text-danger">*</span>
+              <label htmlFor={`${prefix}password`} className="block text-xs font-semibold text-slate-800">
+                Password <span className="text-red-500">*</span>
               </label>
             </div>
             <div className="relative">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 id={`${prefix}password`}
                 type={showPassword ? "text" : "password"}
                 required
                 autoComplete="new-password"
+                placeholder="••••••••"
                 value={values.password}
-                onChange={set("password")}
-                className="ts-input pr-10"
+                onChange={handleChange("password")}
+                className={`w-full rounded-xl border bg-white pl-10 pr-10 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
+                  errors.password
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-500/20"
+                }`}
                 aria-invalid={errors.password ? "true" : undefined}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-navy-400 hover:text-navy-800"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
-                {showPassword ? (
-                  <EyeOff className="size-4" aria-hidden="true" />
-                ) : (
-                  <Eye className="size-4" aria-hidden="true" />
-                )}
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
             {errors.password ? (
-              <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
+                <CircleAlert className="h-3.5 w-3.5 shrink-0" />
                 {errors.password}
               </p>
             ) : null}
@@ -522,88 +461,111 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
         </>
       ) : null}
 
-      {/* PUBLIC EMAIL LOGIN FLOW */}
+      {/* PUBLIC MEMBER EMAIL + PASSWORD LOGIN (STANDARD B2B AUTHENTICATION) */}
       {!isAdmin && loginMethod === "email" ? (
         <>
-          {/* Email + Send OTP Action */}
+          {/* Work Email Address */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor={`${prefix}email`} className="ts-label !mb-0">
-                Email Address <span className="text-danger">*</span>
-              </label>
-              {emailOtpSent ? (
-                <button
-                  type="button"
-                  onClick={() => setIsOtpModalOpen(true)}
-                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer transition-colors"
-                  title="Click to open verification popup"
-                >
-                  <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden="true" />
-                  Code sent · <span className="underline">Enter OTP</span>
-                </button>
-              ) : null}
-            </div>
-            <div className="flex gap-2">
+            <label htmlFor={`${prefix}email`} className="block text-xs font-semibold text-slate-800 mb-1.5">
+              Business / Work Email <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 id={`${prefix}email`}
                 type="email"
                 required
-                autoComplete="off"
-                name={`ts_auth_email_${role || 'user'}`}
-                data-lpignore="true"
-                data-form-type="other"
+                autoComplete="email"
+                name="email"
+                placeholder="e.g. name@company.com"
                 value={values.email}
-                onChange={set("email")}
-                className="ts-input flex-1"
+                onChange={handleChange("email")}
+                className={`w-full rounded-xl border bg-white pl-10 pr-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
+                  errors.email
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-500/20"
+                }`}
                 aria-invalid={errors.email ? "true" : undefined}
               />
-              <button
-                type="button"
-                onClick={handleSendEmailOtp}
-                disabled={sendingEmailOtp || emailCooldown > 0}
-                className="shrink-0 px-3.5 sm:px-4 py-2 rounded-lg bg-navy-900 text-white text-xs sm:text-sm font-semibold hover:bg-navy-800 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-              >
-                {sendingEmailOtp ? (
-                  <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
-                ) : null}
-                {emailCooldown > 0
-                  ? `Resend in ${emailCooldown}s`
-                  : emailOtpSent
-                  ? "Resend OTP"
-                  : "Send OTP"}
-              </button>
             </div>
             {errors.email ? (
-              <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
+                <CircleAlert className="h-3.5 w-3.5 shrink-0" />
                 {errors.email}
               </p>
             ) : null}
           </div>
+
+          {/* Password */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor={`${prefix}password`} className="block text-xs font-semibold text-slate-800">
+                Password <span className="text-red-500">*</span>
+              </label>
+              <Link
+                to="/forgot-password"
+                className="text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                id={`${prefix}password`}
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete="current-password"
+                name="password"
+                placeholder="••••••••"
+                value={values.password}
+                onChange={handleChange("password")}
+                className={`w-full rounded-xl border bg-white pl-10 pr-10 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
+                  errors.password
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-500/20"
+                }`}
+                aria-invalid={errors.password ? "true" : undefined}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            {errors.password ? (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
+                <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                {errors.password}
+              </p>
+            ) : null}
+          </div>
+
+          {/* Remember Me */}
+          <div className="flex items-center justify-between text-xs pt-1">
+            <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+              <input
+                type="checkbox"
+                checked={values.rememberMe}
+                onChange={handleChange("rememberMe")}
+                className="rounded border-slate-300 text-emerald-700 focus:ring-emerald-500 h-4 w-4"
+              />
+              <span>Remember this device</span>
+            </label>
+          </div>
         </>
       ) : null}
 
-      {/* PUBLIC MOBILE LOGIN FLOW */}
+      {/* PUBLIC MEMBER MOBILE OTP FLOW (INLINE, CLEAN, NO POPUPS) */}
       {!isAdmin && loginMethod === "mobile" ? (
         <>
-          {/* Mobile Number + Country selector + Send OTP */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor={`${prefix}mobile`} className="ts-label !mb-0">
-                Mobile Number <span className="text-danger">*</span>
-              </label>
-              {mobileOtpSent ? (
-                <button
-                  type="button"
-                  onClick={() => setIsOtpModalOpen(true)}
-                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer transition-colors"
-                  title="Click to open verification popup"
-                >
-                  <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden="true" />
-                  Code sent · <span className="underline">Enter OTP</span>
-                </button>
-              ) : null}
-            </div>
+            <label htmlFor={`${prefix}mobile`} className="block text-xs font-semibold text-slate-800 mb-1.5">
+              Registered Mobile Number <span className="text-red-500">*</span>
+            </label>
             <div className="flex items-center gap-2">
               {/* Compact Country Code Dropdown Trigger */}
               <div className="relative shrink-0" ref={countryDropdownRef}>
@@ -614,43 +576,43 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
                   aria-haspopup="listbox"
                   aria-expanded={countryDropdownOpen}
                   title={`${values.country} (+${COUNTRY_PHONE_RULES[values.country]?.dial || '91'})`}
-                  className="h-10 sm:h-11 w-[84px] sm:w-[90px] rounded-lg border border-navy-900/15 bg-white px-2 py-1 text-xs sm:text-sm font-semibold text-navy-900 shadow-xs hover:border-navy-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30 flex items-center justify-between gap-1 transition-all"
+                  className="h-10 w-[88px] sm:w-[94px] rounded-xl border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-900 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 flex items-center justify-between gap-1 transition-all"
                 >
                   <span className="flex items-center gap-1 truncate">
-                    <span className="text-base shrink-0">
+                    <span className="text-sm shrink-0">
                       {COUNTRY_FLAGS[values.country] || "🌐"}
                     </span>
-                    <span className="font-bold text-navy-900">
+                    <span className="font-bold text-slate-900">
                       +{COUNTRY_PHONE_RULES[values.country]?.dial || "91"}
                     </span>
                   </span>
                   <ChevronDown
-                    className={`size-3 text-navy-500 transition-transform ${
+                    className={`h-3 w-3 text-slate-500 transition-transform ${
                       countryDropdownOpen ? "rotate-180" : ""
                     }`}
                   />
                 </button>
 
-                {/* Sleek Custom Dropdown Menu Anchored Below */}
+                {/* Country Dropdown Menu */}
                 {countryDropdownOpen ? (
                   <div
                     role="listbox"
-                    className="absolute left-0 top-full mt-1.5 z-50 w-72 max-h-64 overflow-hidden rounded-xl border border-navy-900/10 bg-white shadow-2xl ring-1 ring-black/5 flex flex-col animate-in fade-in slide-in-from-top-1 duration-150"
+                    className="absolute left-0 top-full mt-1.5 z-50 w-72 max-h-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 flex flex-col animate-in fade-in slide-in-from-top-1 duration-150"
                   >
-                    <div className="p-2 border-b border-navy-100 bg-surface/50">
+                    <div className="p-2 border-b border-slate-100 bg-slate-50">
                       <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-navy-400" />
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                         <input
                           type="text"
                           value={countrySearch}
                           onChange={(e) => setCountrySearch(e.target.value)}
                           placeholder="Search country or code..."
-                          className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-lg border border-navy-200 bg-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                          className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                           autoFocus
                         />
                       </div>
                     </div>
-                    <div className="overflow-y-auto max-h-48 p-1 divide-y divide-navy-50">
+                    <div className="overflow-y-auto max-h-48 p-1 divide-y divide-slate-50">
                       {COUNTRIES.filter((c) => {
                         const q = countrySearch.trim().toLowerCase();
                         if (!q) return true;
@@ -671,17 +633,17 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
                               setCountryDropdownOpen(false);
                               setCountrySearch("");
                             }}
-                            className={`w-full px-2.5 py-2 text-left text-xs sm:text-sm flex items-center justify-between rounded-lg transition-colors ${
+                            className={`w-full px-2.5 py-2 text-left text-xs flex items-center justify-between rounded-lg transition-colors ${
                               isSelected
-                                ? "bg-brand-50 text-navy-950 font-bold"
-                                : "text-navy-800 hover:bg-navy-50"
+                                ? "bg-emerald-50 text-emerald-950 font-bold"
+                                : "text-slate-800 hover:bg-slate-50"
                             }`}
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-base shrink-0">{flag}</span>
                               <span className="truncate">{c}</span>
                             </div>
-                            <span className="font-mono text-xs font-bold text-navy-600 shrink-0 ml-2">
+                            <span className="font-mono text-xs font-bold text-slate-600 shrink-0 ml-2">
                               +{rule?.dial}
                             </span>
                           </button>
@@ -692,109 +654,142 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
                 ) : null}
               </div>
 
-              {/* Spacious Mobile Number Input */}
+              {/* Mobile Number Input */}
               <input
                 id={`${prefix}mobile`}
                 type="tel"
                 required
-                autoComplete="off"
-                name={`ts_auth_phone_${role || 'user'}`}
-                data-lpignore="true"
-                data-form-type="other"
+                autoComplete="tel"
+                placeholder="e.g. 9876543210"
                 value={values.phone}
-                onChange={set("phone")}
-                className="ts-input flex-1 min-w-0"
+                onChange={handleChange("phone")}
+                className={`flex-1 min-w-0 rounded-xl border bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
+                  errors.phone
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-500/20"
+                }`}
                 aria-invalid={errors.phone ? "true" : undefined}
               />
 
-              {/* Send OTP button */}
+              {/* Send / Resend OTP Action */}
               <button
                 type="button"
                 onClick={handleSendMobileOtp}
                 disabled={sendingMobileOtp || mobileCooldown > 0}
-                className="shrink-0 px-3.5 sm:px-4 py-2 rounded-lg bg-navy-900 text-white text-xs sm:text-sm font-semibold hover:bg-navy-800 disabled:opacity-50 transition-all flex items-center gap-1.5"
+                className="shrink-0 px-3 sm:px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 {sendingMobileOtp ? (
-                  <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                 ) : null}
                 {mobileCooldown > 0
-                  ? `Resend in ${mobileCooldown}s`
+                  ? `Resend (${mobileCooldown}s)`
                   : mobileOtpSent
-                  ? "Resend OTP"
+                  ? "Resend"
                   : "Send OTP"}
               </button>
             </div>
             {errors.phone ? (
-              <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] font-medium text-danger">
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
+                <CircleAlert className="h-3.5 w-3.5 shrink-0" />
                 {errors.phone}
               </p>
             ) : null}
           </div>
 
+          {/* Inline OTP Input when sent */}
+          {mobileOtpSent ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-2 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  SMS Code Dispatched
+                </span>
+                <span className="text-slate-500 text-[11px]">Valid for 10 mins</span>
+              </div>
+
+              <div>
+                <label htmlFor={`${prefix}otp`} className="block text-xs font-semibold text-slate-700 mb-1">
+                  Enter 6-Digit Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id={`${prefix}otp`}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  placeholder="• • • • • •"
+                  value={values.mobileOtp}
+                  onChange={handleChange("mobileOtp")}
+                  className={`w-full text-center tracking-[0.4em] font-mono font-bold text-lg rounded-xl border bg-white py-2 px-3 text-slate-900 transition focus:outline-none focus:ring-2 ${
+                    errors.mobileOtp
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                      : "border-slate-300 focus:border-emerald-600 focus:ring-emerald-500/20"
+                  }`}
+                  aria-invalid={errors.mobileOtp ? "true" : undefined}
+                />
+                {errors.mobileOtp ? (
+                  <p className="mt-1.5 flex items-center justify-center gap-1.5 text-xs font-medium text-red-600">
+                    <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                    {errors.mobileOtp}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </>
       ) : null}
 
-      <div className="pt-3 sm:pt-4">
+      {/* Submit Button */}
+      <div className="pt-2">
         <Button
           type="submit"
           full
           size="lg"
           icon={isAdmin ? ShieldCheck : LogIn}
-          loading={busy || sendingEmailOtp || sendingMobileOtp}
-          className={
-            isAdmin && adminType === "super_admin"
-              ? "!bg-emerald-950 !text-emerald-300 hover:!bg-emerald-900 border border-emerald-500/40"
-              : ""
-          }
+          loading={busy || sendingMobileOtp}
+          className="!bg-emerald-700 hover:!bg-emerald-800 !text-white font-bold py-3 rounded-xl shadow-md transition"
         >
-          {busy || sendingEmailOtp || sendingMobileOtp
-            ? "Please wait…"
+          {busy
+            ? "Verifying credentials..."
             : isAdmin
             ? adminType === "super_admin"
               ? "Sign in as Super Admin"
               : "Sign in as Admin"
-            : !isAdmin && loginMethod === "email" && emailOtpSent
-            ? "Enter Verification Code"
+            : !isAdmin && loginMethod === "mobile" && !mobileOtpSent
+            ? "Send Mobile OTP"
             : !isAdmin && loginMethod === "mobile" && mobileOtpSent
-            ? "Enter Verification Code"
+            ? "Verify & Sign In"
             : role
-            ? `Sign in with OTP (${ROLE_NAMES[role] || role})`
-            : "Continue with OTP"}
+            ? `Sign in as ${ROLE_NAMES[role] || role}`
+            : "Sign In"}
         </Button>
       </div>
 
+      {/* Account Registration Link */}
       {!isAdmin ? (
-        <p className="text-center text-sm text-muted">
-          New to TradeExpress?{" "}
-          <Link
-            to="/register"
-            className="font-semibold text-brand-600 hover:text-brand-700"
-          >
-            Join free as a Buyer or Supplier
-          </Link>
-        </p>
+        <div className="pt-3 border-t border-slate-100 text-center space-y-2">
+          <p className="text-xs text-slate-600">
+            Don't have an account yet?
+          </p>
+          <div className="flex items-center justify-center gap-3 text-xs">
+            <Link
+              to="/buyer/register"
+              className="inline-flex items-center gap-1 font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
+            >
+              <span>Join as Buyer</span>
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+            <span className="text-slate-300">|</span>
+            <Link
+              to="/supplier/register"
+              className="inline-flex items-center gap-1 font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
+            >
+              <span>Join as Supplier</span>
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        </div>
       ) : null}
-
-      {/* Universal OTP Verification Popup Modal */}
-      <OtpModal
-        open={isOtpModalOpen}
-        onClose={() => setIsOtpModalOpen(false)}
-        type={loginMethod === "email" ? "email" : "phone"}
-        destination={
-          loginMethod === "email"
-            ? values.email
-            : `${COUNTRY_PHONE_RULES[values.country]?.dial ? '+' + COUNTRY_PHONE_RULES[values.country].dial + ' ' : ''}${values.phone}`
-        }
-        devOtp={loginMethod === "email" ? emailDevOtp : mobileDevOtp}
-        cooldown={loginMethod === "email" ? emailCooldown : mobileCooldown}
-        onResend={loginMethod === "email" ? handleSendEmailOtp : handleSendMobileOtp}
-        resending={loginMethod === "email" ? sendingEmailOtp : sendingMobileOtp}
-        onVerify={handleVerifyModalOtp}
-        verifying={verifyingOtp}
-        error={otpModalError}
-        submitLabel="Verify & Sign In"
-      />
     </form>
   );
 }

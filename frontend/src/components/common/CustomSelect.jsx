@@ -24,6 +24,7 @@ export default function CustomSelect({
   placeholder = 'Select an option',
   searchable = true,
   disabled = false,
+  compact = false,
   className = '',
   panelClassName = '',
 }) {
@@ -47,8 +48,12 @@ export default function CustomSelect({
     return { value: opt, label: String(opt) };
   });
 
+  const safeVal = typeof value === 'object' && value !== null
+    ? (value.value ?? value.target?.value ?? '')
+    : (value ?? '');
+
   const selectedOption = normalizedOptions.find(
-    (opt) => String(opt.value) === String(value)
+    (opt) => String(opt.value) === String(safeVal)
   );
 
   const filteredOptions = normalizedOptions.filter((opt) =>
@@ -112,7 +117,9 @@ export default function CustomSelect({
         aria-expanded={open}
         aria-controls={selectId}
         onClick={() => !disabled && setOpen((prev) => !prev)}
-        className={`group flex w-full items-center justify-between rounded-xl border bg-white px-3.5 py-2.5 text-left text-xs sm:text-sm font-semibold transition-all shadow-2xs ${
+        className={`group flex w-full items-center justify-between rounded-xl border bg-white text-left font-semibold transition-all shadow-2xs ${
+          compact ? 'px-2.5 py-2 text-xs' : 'px-3.5 py-2.5 text-xs sm:text-sm'
+        } ${
           open
             ? 'border-emerald-600 ring-4 ring-emerald-500/10'
             : 'border-slate-200/90 hover:border-slate-300'
@@ -122,14 +129,23 @@ export default function CustomSelect({
           {selectedOption ? selectedOption.label : placeholder}
         </span>
 
-        <span className="ml-2 flex size-5 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-slate-700 transition-all">
+        {compact ? (
           <ChevronDown
-            className={`size-3.5 transition-transform duration-200 ${
-              open ? 'rotate-180 text-emerald-700' : ''
+            className={`size-3 shrink-0 ml-1 transition-transform duration-200 ${
+              open ? 'rotate-180 text-emerald-700' : 'text-slate-400'
             }`}
             aria-hidden="true"
           />
-        </span>
+        ) : (
+          <span className="ml-2 flex size-5 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-slate-700 transition-all">
+            <ChevronDown
+              className={`size-3.5 transition-transform duration-200 ${
+                open ? 'rotate-180 text-emerald-700' : ''
+              }`}
+              aria-hidden="true"
+            />
+          </span>
+        )}
       </button>
 
       {/* Popover Custom Dropdown Panel */}

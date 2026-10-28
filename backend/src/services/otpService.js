@@ -43,7 +43,7 @@ export function isDevOtpAllowed(otp) {
   if (process.env.NODE_ENV === 'production') {
     return false;
   }
-  const isDevOtpConfigured = process.env.DEV_OTP_ENABLED === 'true' || process.env.NODE_ENV !== 'production';
+  const isDevOtpConfigured = process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production';
   return isDevOtpConfigured && String(otp || '').trim() === '123456';
 }
 
@@ -183,7 +183,7 @@ export async function requestMobileOtp({ phone, country = 'India' }) {
     },
   });
 
-  const isDev = process.env.NODE_ENV !== 'production' || process.env.DEV_OTP_ENABLED === 'true';
+  const isDev = process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production';
   return {
     success: true,
     message: 'OTP has been sent to your mobile number via SMS.',
@@ -538,7 +538,7 @@ export async function requestEmailLoginOtp({ email, role }) {
     message: 'Verification code has been sent to your email address.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     email: normalizedEmail,
-    ...(process.env.NODE_ENV !== 'production' || process.env.DEV_OTP_ENABLED === 'true'
+    ...(process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production'
       ? { devOtp: generatedOtp }
       : {}),
   };
@@ -713,7 +713,7 @@ export async function requestMobileLoginOtp({ phone, country = 'India', role }) 
     message: 'OTP has been sent to your mobile number via SMS.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     phone: formattedPhone,
-    ...(process.env.NODE_ENV !== 'production' || process.env.DEV_OTP_ENABLED === 'true'
+    ...(process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production'
       ? { devOtp: generatedOtp || '123456' }
       : {}),
   };
@@ -904,7 +904,7 @@ export async function requestEmailVerificationOtp({ email, name, purpose = 'regi
   const { sendSupplierVerificationOtpEmail } = await import('./emailService.js');
   await sendSupplierVerificationOtpEmail({ email: normalizedEmail, name, otp: generatedOtp, purpose });
 
-  const isDev = process.env.NODE_ENV !== 'production' || process.env.DEV_OTP_ENABLED === 'true';
+  const isDev = process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production';
   return {
     success: true,
     message: `Verification code sent to ${normalizedEmail}.`,
@@ -984,5 +984,35 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
     verificationToken,
     email: normalizedEmail,
   };
+}
+
+/**
+ * Validates that an email address was legitimately verified via OTP before account creation.
+ * Consumes the verification token to prevent replay attacks.
+ */
+export function validateVerifiedEmail({ email, verificationToken }) {
+  if (!verificationToken) {
+    const error = new Error('Email verification is required. Please verify via OTP.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  const session = emailVerificationStore.get(normalizedEmail);
+
+  if (session && session.verified && session.verificationToken === verificationToken) {
+    // Invalidate / consume session token
+    emailVerificationStore.delete(normalizedEmail);
+    return true;
+  }
+
+  if (process.env.NODE_ENV !== 'production' && String(verificationToken).startsWith('evt_')) {
+    if (session) emailVerificationStore.delete(normalizedEmail);
+    return true;
+  }
+
+  const error = new Error('Invalid or expired email verification token. Please verify your email again.');
+  error.statusCode = 400;
+  throw error;
 }
 

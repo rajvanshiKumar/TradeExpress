@@ -199,7 +199,7 @@ export function AuthProvider({ children }) {
 
     // Try backend sign-in with email, password, role, and email OTP
     let backendUser = null;
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || 'http://localhost:5000/api').replace(/\/+$/, '');
     if (baseUrl) {
       try {
         const response = await fetch(`${baseUrl}/auth/login`, {
@@ -286,7 +286,7 @@ export function AuthProvider({ children }) {
     if (!cleanOtp) return { ok: false, error: 'Please enter the verification OTP.' };
 
     let backendUser = null;
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || 'http://localhost:5000/api').replace(/\/+$/, '');
     if (baseUrl) {
       try {
         const response = await fetch(`${baseUrl}/auth/login-mobile`, {
@@ -357,7 +357,7 @@ export function AuthProvider({ children }) {
     
     // Register directly on backend MySQL database first
     let backendUser = null;
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || 'http://localhost:5000/api').replace(/\/+$/, '');
     if (baseUrl) {
       try {
         const response = await fetch(`${baseUrl}/auth/register`, {
@@ -409,6 +409,36 @@ export function AuthProvider({ children }) {
     setSession(newSession(account.id, account.role));
     return { ok: true, user: account };
   }, [accounts, setAccounts, setSession]);
+
+  /** Directly sets session and local account state from successful backend auth */
+  const setAuthUser = useCallback(async (backendUser, token, rawPassword = '') => {
+    if (!backendUser?.id) return null;
+    if (token) {
+      localStorage.setItem('tradeexpress_auth_token', token);
+      localStorage.setItem('tradesphere_auth_token', token);
+    }
+    const cleanRole = (backendUser.role || 'buyer').toLowerCase();
+    const activeAccount = {
+      id: backendUser.id,
+      status: backendUser.status === 'SUSPENDED' ? 'Suspended' : 'Active',
+      name: backendUser.name || 'User',
+      email: backendUser.email?.toLowerCase(),
+      role: cleanRole,
+      company: backendUser.company || backendUser.companyName || '',
+      companyId: backendUser.companyId || null,
+      country: backendUser.country || 'India',
+      city: backendUser.city || '',
+      phone: backendUser.phone || '',
+      joinedAt: backendUser.createdAt || new Date().toISOString(),
+      notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
+      passwordHash: rawPassword ? await hashPassword(rawPassword) : '',
+    };
+    setAccounts((prev) => [activeAccount, ...prev.filter((a) => a.id !== activeAccount.id && a.email?.toLowerCase() !== activeAccount.email)]);
+    startTransition(() => {
+      setSession(newSession(activeAccount.id, activeAccount.role));
+    });
+    return activeAccount;
+  }, [setAccounts, setSession]);
 
   /** Signs out and clears session-related data (the Buy Now selection). The cart is kept. */
   const logout = useCallback(() => {
@@ -462,9 +492,9 @@ export function AuthProvider({ children }) {
   }, [user, setAddressBook]);
 
   const value = useMemo(() => ({
-    user, accounts: publicAccounts, isAuthenticated: Boolean(user), login, loginMobile, loginAdmin, register, logout, updateProfile, updateAccount,
+    user, accounts: publicAccounts, isAuthenticated: Boolean(user), login, loginMobile, loginAdmin, register, setAuthUser, logout, updateProfile, updateAccount,
     preferences, setPreferences, addresses, saveAddress, deleteAddress, isAdminConfigured,
-  }), [user, publicAccounts, login, loginMobile, loginAdmin, register, logout, updateProfile, updateAccount, preferences, setPreferences, addresses, saveAddress, deleteAddress]);
+  }), [user, publicAccounts, login, loginMobile, loginAdmin, register, setAuthUser, logout, updateProfile, updateAccount, preferences, setPreferences, addresses, saveAddress, deleteAddress]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import AuthShell from './AuthShell';
-import RegisterForm from '../components/forms/RegisterForm';
+import BuyerRegisterForm from '../components/forms/BuyerRegisterForm';
 import SupplierRegisterForm from '../components/forms/SupplierRegisterForm';
 import useAuth from '../hooks/useAuth';
 import useDocumentTitle from '../hooks/useDocumentTitle';
@@ -15,7 +15,11 @@ export default function Register({ defaultRole }) {
     defaultRole || (searchParams.get('role') === 'supplier' ? 'supplier' : 'buyer')
   );
 
-  useDocumentTitle(role === 'supplier' ? 'Supplier Registration — TradeExpress' : 'Join Free — TradeExpress');
+  useDocumentTitle(
+    role === 'supplier'
+      ? 'Supplier Registration — TradeExpress'
+      : 'Create Your Buyer Account — TradeExpress'
+  );
   if (user) return <Navigate to={ROLE_HOME[user.role]} replace />;
 
   const handleRoleChange = (newRole) => {
@@ -57,17 +61,17 @@ export default function Register({ defaultRole }) {
           </button>
         </div>
       }
-      title={isSupplier ? 'Create Your Supplier Account' : 'Join TradeExpress free'}
+      title={isSupplier ? 'Create Your Supplier Account' : 'Create Your Buyer Account'}
       subtitle={
         isSupplier
           ? 'Join TradeExpress to showcase your business and connect with B2B buyers.'
-          : 'Register as a Buyer to source products and connect with verified suppliers.'
+          : 'Join TradeExpress to discover suppliers, compare products and purchase confidently from businesses worldwide.'
       }
     >
       {isSupplier ? (
         <SupplierRegisterForm />
       ) : (
-        <RegisterForm role={role} onRoleChange={handleRoleChange} />
+        <BuyerRegisterForm onRoleChange={handleRoleChange} />
       )}
     </AuthShell>
   );

@@ -126,11 +126,41 @@ export async function register(req, res, next) {
         data: result,
       });
     }
+
+    // Comprehensive enterprise Buyer registration
+    if (req.body.businessAddress || req.body.buyerType || req.body.state) {
+      const result = await authService.registerBuyer({
+        ...req.body,
+        req,
+      });
+      return res.status(201).json({
+        success: true,
+        message: 'Buyer account created successfully.',
+        data: result,
+      });
+    }
+
     const { user, token } = await authService.registerUser(req.body);
     res.status(201).json({
       success: true,
       message: 'Account registered successfully.',
       data: { user, token },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function registerBuyer(req, res, next) {
+  try {
+    const result = await authService.registerBuyer({
+      ...req.body,
+      req,
+    });
+    res.status(201).json({
+      success: true,
+      message: 'Buyer account created successfully.',
+      data: result,
     });
   } catch (error) {
     next(error);

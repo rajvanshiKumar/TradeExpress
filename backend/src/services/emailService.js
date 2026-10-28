@@ -152,9 +152,16 @@ export async function sendSupplierVerificationOtpEmail({ email, name = 'Supplier
         : ENV.SMTP_FROM;
 
     const isKyc = purpose === 'kyc' || purpose === 'verification';
-    const title = isKyc ? 'Supplier KYC Email Verification' : 'Supplier Registration Email Verification';
+    const isBuyer = purpose === 'buyer_registration' || purpose === 'buyer';
+    const title = isKyc
+      ? 'Supplier KYC Email Verification'
+      : isBuyer
+      ? 'Buyer Account Email Verification'
+      : 'Supplier Registration Email Verification';
     const actionText = isKyc
       ? 'verify your official company email address for your Supplier KYC & Statutory documents review.'
+      : isBuyer
+      ? 'verify your official work email address and complete your TradeExpress buyer registration.'
       : 'verify your official work email address and complete your TradeExpress supplier onboarding.';
 
     const html = `
@@ -167,7 +174,7 @@ export async function sendSupplierVerificationOtpEmail({ email, name = 'Supplier
           <p style="color: #64748b; font-size: 13px; margin: 0;">Official Verification Code</p>
         </div>
 
-        <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-bottom: 14px;">Hello <strong>${name || 'Supplier'}</strong>,</p>
+        <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-bottom: 14px;">Hello <strong>${name || (isBuyer ? 'Buyer Partner' : 'Supplier Partner')}</strong>,</p>
         <p style="font-size: 14px; color: #475569; line-height: 1.6; margin-bottom: 20px;">
           Please use the one-time password (OTP) below to ${actionText}
         </p>
@@ -194,7 +201,9 @@ export async function sendSupplierVerificationOtpEmail({ email, name = 'Supplier
     const mailOptions = {
       from: fromAddress,
       to: email,
-      subject: `Your TradeExpress Supplier Verification Code: ${otp}`,
+      subject: isBuyer
+        ? `Your TradeExpress Buyer Verification Code: ${otp}`
+        : `Your TradeExpress Supplier Verification Code: ${otp}`,
       html,
     };
 

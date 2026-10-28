@@ -9,6 +9,7 @@ import { StatusBadge } from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import SupplierGuard from './SupplierGuard';
 import useOrders from '../../hooks/useOrders';
+import useAuth from '../../hooks/useAuth';
 import useInquiries from '../../hooks/useInquiries';
 import useMessages from '../../hooks/useMessages';
 import useCurrency from '../../hooks/useCurrency';
@@ -19,6 +20,7 @@ import { formatDate } from '../../utils/formatDate';
 import { LOW_STOCK_FACTOR } from '../../utils/constants';
 
 function Overview({ company, products }) {
+  const { user } = useAuth();
   const { orders } = useOrders();
   const { inquiries } = useInquiries();
   const { unreadCount } = useMessages();
@@ -104,6 +106,83 @@ function Overview({ company, products }) {
         <StatCard icon={Package} tone="brand" label="Orders" value={myOrders.length} hint={`${myOrders.filter((order) => order.status === 'Pending').length} awaiting confirmation`} to="/supplier/orders" />
         <StatCard icon={CircleDollarSign} tone="success" label="Order value" value={money(revenue)} hint="Excludes cancelled orders" to="/supplier/analytics" />
         <StatCard icon={FileText} tone="warning" label="Open inquiries" value={openInquiries.length} hint={`${unreadCount} unread ${unreadCount === 1 ? 'message' : 'messages'}`} to="/supplier/inquiries" />
+      </div>
+
+      {/* Account & Statutory Compliance Card */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-4">
+          <div>
+            <h3 className="font-bold text-navy-950 text-sm flex items-center gap-2">
+              <ShieldCheck className="size-4 text-emerald-700" />
+              Account & Statutory Compliance Details
+            </h3>
+            <p className="text-xs text-muted mt-0.5">
+              Verified identity credentials and statutory compliance status.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-mono font-semibold text-slate-700">
+              Code: {company.supplierCode || user?.supplierCode || 'SUP-ACTIVE'}
+            </span>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+              company.isVerified || user?.isVerified
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-amber-100 text-amber-800'
+            }`}>
+              {company.isVerified || user?.isVerified ? 'Verified Merchant' : 'KYC Under Review'}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs">
+          <div>
+            <span className="text-muted block">Legal Entity / Company:</span>
+            <span className="font-semibold text-navy-900">{company.name}</span>
+          </div>
+          <div>
+            <span className="text-muted block">Business Type:</span>
+            <span className="font-semibold text-navy-900">{company.businessType || user?.businessType || 'Manufacturer'}</span>
+          </div>
+          <div>
+            <span className="text-muted block">PAN Card Number:</span>
+            <span className="font-mono font-semibold text-navy-900">
+              {company.pan || user?.pan ? company.pan || user?.pan : '—'}
+            </span>
+          </div>
+          <div>
+            <span className="text-muted block">Aadhaar (Masked):</span>
+            <span className="font-mono font-semibold text-navy-900">
+              {company.aadhaarLast4 || user?.aadhaarLast4
+                ? `•••• •••• ${company.aadhaarLast4 || user?.aadhaarLast4}`
+                : '—'}
+            </span>
+          </div>
+          <div>
+            <span className="text-muted block">PAN–Aadhaar Link:</span>
+            <span className="inline-flex items-center gap-1 mt-0.5">
+              {(company.panAadhaarStatus === 'LINKED' || user?.panAadhaarStatus === 'LINKED') ? (
+                <span className="rounded-full bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 text-[11px]">
+                  ✓ Linked {company.panAadhaarMaskedPan || user?.panAadhaarMaskedPan ? `(${company.panAadhaarMaskedPan || user?.panAadhaarMaskedPan})` : ''}
+                </span>
+              ) : (company.panAadhaarStatus === 'NOT_LINKED' || user?.panAadhaarStatus === 'NOT_LINKED') ? (
+                <span className="rounded-full bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 text-[11px]">
+                  ⚠ Not Linked
+                </span>
+              ) : (company.panAadhaarStatus === 'UNABLE_TO_VERIFY' || user?.panAadhaarStatus === 'UNABLE_TO_VERIFY') ? (
+                <span className="rounded-full bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 text-[11px]">
+                  Unable to Verify
+                </span>
+              ) : (
+                <span className="rounded-full bg-slate-100 text-slate-500 font-medium px-2 py-0.5 text-[11px]">
+                  Not Checked
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+        <p className="mt-3 border-t border-slate-100 pt-2 text-[10px] text-slate-400">
+          * Statutory compliance notice: PAN–Aadhaar linkage reflects ITD registry alignment only and is kept confidential. It does not replace full KYC identity verification or confer Gold Supplier status.
+        </p>
       </div>
 
       {/* Plans Comparison Modal */}

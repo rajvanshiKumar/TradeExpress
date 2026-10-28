@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { signJwt } from '../utils/jwt.js';
-import { normalizeMobile, validateVerifiedMobile, validateEmailLoginOtp } from './otpService.js';
+import { normalizeMobile, validateVerifiedMobile, validateVerifiedEmail, validateEmailLoginOtp } from './otpService.js';
 
 export async function registerUser({ email, password, name, role = 'BUYER', company, companyName, phone, city, country, verificationToken, emailVerificationToken }) {
   const upperRole = (role || 'BUYER').toUpperCase();
@@ -93,6 +93,336 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
 }
 
 /**
+ * Production-ready Enterprise Buyer Registration
+ * Strictly assigns Role.BUYER on the server.
+ */
+export async function registerBuyer({
+  name,
+  email,
+  password,
+  confirmPassword,
+  company,
+  companyName,
+  phone,
+  country = 'India',
+  state,
+  city,
+  postalCode,
+  businessAddress,
+  buyerType,
+  buyerTypes,
+  buyerTypeOther,
+  businessDescription,
+  gstStatus,
+  gstin,
+  pan,
+  panNumber,
+  taxId,
+  verificationToken,
+  emailVerificationToken,
+  agree = true,
+  agreeTerms = true,
+  req,
+}) {
+  // 1. Validate required fields
+  if (!name || name.trim().length < 2) {
+    const error = new Error('Full name is required (minimum 2 characters).');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const legalCompany = (company || companyName || '').trim();
+  if (!legalCompany || legalCompany.length < 2) {
+    const error = new Error('Business / Company Name is required (minimum 2 characters).');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  if (!normalizedEmail || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(normalizedEmail)) {
+    const error = new Error('A valid business email address is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const existingEmail = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+  if (existingEmail) {
+    const error = new Error('An account with this email address already exists. Please sign in instead.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  if (!phone) {
+    const error = new Error('Mobile number is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalized = normalizeMobile(phone, country);
+  const storedPhone = normalized.ok ? normalized.formattedPhone : phone;
+
+  // Uniqueness check for mobile
+  const existingPhone = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { phone: storedPhone },
+        ...(normalized.msg91Mobile ? [{ phone: normalized.msg91Mobile }, { phone: `+${normalized.msg91Mobile}` }] : []),
+      ],
+    },
+  });
+  if (existingPhone) {
+    const error = new Error('An account with this mobile number already exists. Please sign in or use another number.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  // Password validation
+  if (!password || password.length < 8) {
+    const error = new Error('Password must be at least 8 characters.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    const error = new Error('Password must contain at least one letter and one number.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (confirmPassword && password !== confirmPassword) {
+    const error = new Error('Password and confirm password do not match.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Token validations if tokens are provided
+  if (verificationToken) {
+    try {
+      await validateVerifiedMobile({ phone: storedPhone, country, verificationToken });
+    } catch {
+      if (process.env.NODE_ENV === 'production') {
+        const error = new Error('Mobile number verification token is invalid or expired.');
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+  }
+
+  if (emailVerificationToken) {
+    try {
+      validateVerifiedEmail({ email: normalizedEmail, verificationToken: emailVerificationToken });
+    } catch {
+      if (process.env.NODE_ENV === 'production') {
+        const error = new Error('Email verification token is invalid or expired.');
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+  }
+
+  // Buyer Type
+  const rawBuyerType = Array.isArray(buyerTypes) && buyerTypes.length > 0
+    ? buyerTypes.join(', ')
+    : (buyerType || 'Corporate Procurement');
+
+  if (!rawBuyerType || !rawBuyerType.trim()) {
+    const error = new Error('Please select a Buyer Type.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const isOther = rawBuyerType === 'Other' || rawBuyerType.includes('Other');
+  if (isOther && (!buyerTypeOther || !buyerTypeOther.trim())) {
+    const error = new Error('Please specify your buyer type description.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Country and Address validation
+  const isIndia = (country || 'India').trim().toLowerCase() === 'india';
+  if (!country || !country.trim()) {
+    const error = new Error('Country is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!state || !state.trim()) {
+    const error = new Error('State / Province / Region is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!city || !city.trim()) {
+    const error = new Error('City is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!postalCode || !postalCode.trim()) {
+    const error = new Error(isIndia ? 'PIN Code is required.' : 'Postal Code is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (isIndia && !/^[1-9][0-9]{5}$/.test(postalCode.trim())) {
+    const error = new Error('Please enter a valid 6-digit Indian PIN Code.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!businessAddress || !businessAddress.trim()) {
+    const error = new Error('Full Business Address is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Tax & Identity Details
+  let cleanGstin = null;
+  let cleanPan = null;
+  const rawGstin = gstin || '';
+  const rawPan = pan || panNumber || '';
+
+  if (isIndia) {
+    const requiresGstin = gstStatus === 'Regular GST Registration' || gstStatus === 'Composition Scheme';
+    if (requiresGstin) {
+      if (!rawGstin || !rawGstin.trim()) {
+        const error = new Error(`GSTIN is required when GST status is '${gstStatus}'.`);
+        error.statusCode = 400;
+        throw error;
+      }
+      cleanGstin = rawGstin.trim().toUpperCase();
+      const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstinRegex.test(cleanGstin)) {
+        const error = new Error('Invalid Indian GSTIN format. Expected 15-character alphanumeric format (e.g. 27ABCDE1234F1Z5).');
+        error.statusCode = 400;
+        throw error;
+      }
+    } else if (rawGstin && rawGstin.trim()) {
+      cleanGstin = rawGstin.trim().toUpperCase();
+      const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstinRegex.test(cleanGstin)) {
+        const error = new Error('Invalid Indian GSTIN format.');
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+
+    if (rawPan && rawPan.trim()) {
+      cleanPan = rawPan.trim().toUpperCase();
+      const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+      if (!panRegex.test(cleanPan)) {
+        const error = new Error('Invalid Indian PAN format. Expected 10-character alphanumeric format (e.g. ABCDE1234F).');
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+  } else if (rawPan && rawPan.trim()) {
+    cleanPan = rawPan.trim().toUpperCase();
+  }
+
+  // Terms and Privacy acceptance
+  const acceptedTerms = agree === true || agree === 'true' || agreeTerms === true || agreeTerms === 'true';
+  if (!acceptedTerms) {
+    const error = new Error('You must accept the Buyer Terms of Service and Privacy Notice to proceed.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Hash password
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  // Generate unique buyer code
+  const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+  const buyerCode = `BYR-${randomSuffix}`;
+
+  // Persist User with strictly server-assigned Role.BUYER
+  const user = await prisma.user.create({
+    data: {
+      email: normalizedEmail,
+      passwordHash,
+      name: name.trim(),
+      role: 'BUYER',
+      company: legalCompany,
+      phone: storedPhone,
+      city: city.trim(),
+      state: state.trim(),
+      postalCode: postalCode.trim(),
+      country: country.trim(),
+      businessType: rawBuyerType,
+      businessTypeOther: isOther ? (buyerTypeOther || '').trim() : null,
+      gstStatus: isIndia ? (gstStatus || 'Not Registered / Not Applicable') : null,
+      gstin: cleanGstin,
+      pan: cleanPan,
+      taxId: !isIndia ? (taxId || '').trim() : null,
+      companyDescription: (businessDescription || '').trim() || null,
+      businessAddress: businessAddress.trim(),
+      status: 'ACTIVE',
+      isVerified: Boolean(emailVerificationToken),
+      isPhoneVerified: Boolean(verificationToken),
+      kycStatus: 'NOT_SUBMITTED',
+    },
+  });
+
+  // Create default address in Address model
+  try {
+    await prisma.address.create({
+      data: {
+        userId: user.id,
+        label: 'Registered Office',
+        name: name.trim(),
+        company: legalCompany,
+        gstin: cleanGstin,
+        phone: storedPhone,
+        street: businessAddress.trim(),
+        city: city.trim(),
+        state: state.trim(),
+        postalCode: postalCode.trim(),
+        country: country.trim(),
+        isDefault: true,
+      },
+    });
+  } catch (addrErr) {
+    // Non-blocking fallback
+  }
+
+  // Record audit log
+  try {
+    await prisma.auditLog.create({
+      data: {
+        actorId: user.id,
+        actorEmail: user.email,
+        actorRole: 'BUYER',
+        action: 'BUYER_REGISTERED',
+        resource: 'USERS',
+        targetId: user.id,
+        details: {
+          email: user.email,
+          company: legalCompany,
+          country: country.trim(),
+          buyerType: rawBuyerType,
+          isPhoneVerified: Boolean(verificationToken),
+          isEmailVerified: Boolean(emailVerificationToken),
+        },
+        result: 'SUCCESS',
+      },
+    });
+  } catch (auditErr) {
+    // Non-blocking audit record
+  }
+
+  // Generate JWT token
+  const token = signJwt({ userId: user.id, email: user.email, role: 'BUYER' });
+
+  // Safe user output (redact passwordHash, mask sensitive PAN)
+  const { passwordHash: _, ...safeUser } = user;
+  if (safeUser.pan) {
+    safeUser.pan = `${safeUser.pan.slice(0, 5)}****${safeUser.pan.slice(-1)}`;
+  }
+
+  return {
+    user: safeUser,
+    buyerCode,
+    token,
+  };
+}
+
+/**
  * Production-ready Enterprise Supplier Registration
  */
 export async function registerSupplier({
@@ -125,6 +455,10 @@ export async function registerSupplier({
   aadhaarConsent = false,
   aadhaarNumber,
   aadhaarLast4,
+  panAadhaarStatus = 'NOT_STARTED',
+  panAadhaarLinked = false,
+  panAadhaarMaskedPan = null,
+  panAadhaarCheckedAt = null,
   documents = [],
   verificationToken,
   emailVerificationToken,
@@ -267,6 +601,29 @@ export async function registerSupplier({
         throw error;
       }
     }
+  } else if (rawPan && rawPan.trim()) {
+    cleanPan = rawPan.trim().toUpperCase();
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    if (!panRegex.test(cleanPan)) {
+      const error = new Error('Invalid PAN format. Expected 10-character alphanumeric format.');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  // Statutory Aadhaar Validation & Data Minimization (India & UIDAI compliance)
+  let cleanAadhaarLast4 = null;
+  if (aadhaarNumber) {
+    const rawDigits = String(aadhaarNumber).replace(/\D/g, '');
+    if (rawDigits.length !== 12) {
+      const error = new Error('Invalid Aadhaar Card format. Expected a 12-digit number.');
+      error.statusCode = 400;
+      throw error;
+    }
+    // Under applicable data protection laws, never store full 12-digit Aadhaar; only retain masked last 4 digits
+    cleanAadhaarLast4 = rawDigits.slice(-4);
+  } else if (aadhaarLast4) {
+    cleanAadhaarLast4 = String(aadhaarLast4).replace(/\D/g, '').slice(-4);
   }
 
   // Year established validation
@@ -387,7 +744,11 @@ export async function registerSupplier({
       isVerified: false,
       isPhoneVerified: Boolean(verificationToken),
       aadhaarConsent: Boolean(aadhaarConsent),
-      aadhaarLast4: aadhaarNumber ? String(aadhaarNumber).replace(/\D/g, '').slice(-4) : (aadhaarLast4 || null),
+      aadhaarLast4: cleanAadhaarLast4,
+      panAadhaarStatus: panAadhaarStatus || 'NOT_STARTED',
+      panAadhaarLinked: Boolean(panAadhaarLinked),
+      panAadhaarMaskedPan: panAadhaarMaskedPan || null,
+      panAadhaarCheckedAt: panAadhaarCheckedAt ? new Date(panAadhaarCheckedAt) : null,
     },
     select: {
       id: true,
@@ -405,6 +766,12 @@ export async function registerSupplier({
       gstStatus: true,
       gstin: true,
       pan: true,
+      aadhaarConsent: true,
+      aadhaarLast4: true,
+      panAadhaarStatus: true,
+      panAadhaarLinked: true,
+      panAadhaarMaskedPan: true,
+      panAadhaarCheckedAt: true,
       taxId: true,
       companyDescription: true,
       logoUrl: true,
@@ -502,7 +869,7 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
   }
 
   if (!user) {
-    const error = new Error('Invalid email or password.');
+    const error = new Error('No account found with this email. Please sign up to create your TradeExpress account.');
     error.statusCode = 401;
     throw error;
   }
@@ -515,9 +882,6 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
       error.statusCode = 403;
       throw error;
     }
-  } else {
-    // For member login, authenticate the user seamlessly regardless of which tab was active.
-    // The user's registered role (SUPPLIER or BUYER) is returned so they are routed to their appropriate portal.
   }
 
   if (user.isActive === false || user.status === 'SUSPENDED') {
@@ -527,29 +891,26 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
   }
 
   // 2. Authentication:
-  // For public Buyer/Supplier email login: authenticate using Email OTP without requiring password
+  // Primary B2B login uses registered email and password. Optional OTP authentication supported if provided.
   if (!isAdminLogin && ['BUYER', 'SUPPLIER'].includes(user.role)) {
-    if (!otp) {
-      // If no OTP provided, check if valid password was provided as fallback
-      if (password) {
-        const trimmedPass = typeof password === 'string' ? password.trim() : '';
-        let matches = await bcrypt.compare(password, user.passwordHash);
-        if (!matches && trimmedPass) {
-          matches = await bcrypt.compare(trimmedPass, user.passwordHash);
-        }
-        if (!matches) {
-          const error = new Error('Invalid email or password.');
-          error.statusCode = 401;
-          throw error;
-        }
-      } else {
-        const error = new Error('Email verification code is required. Please click "Send OTP" and enter the 6-digit code.');
-        error.statusCode = 400;
+    if (password) {
+      const trimmedPass = typeof password === 'string' ? password.trim() : '';
+      let matches = await bcrypt.compare(password, user.passwordHash);
+      if (!matches && trimmedPass) {
+        matches = await bcrypt.compare(trimmedPass, user.passwordHash);
+      }
+      if (!matches) {
+        const error = new Error('Invalid email or password. Please try again.');
+        error.statusCode = 401;
         throw error;
       }
-    } else {
-      // Validate and consume OTP upon successful login
+    } else if (otp) {
+      // Validate and consume OTP upon successful OTP login
       validateEmailLoginOtp({ email: normalizedEmail, otp, consume: true });
+    } else {
+      const error = new Error('Password is required to sign in.');
+      error.statusCode = 400;
+      throw error;
     }
   } else {
     // Admin or password-based login
@@ -606,7 +967,29 @@ export async function getUserProfile(userId) {
       company: true,
       phone: true,
       city: true,
+      state: true,
       country: true,
+      postalCode: true,
+      supplierCode: true,
+      businessType: true,
+      businessTypeOther: true,
+      gstStatus: true,
+      gstin: true,
+      pan: true,
+      aadhaarConsent: true,
+      aadhaarLast4: true,
+      panAadhaarStatus: true,
+      panAadhaarLinked: true,
+      panAadhaarMaskedPan: true,
+      panAadhaarCheckedAt: true,
+      businessAddress: true,
+      factoryAddress: true,
+      factoryAddressSame: true,
+      companyDescription: true,
+      yearEstablished: true,
+      kycStatus: true,
+      isVerified: true,
+      isPhoneVerified: true,
       addresses: true,
       createdAt: true,
     },
@@ -884,6 +1267,10 @@ export async function getKycStatus(userId) {
       company: true,
       gstin: true,
       pan: true,
+      panAadhaarStatus: true,
+      panAadhaarLinked: true,
+      panAadhaarMaskedPan: true,
+      panAadhaarCheckedAt: true,
       bankAccountNumber: true,
       bankIfsc: true,
       bankName: true,

@@ -46,12 +46,12 @@ const STEPS = [
   { id: 1, label: 'Account Details', desc: 'Credentials & contact' },
   { id: 2, label: 'Business Info', desc: 'Category & tax profile' },
   { id: 3, label: 'Business Address', desc: 'Operating & factory location' },
-  { id: 4, label: 'Verification & Docs', desc: 'PAN, KYC & documents' },
+  { id: 4, label: 'Verification & Docs', desc: 'PAN & Aadhaar details' },
   { id: 5, label: 'Review & Submit', desc: 'Confirm & register' },
 ];
 
 export default function SupplierRegisterForm() {
-  const { preferences } = useAuth();
+  const { preferences, setAuthUser } = useAuth();
   const { showToast } = useNotifications();
   const navigate = useNavigate();
 
@@ -72,7 +72,7 @@ export default function SupplierRegisterForm() {
     confirmPassword: '',
 
     // Step 2: Business Information
-    businessType: 'Manufacturer',
+    businessType: 'GST Certificate',
     businessTypeOther: '',
     gstStatus: 'Regular GST Registration',
     taxId: '',
@@ -91,12 +91,17 @@ export default function SupplierRegisterForm() {
     factoryAddressSame: true,
     factoryAddress: '',
 
-    // Step 4: Verification & Documents
+    // Step 4: Verification & Docs (PAN & Aadhaar)
     panNumber: '',
-    voluntaryAadhaar: false,
+    aadhaarNumber: '',
     aadhaarConsent: false,
     aadhaarLast4: '',
-    documents: [], // Array of { type, docNumber, fileUrl, fileName, fileSize }
+    panAadhaarStatus: 'NOT_STARTED', // NOT_STARTED, PENDING, LINKED, NOT_LINKED, UNABLE_TO_VERIFY
+    panAadhaarLinked: false,
+    panAadhaarMaskedPan: null,
+    panAadhaarCheckedAt: null,
+    panAadhaarMessage: '',
+    documents: [],
     agreeTerms: false,
   });
 
@@ -125,11 +130,9 @@ export default function SupplierRegisterForm() {
   // Media upload loading states
   const [logoUploading, setLogoUploading] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
-  const [docUploading, setDocUploading] = useState(false);
-
-  // New Document Input temporary state
-  const [currentDocType, setCurrentDocType] = useState('GST_CERTIFICATE');
-  const [currentDocNumber, setCurrentDocNumber] = useState('');
+  const [showAadhaar, setShowAadhaar] = useState(false);
+  const [panAadhaarLoading, setPanAadhaarLoading] = useState(false);
+  const [panAadhaarError, setPanAadhaarError] = useState('');
 
   // Countdown timers for OTP cooldowns
   useEffect(() => {
@@ -220,7 +223,7 @@ export default function SupplierRegisterForm() {
       const data = await res.json();
       if (res.ok && data.success) {
         setPhoneCooldown(data.cooldownSeconds || 60);
-        showToast(data.devOtp ? `OTP Sent! Dev Code: ${data.devOtp}` : `Verification code sent to ${values.phone}`);
+        showToast(`Verification code sent to ${values.phone}`);
         setOtpModalType('phone');
       } else {
         setErrors((prev) => ({ ...prev, phone: data.message || 'Unable to send mobile verification code.' }));
@@ -258,7 +261,7 @@ export default function SupplierRegisterForm() {
       const data = await res.json();
       if (res.ok && data.success) {
         setEmailCooldown(data.cooldownSeconds || 60);
-        showToast(data.devOtp ? `OTP Sent! Dev Code: ${data.devOtp}` : `Verification code sent to ${cleanEmail}`);
+        showToast(`Verification code sent to ${cleanEmail}`);
         setOtpModalType('email');
       } else {
         setErrors((prev) => ({ ...prev, email: data.message || 'Unable to dispatch verification email.' }));
@@ -395,50 +398,153 @@ export default function SupplierRegisterForm() {
     }));
   };
 
-  // Upload Supporting Document
-  const handleDocUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('Document file size must be less than 10 MB.');
-      return;
+  // Format Aadhaar display with 4-digit groups (e.g. 1234 5678 9012)
+  const formatAadhaarInput = (val) => {
+    const raw = String(val || '').replace(/\D/g, '').slice(0, 12);
+    return raw.replace(/(\d{4})(?=\d)/g, '$1 ');
+  };
+
+  // Handle PAN change
+  const handlePanChange = (e) => {
+    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    setValues((prev) => ({
+      ...prev,
+      panNumber: val,
+      panAadhaarStatus: prev.panNumber !== val ? 'NOT_STARTED' : prev.panAadhaarStatus,
+      panAadhaarLinked: prev.panNumber !== val ? false : prev.panAadhaarLinked,
+      panAadhaarMaskedPan: prev.panNumber !== val ? null : prev.panAadhaarMaskedPan,
+      panAadhaarCheckedAt: prev.panNumber !== val ? null : prev.panAadhaarCheckedAt,
+      panAadhaarMessage: prev.panNumber !== val ? '' : prev.panAadhaarMessage,
+    }));
+    setPanAadhaarError('');
+    if (errors.panNumber) {
+      setErrors((prev) => ({ ...prev, panNumber: '' }));
     }
-    setDocUploading(true);
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch(`${baseUrl}/upload`, { method: 'POST', body: formData });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const newDoc = {
-          type: currentDocType,
-          docNumber: currentDocNumber.trim(),
-          fileUrl: data.fileUrl || data.url,
-          fileName: file.name,
-          fileSize: file.size,
-        };
-        setValues((prev) => ({
-          ...prev,
-          documents: [...prev.documents, newDoc],
-        }));
-        setCurrentDocNumber('');
-        showToast('Document added to compliance package.');
-      } else {
-        showToast(data.message || 'Document upload failed.');
-      }
-    } catch {
-      showToast('Error uploading document.');
-    } finally {
-      setDocUploading(false);
+    if (errors.panAadhaar) {
+      setErrors((prev) => ({ ...prev, panAadhaar: '' }));
     }
   };
 
-  const handleRemoveDoc = (index) => {
+  // Handle Aadhaar change
+  const handleAadhaarChange = (e) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 12);
     setValues((prev) => ({
       ...prev,
-      documents: prev.documents.filter((_, i) => i !== index),
+      aadhaarNumber: digits,
+      aadhaarLast4: digits.slice(-4),
+      panAadhaarStatus: prev.aadhaarNumber !== digits ? 'NOT_STARTED' : prev.panAadhaarStatus,
+      panAadhaarLinked: prev.aadhaarNumber !== digits ? false : prev.panAadhaarLinked,
+      panAadhaarMaskedPan: prev.aadhaarNumber !== digits ? null : prev.panAadhaarMaskedPan,
+      panAadhaarCheckedAt: prev.aadhaarNumber !== digits ? null : prev.panAadhaarCheckedAt,
+      panAadhaarMessage: prev.aadhaarNumber !== digits ? '' : prev.panAadhaarMessage,
     }));
+    setPanAadhaarError('');
+    if (errors.aadhaarNumber) {
+      setErrors((prev) => ({ ...prev, aadhaarNumber: '' }));
+    }
+    if (errors.panAadhaar) {
+      setErrors((prev) => ({ ...prev, panAadhaar: '' }));
+    }
+  };
+
+  // PAN-Aadhaar Link Status Inquiry via UAT endpoint
+  const handleCheckLinkStatus = async () => {
+    const rawPan = (values.panNumber || '').trim().toUpperCase();
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    if (!panRegex.test(rawPan)) {
+      setErrors((prev) => ({
+        ...prev,
+        panNumber: 'Please enter a valid 10-character PAN format (e.g. ABCDE1234F).',
+      }));
+      return;
+    }
+
+    const rawAadhaar = String(values.aadhaarNumber || '').replace(/\D/g, '');
+    if (rawAadhaar.length !== 12) {
+      setErrors((prev) => ({
+        ...prev,
+        aadhaarNumber: 'Please enter a valid 12-digit Aadhaar number before checking link status.',
+      }));
+      return;
+    }
+    if (!values.aadhaarConsent) {
+      setErrors((prev) => ({
+        ...prev,
+        aadhaarConsent: 'Consent is required to verify PAN–Aadhaar link status.',
+      }));
+      return;
+    }
+
+    setPanAadhaarLoading(true);
+    setPanAadhaarError('');
+    setValues((prev) => ({ ...prev, panAadhaarStatus: 'PENDING' }));
+
+    try {
+      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const res = await fetch(`${baseUrl}/verification/pan-aadhaar/link-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          aadhaarNumber: rawAadhaar,
+          pan: rawPan,
+          userConsent: true,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success && data.data) {
+        const d = data.data;
+        setValues((prev) => ({
+          ...prev,
+          panAadhaarStatus: d.status, // LINKED, NOT_LINKED, UNABLE_TO_VERIFY
+          panAadhaarLinked: Boolean(d.linked),
+          panAadhaarMaskedPan: d.maskedPan || null,
+          panAadhaarCheckedAt: d.verifiedAt || new Date().toISOString(),
+          panAadhaarMessage: d.message || '',
+        }));
+
+        if (d.status === 'LINKED') {
+          setErrors((prev) => {
+            const next = { ...prev };
+            delete next.panAadhaar;
+            delete next.panNumber;
+            delete next.aadhaarNumber;
+            return next;
+          });
+          showToast('PAN and Aadhaar verified successfully.');
+        } else if (d.status === 'NOT_LINKED') {
+          showToast('PAN and Aadhaar are not linked in ITD records.', 'warning');
+        } else {
+          showToast('Unable to verify link status with provider.', 'info');
+        }
+      } else {
+        const errorMsg = data.message || data.error?.message || 'Unable to verify link status.';
+        setPanAadhaarError(errorMsg);
+        setValues((prev) => ({
+          ...prev,
+          panAadhaarStatus: 'UNABLE_TO_VERIFY',
+          panAadhaarLinked: false,
+          panAadhaarMessage: errorMsg,
+        }));
+        showToast(errorMsg, 'error');
+      }
+    } catch {
+      const netMsg = 'Network error or timeout while verifying link status.';
+      setPanAadhaarError(netMsg);
+      setValues((prev) => ({
+        ...prev,
+        panAadhaarStatus: 'UNABLE_TO_VERIFY',
+        panAadhaarLinked: false,
+        panAadhaarMessage: netMsg,
+      }));
+      showToast(netMsg, 'error');
+    } finally {
+      setPanAadhaarLoading(false);
+    }
   };
 
   // Step Validations
@@ -531,19 +637,42 @@ export default function SupplierRegisterForm() {
     }
 
     if (step === 4) {
-      if (values.country === 'India' && values.panNumber) {
-        const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-        if (!panRegex.test(values.panNumber.trim().toUpperCase())) {
-          stepErrors.panNumber = 'Enter a valid 10-character PAN (e.g. ABCDE1234F).';
+      const isInd = values.country === 'India';
+
+      // PAN Card Number: validate format
+      if (isInd || values.panNumber?.trim()) {
+        if (!values.panNumber?.trim()) {
+          stepErrors.panNumber = 'PAN Card Number is required.';
+        } else {
+          const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+          if (!panRegex.test(values.panNumber.trim().toUpperCase())) {
+            stepErrors.panNumber = 'Enter a valid 10-character PAN format (e.g. ABCDE1234F).';
+          }
         }
       }
 
-      if (values.voluntaryAadhaar) {
-        if (!values.aadhaarConsent) {
-          stepErrors.aadhaarConsent = 'Consent is required to submit voluntary identity details.';
+      // Aadhaar Card Number: validate 12-digit format
+      const aadhaarDigits = (values.aadhaarNumber || '').replace(/\D/g, '');
+      if (isInd || aadhaarDigits) {
+        if (!aadhaarDigits) {
+          stepErrors.aadhaarNumber = 'Aadhaar Card Number is required.';
+        } else if (aadhaarDigits.length !== 12) {
+          stepErrors.aadhaarNumber = 'Aadhaar Card Number must be exactly 12 digits.';
         }
-        if (!values.aadhaarLast4 || !/^\d{4}$/.test(values.aadhaarLast4.trim())) {
-          stepErrors.aadhaarLast4 = 'Please enter the exact last 4 digits.';
+      }
+
+      // Statutory consent for identity submission
+      if (isInd || aadhaarDigits) {
+        if (!values.aadhaarConsent) {
+          stepErrors.aadhaarConsent = 'Statutory consent is required for identity submission.';
+        }
+      }
+
+      // PAN-Aadhaar Link Verification requirement:
+      // User must verify Aadhaar to PAN before proceeding to next process
+      if (isInd || values.panNumber?.trim() || aadhaarDigits) {
+        if (values.panAadhaarStatus !== 'LINKED') {
+          stepErrors.panAadhaar = 'Please verify that your PAN and Aadhaar are linked by clicking "Check Link Status" before proceeding to the next step.';
         }
       }
 
@@ -591,6 +720,7 @@ export default function SupplierRegisterForm() {
       const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
       const payload = {
         name: values.name.trim(),
+        company: values.companyName.trim(),
         companyName: values.companyName.trim(),
         email: normalizeEmail(values.email),
         password: values.password,
@@ -612,9 +742,14 @@ export default function SupplierRegisterForm() {
         companyDescription: values.companyDescription.trim(),
         logoUrl: values.logoUrl,
         businessImages: values.businessImages,
-        aadhaarConsent: values.voluntaryAadhaar ? values.aadhaarConsent : false,
-        aadhaarLast4: values.voluntaryAadhaar ? values.aadhaarLast4.trim() : null,
-        documents: values.documents,
+        aadhaarNumber: values.aadhaarNumber ? values.aadhaarNumber.replace(/\D/g, '') : '',
+        aadhaarConsent: Boolean(values.aadhaarConsent),
+        aadhaarLast4: values.aadhaarNumber ? values.aadhaarNumber.replace(/\D/g, '').slice(-4) : (values.aadhaarLast4 || null),
+        panAadhaarStatus: values.panAadhaarStatus || 'NOT_STARTED',
+        panAadhaarLinked: Boolean(values.panAadhaarLinked),
+        panAadhaarMaskedPan: values.panAadhaarMaskedPan || null,
+        panAadhaarCheckedAt: values.panAadhaarCheckedAt || null,
+        documents: values.documents || [],
         verificationToken: phoneToken || 'evt_supplier_phone',
         emailVerificationToken: emailToken || 'evt_supplier_email',
       };
@@ -633,10 +768,13 @@ export default function SupplierRegisterForm() {
         return;
       }
 
-      // Store tokens for automatic sign-in if provided
+      // Store tokens for automatic sign-in and activate session
       if (data.data?.token) {
         localStorage.setItem('tradeexpress_auth_token', data.data.token);
         localStorage.setItem('tradesphere_auth_token', data.data.token);
+      }
+      if (setAuthUser && data.data) {
+        await setAuthUser(data.data.user || data.data, data.data.token, payload.password);
       }
 
       setSubmittedData({
@@ -1400,213 +1538,204 @@ export default function SupplierRegisterForm() {
         )}
 
         {/* ============================================================ */}
-        {/* STEP 4: VERIFICATION & DOCUMENTS */}
+        {/* STEP 4: VERIFICATION & DOCS */}
         {/* ============================================================ */}
         {currentStep === 4 && (
           <div className="space-y-6">
             <div className="border-b border-slate-100 pb-3">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-emerald-700" />
-                Business Compliance & Verification Documents
+                Verification & Docs
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Upload verified business evidence to gain the TradeExpress Verified Gold Supplier Trust Badge.
+                Provide your statutory identification numbers for compliance and account verification.
               </p>
             </div>
 
             <div className="space-y-5">
-              {/* PAN Number for Indian Suppliers */}
-              {isIndia && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-slate-800">
-                      Permanent Account Number (PAN)
-                    </label>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                      <Lock className="h-3 w-3 text-slate-400" />
-                      Confidential / Private
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    maxLength={10}
-                    placeholder="10-character PAN (e.g. ABCDE1234F)"
-                    value={values.panNumber}
-                    onChange={(e) => handleChange('panNumber')(e.target.value.toUpperCase())}
-                    className={`mt-1.5 w-full font-mono uppercase rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                      errors.panNumber ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                    }`}
-                  />
-                  {errors.panNumber && <p className="mt-1 text-xs text-red-600">{errors.panNumber}</p>}
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    PAN is stored securely for statutory compliance and is never disclosed on public product catalogs or buyer APIs.
-                  </p>
-                </div>
-              )}
-
-              {/* Aadhaar Data Minimization & Voluntary Consent Card */}
-              {isIndia && (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">
-                        Voluntary Authorized Identity Verification (Optional)
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        In compliance with data minimization laws, TradeExpress does not mandate Aadhaar card collection. You may voluntarily confirm authorized signer verification.
-                      </p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={values.voluntaryAadhaar}
-                        onChange={(e) => handleChange('voluntaryAadhaar')(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-700"></div>
-                    </label>
-                  </div>
-
-                  {values.voluntaryAadhaar && (
-                    <div className="mt-4 pt-3 border-t border-slate-200/80 space-y-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Last 4 Digits of Authorized Signatory Aadhaar <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="password"
-                          maxLength={4}
-                          placeholder="•••• 1234"
-                          value={values.aadhaarLast4}
-                          onChange={(e) => handleChange('aadhaarLast4')(e.target.value.replace(/\D/g, ''))}
-                          className={`w-36 font-mono text-center tracking-widest rounded-xl border px-3.5 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                            errors.aadhaarLast4 ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                          }`}
-                        />
-                        {errors.aadhaarLast4 && <p className="mt-1 text-xs text-red-600">{errors.aadhaarLast4}</p>}
-                      </div>
-
-                      <label className="flex items-start gap-2.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={values.aadhaarConsent}
-                          onChange={(e) => handleChange('aadhaarConsent')(e.target.checked)}
-                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
-                        />
-                        <span className="text-[11px] text-slate-600 leading-normal">
-                          I voluntarily consent to submit my identity verification details strictly for authorized business KYC verification in accordance with applicable laws.
+              {/* Identity Numbers Card: PAN Card Number & Aadhaar Card Number */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-5 shadow-sm">
+                {/* 1. PAN Card Number */}
+                <div>
+                  <label htmlFor="pan-card-number" className="block text-xs font-semibold text-slate-800 mb-1">
+                    PAN Card Number <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="pan-card-number"
+                      type="text"
+                      maxLength={10}
+                      placeholder="e.g. ABCDE1234F"
+                      value={values.panNumber}
+                      onChange={handlePanChange}
+                      className={`w-full font-mono uppercase tracking-wider rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 pr-28 ${
+                        errors.panNumber || errors.panAadhaar
+                          ? 'border-red-500 bg-red-50/30'
+                          : values.panAadhaarStatus === 'LINKED'
+                          ? 'border-blue-500 bg-blue-50/10 focus:border-blue-600'
+                          : 'border-slate-300 focus:border-emerald-600'
+                      }`}
+                    />
+                    {/* Inside input box of PAN card at right corner: blue verified or not verified */}
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none select-none">
+                      {values.panAadhaarStatus === 'LINKED' ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-600 border border-blue-200 shadow-sm animate-in fade-in">
+                          <BadgeCheck className="h-4 w-4 text-blue-600 fill-blue-100" />
+                          Verified
                         </span>
-                      </label>
-                      {errors.aadhaarConsent && <p className="text-xs text-red-600">{errors.aadhaarConsent}</p>}
+                      ) : values.panAadhaarStatus === 'NOT_LINKED' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600 border border-red-200">
+                          <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                          Not Linked
+                        </span>
+                      ) : values.panAadhaarStatus === 'PENDING' ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600">
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          Checking...
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 bg-slate-100/80 px-2.5 py-0.5 rounded-full">
+                          Not Verified
+                        </span>
+                      )}
                     </div>
+                  </div>
+                  {errors.panNumber ? (
+                    <p className="mt-1 text-xs text-red-600">{errors.panNumber}</p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Standard 10-character alphanumeric PAN format (e.g. ABCDE1234F).
+                    </p>
                   )}
                 </div>
-              )}
 
-              {/* Supporting Business Documents Upload Area */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="border-b border-slate-100 pb-3 mb-4">
-                  <p className="text-sm font-bold text-slate-900">Supporting Business Documents & Licenses</p>
-                  <p className="text-xs text-slate-500">
-                    Upload official certificates (MSME/Udyam, Incorporation, IEC, Trade License, ISO). Stored in private object storage.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-4">
-                  <div className="sm:col-span-5">
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Document Category
+                {/* 2. Aadhaar Card Number */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor="aadhaar-card-number" className="block text-xs font-semibold text-slate-800">
+                      Aadhaar Card Number <span className="text-red-500">*</span>
                     </label>
-                    <CustomSelect
-                      id="doc-type-select"
-                      value={currentDocType}
-                      onChange={(e) => setCurrentDocType(e.target.value)}
-                      options={SUPPLIER_DOC_TYPES}
-                      placeholder="Select Document"
-                      searchable={false}
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAadhaar((prev) => !prev)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 hover:text-emerald-950 transition select-none"
+                    >
+                      {showAadhaar ? (
+                        <>
+                          <EyeOff className="h-3.5 w-3.5" />
+                          Mask Number
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="h-3.5 w-3.5" />
+                          Show Number
+                        </>
+                      )}
+                    </button>
                   </div>
-
-                  <div className="sm:col-span-4">
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Document / Certificate # (Optional)
-                    </label>
+                  <div className="relative">
                     <input
-                      type="text"
-                      placeholder="e.g. UDYAM-MH-01-0012345"
-                      value={currentDocNumber}
-                      onChange={(e) => setCurrentDocNumber(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs transition focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+                      id="aadhaar-card-number"
+                      type={showAadhaar ? 'text' : 'password'}
+                      maxLength={14}
+                      placeholder={showAadhaar ? '12-digit Aadhaar number' : '•••• •••• ••••'}
+                      value={formatAadhaarInput(values.aadhaarNumber)}
+                      onChange={handleAadhaarChange}
+                      className={`w-full font-mono tracking-widest rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                        errors.aadhaarNumber || errors.panAadhaar ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                      }`}
                     />
                   </div>
+                  {errors.aadhaarNumber ? (
+                    <p className="mt-1 text-xs text-red-600">{errors.aadhaarNumber}</p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      12-digit statutory identity number. In compliance with data protection laws, full Aadhaar numbers are never retained or publicly exposed; only masked digits are stored for authorized KYC.
+                    </p>
+                  )}
 
-                  <div className="sm:col-span-3 flex items-end">
-                    <label className="w-full cursor-pointer inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-800 px-3.5 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 transition">
-                      <UploadCloud className="h-4 w-4" />
-                      <span>{docUploading ? 'Uploading...' : 'Upload File'}</span>
+                  {/* Statutory Consent Notice */}
+                  <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/80 p-3.5">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
                       <input
-                        type="file"
-                        accept="application/pdf,image/png,image/jpeg,image/webp"
-                        className="hidden"
-                        onChange={handleDocUpload}
-                        disabled={docUploading}
+                        type="checkbox"
+                        checked={values.aadhaarConsent}
+                        onChange={(e) => handleChange('aadhaarConsent')(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
                       />
+                      <span className="text-[11px] text-slate-600 leading-normal">
+                        I confirm and consent to submit my identity details for statutory compliance and authorized business verification. I understand that details are kept confidential and identity will remain pending until authorized verification is complete.
+                      </span>
                     </label>
+                    {errors.aadhaarConsent && <p className="mt-1.5 text-xs text-red-600">{errors.aadhaarConsent}</p>}
                   </div>
                 </div>
 
-                {/* Uploaded Documents List */}
-                {values.documents.length > 0 ? (
-                  <div className="space-y-2 mt-3">
-                    {values.documents.map((doc, idx) => {
-                      const docTypeObj = SUPPLIER_DOC_TYPES.find((d) => d.value === doc.type);
-                      return (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 shrink-0">
-                              <File className="h-4 w-4" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-slate-900 truncate">
-                                {docTypeObj?.label || doc.type}
-                              </p>
-                              <p className="text-[11px] text-slate-500 truncate">
-                                {doc.fileName} {doc.docNumber ? `• Ref: ${doc.docNumber}` : ''}
-                              </p>
-                            </div>
-                          </div>
+                {/* Right Bottom: Check Link Status action bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                  <div className="text-xs">
+                    {values.panAadhaarStatus === 'LINKED' ? (
+                      <span className="text-blue-700 font-semibold flex items-center gap-1.5">
+                        <BadgeCheck className="h-4 w-4 text-blue-600 fill-blue-100" />
+                        PAN and Aadhaar verified & linked with Income Tax Department.
+                      </span>
+                    ) : values.panAadhaarStatus === 'NOT_LINKED' ? (
+                      <span className="text-red-600 font-medium flex items-center gap-1.5">
+                        <AlertCircle className="h-4 w-4 text-red-500" />
+                        PAN and Aadhaar are not linked in Income Tax records.
+                      </span>
+                    ) : values.panAadhaarStatus === 'UNABLE_TO_VERIFY' ? (
+                      <span className="text-slate-600 font-medium flex items-center gap-1.5">
+                        <AlertCircle className="h-4 w-4 text-slate-400" />
+                        {panAadhaarError || 'Unable to verify link status. Please retry.'}
+                      </span>
+                    ) : errors.panAadhaar ? (
+                      <span className="text-red-600 font-semibold flex items-center gap-1.5">
+                        <AlertCircle className="h-4 w-4 text-red-500" />
+                        {errors.panAadhaar}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-[11px]">
+                        PAN–Aadhaar verification is required before proceeding to the next step.
+                      </span>
+                    )}
+                  </div>
 
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={doc.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="rounded-lg p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-white"
-                              title="Preview Document"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveDoc(idx)}
-                              className="rounded-lg p-1.5 text-slate-400 hover:text-red-600 hover:bg-white"
-                              title="Delete Document"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={handleCheckLinkStatus}
+                      disabled={
+                        panAadhaarLoading ||
+                        !values.panNumber ||
+                        (values.aadhaarNumber || '').replace(/\D/g, '').length !== 12 ||
+                        !values.aadhaarConsent
+                      }
+                      className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                        values.panAadhaarStatus === 'LINKED'
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                          : 'bg-slate-900 hover:bg-slate-800 text-white'
+                      }`}
+                    >
+                      {panAadhaarLoading ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : values.panAadhaarStatus === 'LINKED' ? (
+                        <>
+                          <BadgeCheck className="h-4 w-4 text-white" />
+                          Re-check Link Status
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                          Check Link Status
+                        </>
+                      )}
+                    </button>
                   </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center text-xs text-slate-400">
-                    No compliance documents attached yet. You can also upload them later in your Supplier Dashboard.
-                  </div>
-                )}
+                </div>
               </div>
 
               {/* Terms and Privacy Acceptance */}
@@ -1631,7 +1760,7 @@ export default function SupplierRegisterForm() {
                     .
                   </span>
                 </label>
-                {errors.agreeTerms && <p className="mt-1 text-xs text-red-600">{errors.agreeTerms}</p>}
+                {errors.agreeTerms && <p className="mt-2 text-xs text-red-600">{errors.agreeTerms}</p>}
               </div>
             </div>
           </div>
@@ -1761,7 +1890,7 @@ export default function SupplierRegisterForm() {
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                    4. Verification & Documents
+                    4. Verification & Identity
                   </h4>
                   <button
                     type="button"
@@ -1772,20 +1901,49 @@ export default function SupplierRegisterForm() {
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-xs">
-                  {values.panNumber && (
-                    <div>
-                      <span className="text-slate-400 block">PAN Number:</span>
-                      <span className="font-mono font-semibold text-slate-800">{values.panNumber}</span>
-                    </div>
-                  )}
                   <div>
-                    <span className="text-slate-400 block">Attached Documents:</span>
-                    <span className="font-semibold text-slate-800">{values.documents.length} File(s)</span>
+                    <span className="text-slate-400 block">PAN Card Number:</span>
+                    <span className="font-mono font-semibold text-slate-800">{values.panNumber || '—'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block">Terms of Service:</span>
+                    <span className="text-slate-400 block">Aadhaar Card Number:</span>
+                    <span className="font-mono font-semibold text-slate-800">
+                      {values.aadhaarNumber
+                        ? `•••• •••• ${values.aadhaarNumber.replace(/\D/g, '').slice(-4)}`
+                        : (values.aadhaarLast4 ? `•••• •••• ${values.aadhaarLast4}` : '—')}
+                    </span>
+                  </div>
+                  <div className="col-span-2 pt-1 border-t border-slate-100">
+                    <span className="text-slate-400 block mb-1">PAN–Aadhaar Link Status:</span>
+                    <div className="flex items-center gap-2">
+                      {values.panAadhaarStatus === 'LINKED' && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-700" />
+                          Linked {values.panAadhaarMaskedPan ? `(${values.panAadhaarMaskedPan})` : ''}
+                        </span>
+                      )}
+                      {values.panAadhaarStatus === 'NOT_LINKED' && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                          <AlertCircle className="h-3 w-3 text-amber-700" />
+                          Not Linked
+                        </span>
+                      )}
+                      {values.panAadhaarStatus === 'UNABLE_TO_VERIFY' && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                          Unable to Verify (Pending compliance review)
+                        </span>
+                      )}
+                      {(!values.panAadhaarStatus || values.panAadhaarStatus === 'NOT_STARTED') && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                          Not Checked (Will be verified during onboarding)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-span-2 pt-1">
+                    <span className="text-slate-400 block">Terms & Statutory Consent:</span>
                     <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
-                      <Check className="h-3.5 w-3.5" /> Accepted
+                      <Check className="h-3.5 w-3.5" /> Accepted & Consented
                     </span>
                   </div>
                 </div>
@@ -1846,15 +2004,21 @@ export default function SupplierRegisterForm() {
 
       {/* Universal OtpModal Popup */}
       <OtpModal
+        open={Boolean(otpModalType)}
         isOpen={Boolean(otpModalType)}
         onClose={() => setOtpModalType(null)}
         type={otpModalType || 'email'}
+        title={otpModalType === 'phone' ? 'Verify Mobile Number' : 'Verify Work Email'}
+        destination={otpModalType === 'phone' ? values.phone : values.email}
         target={otpModalType === 'phone' ? values.phone : values.email}
         onVerify={handleVerifyOtpModal}
         onResend={otpModalType === 'phone' ? handleSendMobileOtp : handleSendEmailOtp}
+        resending={otpModalType === 'phone' ? phoneOtpSending : emailOtpSending}
         cooldown={otpModalType === 'phone' ? phoneCooldown : emailCooldown}
+        verifying={otpModalVerifying}
         isVerifying={otpModalVerifying}
         error={otpModalError}
+        submitLabel="Verify Code"
       />
     </div>
   );
