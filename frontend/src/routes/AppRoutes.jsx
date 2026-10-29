@@ -96,7 +96,10 @@ export default function AppRoutes() {
         <Route path="/cart" element={<Cart />} />
         <Route path="/wishlist" element={<BuyerWishlist standalone />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/buyer/login" element={<Login defaultRole="buyer" />} />
+        <Route path="/supplier/login" element={<Login defaultRole="supplier" />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/buyer/register" element={<Register defaultRole="buyer" />} />
         <Route path="/supplier/register" element={<Register defaultRole="supplier" />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/admin/login" element={<Navigate to="/super-admin/login" replace />} />

@@ -20,6 +20,7 @@ import {
 import Logo from '../common/Logo';
 import ResetDataButton from '../common/ResetDataButton';
 import { BRAND } from '../../utils/constants';
+import useAuth from '../../hooks/useAuth';
 import { useTranslation } from '../../i18n/LanguageContext';
 
 const SOCIAL_LINKS = [
@@ -131,15 +132,24 @@ function MaritimeWatermark() {
 }
 
 export default function Footer() {
+  const { user } = useAuth();
   const location = useLocation();
   const { t, currentLanguage, currentCountry } = useTranslation();
+  const isSupplier = user?.role === 'supplier';
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/forgot-password';
   const buyerResources = isAuthPage
     ? BUYER_RESOURCES.filter((item) => !item.label.toLowerCase().includes('quote') && !item.to.includes('compare'))
     : BUYER_RESOURCES;
-  const supplierResources = isAuthPage
+  const supplierResources = (isAuthPage
     ? SUPPLIER_RESOURCES.filter((item) => !item.to.includes('inquiries'))
-    : SUPPLIER_RESOURCES;
+    : SUPPLIER_RESOURCES
+  ).filter((item) => {
+    // When signed in as a supplier, do not show Become / Join as a Supplier in footer
+    if (isSupplier && (item.to.includes('role=supplier') || item.to.includes('/supplier/register') || item.label.toLowerCase().includes('become a supplier'))) {
+      return false;
+    }
+    return true;
+  });
   const socialLinks = isAuthPage
     ? SOCIAL_LINKS.filter((item) => item.label !== 'WhatsApp')
     : SOCIAL_LINKS;

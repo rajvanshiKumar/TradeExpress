@@ -57,7 +57,7 @@ export default function Register({ defaultRole }) {
             }`}
           >
             <Building2 className="h-4 w-4" />
-            Become a Supplier
+            Join as Supplier
           </button>
         </div>
       }

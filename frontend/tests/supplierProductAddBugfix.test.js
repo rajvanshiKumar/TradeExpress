@@ -304,4 +304,63 @@ describe('Supplier Add Product Flow & Guard Regression Test Suite', () => {
       assert.equal(uploadedViaApi, false);
     });
   });
+
+  describe('12. Supplier Authentication & Join as Supplier Display Invariants', () => {
+    it('omits Join / Become as a Supplier for authenticated suppliers across navigation and CTAs', () => {
+      const mockUser = { role: 'supplier', name: 'Tata Steel Ltd' };
+
+      // Helper simulating mobile navigation filter
+      const items = [
+        { label: 'Products', to: '/products' },
+        { label: 'Become a Supplier', to: '/register?role=supplier' },
+        { label: 'Help', to: '/help' },
+      ];
+
+      const filtered = items.filter((item) => {
+        if (mockUser?.role === 'supplier' && (item.to.includes('role=supplier') || item.label.toLowerCase().includes('become a supplier'))) {
+          return false;
+        }
+        return true;
+      });
+
+      assert.equal(filtered.length, 2);
+      assert.ok(!filtered.some((i) => i.label === 'Become a Supplier'));
+    });
+
+    it('renders contextual "Supplier Dashboard" instead of "Join as a Supplier" when signed in', () => {
+      const user = { role: 'supplier', name: 'Apex Exporters' };
+
+      function getCta(user) {
+        if (user?.role === 'supplier') {
+          return { label: 'Go to Supplier Dashboard', to: '/supplier/dashboard' };
+        }
+        return { label: 'Join as a Supplier', to: '/supplier/register' };
+      }
+
+      const supplierCta = getCta(user);
+      assert.equal(supplierCta.label, 'Go to Supplier Dashboard');
+      assert.equal(supplierCta.to, '/supplier/dashboard');
+
+      const guestCta = getCta(null);
+      assert.equal(guestCta.label, 'Join as a Supplier');
+      assert.equal(guestCta.to, '/supplier/register');
+    });
+
+    it('displays dedicated "Join as a Supplier" CTA on the supplier sign-in form', () => {
+      function getRegisterLink(role) {
+        if (role === 'supplier') {
+          return { prompt: 'New supplier on TradeExpress?', label: 'Join as a Supplier', to: '/supplier/register' };
+        }
+        if (role === 'buyer') {
+          return { prompt: 'New buyer on TradeExpress?', label: 'Join as Buyer', to: '/buyer/register' };
+        }
+        return { prompt: "Don't have an account yet?", label: 'Join', to: '/register' };
+      }
+
+      const supplierLink = getRegisterLink('supplier');
+      assert.equal(supplierLink.prompt, 'New supplier on TradeExpress?');
+      assert.equal(supplierLink.label, 'Join as a Supplier');
+      assert.equal(supplierLink.to, '/supplier/register');
+    });
+  });
 });

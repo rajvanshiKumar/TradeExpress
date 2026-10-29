@@ -25,9 +25,17 @@ export default function MobileMenu({ open, onClose }) {
   const [showCategories, setShowCategories] = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
 
-  const filteredMainNav = isAuthPage
+  const isSupplier = user?.role === 'supplier';
+  const filteredMainNav = (isAuthPage
     ? mainNav.filter((item) => !item.to.includes('compare'))
-    : mainNav;
+    : mainNav
+  ).filter((item) => {
+    // When signed in as a supplier (or authenticated), do not show Become / Join as a Supplier
+    if ((isSupplier || user) && (item.to.includes('role=supplier') || item.to.includes('/supplier/register') || item.label.toLowerCase().includes('become a supplier'))) {
+      return false;
+    }
+    return true;
+  });
   const filteredQuickLinks = isAuthPage
     ? quickLinks.filter((item) => !item.to.includes('compare') && !item.label.toLowerCase().includes('quote'))
     : quickLinks;

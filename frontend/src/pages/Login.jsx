@@ -11,11 +11,12 @@ const ROLES = [
   { id: 'supplier', label: 'Supplier' },
 ];
 
-export default function Login() {
+export default function Login({ defaultRole = null }) {
   const { user } = useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const [role, setRole] = useState(searchParams.get('role') === 'supplier' ? 'supplier' : 'buyer');
+  const initialRole = searchParams.get('role') === 'supplier' || defaultRole === 'supplier' ? 'supplier' : 'buyer';
+  const [role, setRole] = useState(initialRole);
   useDocumentTitle('Sign In');
   // Already signed in: go to the right dashboard instead of showing the form again.
   if (user) return <Navigate to={ROLE_HOME[user.role]} replace />;

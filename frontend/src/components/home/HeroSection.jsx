@@ -15,6 +15,7 @@ import {
 import SearchForm from "../forms/SearchForm";
 import useProducts from "../../hooks/useProducts";
 import useAuth from "../../hooks/useAuth";
+import { ROLE_HOME } from "../../utils/constants";
 
 /* Decorative botanical accent preserved for sibling sections */
 export function BotanicalAccent({ className = "", opacity = 0.18 }) {
@@ -108,17 +109,28 @@ export default function HeroSection() {
               <ArrowRight className="size-3 text-[#166534]" />
             </Link>
 
-            <Link
-              to="/register?role=supplier"
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
-            >
-              <TrendingUp className="size-3.5 text-brand-300" />
-              <span>Start Selling</span>
-              <ArrowRight className="size-3 text-white/70" />
-            </Link>
+            {user?.role === "supplier" ? (
+              <Link
+                to="/supplier/dashboard"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
+              >
+                <TrendingUp className="size-3.5 text-brand-300" />
+                <span>Supplier Dashboard</span>
+                <ArrowRight className="size-3 text-white/70" />
+              </Link>
+            ) : !user ? (
+              <Link
+                to="/supplier/register"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
+              >
+                <TrendingUp className="size-3.5 text-brand-300" />
+                <span>Start Selling</span>
+                <ArrowRight className="size-3 text-white/70" />
+              </Link>
+            ) : null}
 
             <Link
-              to={user ? "/buyer" : "/login"}
+              to={user ? ROLE_HOME[user.role] || "/buyer" : "/login"}
               className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
             >
               <UserCheck className="size-3.5 text-brand-300" />

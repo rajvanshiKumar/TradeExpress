@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Section from "./Section";
 import Button from "../common/Button";
+import useAuth from "../../hooks/useAuth";
 
 const BUYERS = [
   {
@@ -94,6 +95,10 @@ function Column({ title, items, cta, dark }) {
 
 /** Buyer and supplier value propositions (no testimonials: none exist yet). */
 export default function Benefits() {
+  const { user } = useAuth();
+  const isSupplier = user?.role === "supplier";
+  const isBuyer = user?.role === "buyer";
+
   return (
     <Section
       id="home-benefits"
@@ -108,9 +113,15 @@ export default function Benefits() {
           title="For buyers"
           items={BUYERS}
           cta={
-            <Button to="/register" variant="navy">
-              Join as a Buyer
-            </Button>
+            isBuyer ? (
+              <Button to="/buyer" variant="navy">
+                Go to Buyer Dashboard
+              </Button>
+            ) : isSupplier ? null : (
+              <Button to="/register" variant="navy">
+                Join as a Buyer
+              </Button>
+            )
           }
         />
         <Column
@@ -118,9 +129,15 @@ export default function Benefits() {
           items={SUPPLIERS}
           dark
           cta={
-            <Button to="/register?role=supplier" variant="white">
-              Join as a Supplier
-            </Button>
+            isSupplier ? (
+              <Button to="/supplier/dashboard" variant="white">
+                Go to Supplier Dashboard
+              </Button>
+            ) : isBuyer ? null : (
+              <Button to="/supplier/register" variant="white">
+                Join as a Supplier
+              </Button>
+            )
           }
         />
       </div>

@@ -242,6 +242,18 @@ export default function UserMenu() {
               </Link>
             )}
 
+            {user.role === 'supplier' && (
+              <Link to="/supplier/profile" onClick={close} className={menuItemClass}>
+                <span className="flex items-center gap-2.5">
+                  <span className="flex size-6 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                    <Building2 className="size-3.5" aria-hidden="true" />
+                  </span>
+                  <span>Company Profile & KYC</span>
+                </span>
+                <ChevronRight className="size-3 text-slate-300 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+              </Link>
+            )}
+
             <Link to="/help" onClick={close} className={menuItemClass}>
               <span className="flex items-center gap-2.5">
                 <span className="flex size-6 items-center justify-center rounded-lg bg-slate-100 text-slate-700 shrink-0 group-hover:bg-slate-700 group-hover:text-white transition-colors">

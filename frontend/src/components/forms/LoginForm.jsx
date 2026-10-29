@@ -768,24 +768,48 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       {!isAdmin ? (
         <div className="pt-3 border-t border-slate-100 text-center space-y-2">
           <p className="text-xs text-slate-600">
-            Don't have an account yet?
+            {role === 'supplier'
+              ? "New supplier on TradeExpress?"
+              : role === 'buyer'
+              ? "New buyer on TradeExpress?"
+              : "Don't have an account yet?"}
           </p>
           <div className="flex items-center justify-center gap-3 text-xs">
-            <Link
-              to="/buyer/register"
-              className="inline-flex items-center gap-1 font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
-            >
-              <span>Join as Buyer</span>
-              <ArrowRight className="h-3 w-3" />
-            </Link>
-            <span className="text-slate-300">|</span>
-            <Link
-              to="/supplier/register"
-              className="inline-flex items-center gap-1 font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
-            >
-              <span>Join as Supplier</span>
-              <ArrowRight className="h-3 w-3" />
-            </Link>
+            {role === 'supplier' ? (
+              <Link
+                to="/supplier/register"
+                className="inline-flex items-center gap-1 font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
+              >
+                <span>Join as a Supplier</span>
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            ) : role === 'buyer' ? (
+              <Link
+                to="/buyer/register"
+                className="inline-flex items-center gap-1 font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
+              >
+                <span>Join as Buyer</span>
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            ) : (
+              <>
+                <Link
+                  to="/buyer/register"
+                  className="inline-flex items-center gap-1 font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
+                >
+                  <span>Join as Buyer</span>
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+                <span className="text-slate-300">|</span>
+                <Link
+                  to="/supplier/register"
+                  className="inline-flex items-center gap-1 font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
+                >
+                  <span>Join as a Supplier</span>
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </>
+            )}
           </div>
         </div>
       ) : null}
