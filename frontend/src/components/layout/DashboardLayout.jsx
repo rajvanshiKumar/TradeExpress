@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { PageSkeleton } from '../common/Skeleton';
-import { Boxes, Building2, ChartColumn, FileText, Heart, Info, LayoutDashboard, LayoutGrid, MapPin, MessageSquare, Package, Scale, Settings, ShieldCheck, Users } from 'lucide-react';
+import { Boxes, Building2, ChartColumn, FileText, Heart, Info, LayoutDashboard, LayoutGrid, MapPin, MessageSquare, Package, Scale, Settings, ShieldCheck, Users, Truck, CircleDollarSign, Bell, User, ClipboardList } from 'lucide-react';
 import AnnouncementBar from './AnnouncementBar';
 import Header from './Header';
 import Footer from './Footer';
@@ -12,9 +12,9 @@ import useAuth from '../../hooks/useAuth';
 import useProducts from '../../hooks/useProducts';
 import { dashboardNav } from '../../data/navigation';
 
-const ICONS = { LayoutDashboard, Package, FileText, Scale, MessageSquare, Heart, MapPin, Settings, Boxes, ChartColumn, Building2, Users, LayoutGrid, ShieldCheck };
+const ICONS = { LayoutDashboard, Package, FileText, Scale, MessageSquare, Heart, MapPin, Settings, Boxes, ChartColumn, Building2, Users, LayoutGrid, ShieldCheck, Truck, CircleDollarSign, Bell, User, ClipboardList };
 
-const TITLES = { buyer: 'Buyer workspace', supplier: 'Supplier portal', admin: 'Admin console' };
+const TITLES = { buyer: 'Buyer workspace', supplier: 'Supplier Enterprise Portal', admin: 'Admin console' };
 const NOTES = {
   buyer: 'Your orders, quotes and saved items are stored in this browser.',
   supplier: 'Catalogue changes go live in the marketplace immediately, in this browser.',

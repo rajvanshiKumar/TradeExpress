@@ -1,9 +1,11 @@
 import http from 'http';
 import https from 'https';
+import app from '../src/app.js';
 import prisma from '../src/config/db.js';
 import { clearVerificationCache } from '../src/services/verificationService.js';
 
-const BASE_URL = 'http://localhost:5000/api';
+let BASE_URL = 'http://127.0.0.1:5000/api';
+let server = null;
 
 function request(path, options = {}, body = null) {
   return new Promise((resolve, reject) => {
@@ -62,6 +64,14 @@ function assert(condition, message) {
 }
 
 async function runTests() {
+  await new Promise((resolve) => {
+    server = app.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      BASE_URL = `http://127.0.0.1:${port}/api`;
+      resolve();
+    });
+  });
+
   console.log('\n============================================================');
   console.log('PAN–Aadhaar Link Status API & Verification Test Suite');
   console.log('============================================================\n');
@@ -244,12 +254,19 @@ async function runTests() {
   console.log(`Results: ${passed} passed, ${failed} failed`);
   console.log('============================================================\n');
 
+  if (server) {
+    server.close();
+  }
+
   if (failed > 0) {
     process.exit(1);
   }
 }
 
 runTests().catch((err) => {
+  if (server) {
+    server.close();
+  }
   console.error('Test Suite encountered fatal error:', err);
   process.exit(1);
 });

@@ -43,6 +43,11 @@ const SupplierInquiries = lazy(() => import('../pages/supplier/SupplierInquiries
 const SupplierAnalytics = lazy(() => import('../pages/supplier/SupplierAnalytics'));
 const SupplierSettings = lazy(() => import('../pages/supplier/SupplierSettings'));
 const SupplierVerification = lazy(() => import('../pages/supplier/SupplierVerification'));
+const SupplierQuotations = lazy(() => import('../pages/supplier/SupplierQuotations'));
+const SupplierShipping = lazy(() => import('../pages/supplier/SupplierShipping'));
+const SupplierPayments = lazy(() => import('../pages/supplier/SupplierPayments'));
+const SupplierProfile = lazy(() => import('../pages/supplier/SupplierProfile'));
+const SupplierNotifications = lazy(() => import('../pages/supplier/SupplierNotifications'));
 const AdminDashboard = lazy(() => import('../pages/admin/AdminDashboard'));
 const AdminProducts = lazy(() => import('../pages/admin/AdminProducts'));
 const AdminCompanies = lazy(() => import('../pages/admin/AdminCompanies'));
@@ -142,6 +147,18 @@ export default function AppRoutes() {
             <Route path="/supplier/inquiries" element={<SupplierInquiries />} />
             <Route path="/supplier/analytics" element={<SupplierAnalytics />} />
             <Route path="/supplier/settings" element={<SupplierSettings />} />
+            <Route path="/supplier/dashboard" element={<SupplierDashboard />} />
+            <Route path="/supplier/quotations" element={<SupplierQuotations />} />
+            <Route path="/supplier/shipping" element={<SupplierShipping />} />
+            <Route path="/supplier/payments" element={<SupplierPayments />} />
+            <Route path="/supplier/profile" element={<SupplierProfile />} />
+            <Route path="/supplier/notifications" element={<SupplierNotifications />} />
+            <Route path="/supplier/dashboard" element={<SupplierDashboard />} />
+            <Route path="/supplier/quotations" element={<SupplierQuotations />} />
+            <Route path="/supplier/shipping" element={<SupplierShipping />} />
+            <Route path="/supplier/payments" element={<SupplierPayments />} />
+            <Route path="/supplier/profile" element={<SupplierProfile />} />
+            <Route path="/supplier/notifications" element={<SupplierNotifications />} />
             <Route path="/supplier/verification" element={<SupplierVerification />} />
           </Route>
         </Route>

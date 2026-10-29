@@ -154,3 +154,13 @@ export async function apiDelete(path, options) {
   return request('DELETE', path, null, options);
 }
 
+
+const apiClient = {
+  get: apiGet,
+  post: apiPost,
+  put: apiPut,
+  patch: apiPatch,
+  delete: apiDelete,
+};
+
+export default apiClient;

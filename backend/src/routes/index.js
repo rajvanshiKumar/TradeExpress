@@ -19,6 +19,7 @@ import ticketRoutes from './ticketRoutes.js';
 import superAdminRoutes from './superAdminRoutes.js';
 import messageRoutes from './messageRoutes.js';
 import verificationRoutes from './verificationRoutes.js';
+import supplierRoutes from './supplierRoutes.js';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.use('/payments', paymentRoutes);
 router.use('/tracking', trackingRoutes);
 router.use('/cart', cartRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/supplier', supplierRoutes);
 router.use('/supplier/products', supplierProductRoutes);
 router.use('/supplier/orders', supplierOrderRoutes);
 router.use('/admin', adminRoutes);

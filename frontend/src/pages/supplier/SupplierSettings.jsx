@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save } from 'lucide-react';
+import { Save, Lock, ShieldCheck, KeyRound, LogOut } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Input, { Textarea } from '../../components/common/Input';
 import Select from '../../components/common/Select';
@@ -8,9 +8,11 @@ import CompanyLogo from '../../components/common/CompanyLogo';
 import SupplierGuard from './SupplierGuard';
 import useProducts from '../../hooks/useProducts';
 import useNotifications from '../../hooks/useNotifications';
+import useAuth from '../../hooks/useAuth';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { BUSINESS_TYPES, COUNTRIES } from '../../utils/constants';
 import { focusFirstError, hasErrors, rules, validate } from '../../utils/validators';
+import { apiPost } from '../../services/apiClient';
 
 const RESPONSE_TIMES = ['Within 6 hours', 'Within 12 hours', 'Within 24 hours', 'Within 48 hours'];
 const EMPLOYEES = ['1–10', '11–50', '51–200', '201–500', '501–1,000', '1,000+'];
@@ -29,6 +31,8 @@ const schema = {
 function Settings({ company }) {
   const { updateCompany } = useProducts();
   const { showToast } = useNotifications();
+  const { logout, user } = useAuth();
+
   const [values, setValues] = useState({
     name: company.name, city: company.city ?? '', country: company.country ?? '', industry: company.industry ?? '', businessType: company.businessType,
     established: String(company.established ?? ''), employees: company.employees ?? '1–10', responseTime: company.responseTime ?? 'Within 24 hours', color: company.color ?? '#123F25',
@@ -36,6 +40,12 @@ function Settings({ company }) {
     contactPerson: company.contact?.person ?? '', contactEmail: company.contact?.email ?? '', contactPhone: company.contact?.phone ?? '', contactAddress: company.contact?.address ?? '',
   });
   const [errors, setErrors] = useState({});
+
+  // Password Change State
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const set = (field) => (event) => {
     setValues((previous) => ({ ...previous, [field]: event.target.value }));
@@ -58,12 +68,55 @@ function Settings({ company }) {
     return showToast('Company profile saved. Your public profile is updated.');
   };
 
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    if (!currentPassword || !newPassword) {
+      showToast('Please fill in both current and new password.', 'error');
+      return;
+    }
+    if (newPassword.length < 8) {
+      showToast('New password must be at least 8 characters.', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast('New passwords do not match.', 'error');
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      await apiPost('auth/change-password', {
+        currentPassword,
+        newPassword,
+      });
+      showToast('Password changed successfully! Keep your credentials secure.', 'success');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      showToast(err.message || 'Failed to update password. Verify current password.', 'error');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   return (
-    <div>
-      <SectionHeading title="Company settings" description="Edit the public profile buyers see in the supplier directory." actions={<Button to={`/suppliers/${company.slug}`} variant="outline" size="sm">View public profile</Button>} />
+    <div className="space-y-8">
+      <SectionHeading
+        title="Settings & Account Security"
+        description="Manage company details, access credentials, and security controls."
+        actions={
+          <Button to={`/suppliers/${company.slug || company.id}`} variant="outline" size="sm">
+            View public profile
+          </Button>
+        }
+      />
+
       <form onSubmit={submit} noValidate className="space-y-6">
         <fieldset className="ts-card p-5 sm:p-6">
-          <legend className="float-left mb-4 w-full font-display text-base font-bold text-navy-900">Company profile</legend>
+          <legend className="float-left mb-4 w-full font-display text-base font-bold text-navy-900">
+            Company Profile & Industry
+          </legend>
           <div className="grid grid-cols-1 clear-both gap-4 sm:grid-cols-2">
             <Input id="company-name" label="Company name" required value={values.name} onChange={set('name')} error={errors.name} />
             <Input id="company-industry" label="Industry" required value={values.industry} onChange={set('industry')} error={errors.industry} />
@@ -80,35 +133,130 @@ function Settings({ company }) {
         </fieldset>
 
         <fieldset className="ts-card p-5 sm:p-6">
-          <legend className="float-left mb-4 w-full font-display text-base font-bold text-navy-900">Logo colour</legend>
+          <legend className="float-left mb-4 w-full font-display text-base font-bold text-navy-900">
+            Logo & Brand Theme
+          </legend>
           <div className="flex clear-both flex-wrap items-center gap-4">
             <CompanyLogo company={{ ...company, color: values.color, initials: values.name.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toUpperCase() }} size="lg" />
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Logo colour">
               {COLOURS.map((colour) => (
-                <button key={colour} type="button" role="radio" aria-checked={values.color === colour} aria-label={`Colour ${colour}`} onClick={() => setValues((previous) => ({ ...previous, color: colour }))} style={{ backgroundColor: colour }} className={`size-9 rounded-full ring-offset-2 ${values.color === colour ? 'ring-2 ring-brand-500' : ''}`} />
+                <button
+                  key={colour}
+                  type="button"
+                  role="radio"
+                  aria-checked={values.color === colour}
+                  aria-label={`Colour ${colour}`}
+                  onClick={() => setValues((previous) => ({ ...previous, color: colour }))}
+                  style={{ backgroundColor: colour }}
+                  className={`size-9 rounded-full ring-offset-2 ${values.color === colour ? 'ring-2 ring-brand-500' : ''}`}
+                />
               ))}
             </div>
           </div>
         </fieldset>
 
         <fieldset className="ts-card p-5 sm:p-6">
-          <legend className="float-left mb-4 w-full font-display text-base font-bold text-navy-900">Contact details</legend>
+          <legend className="float-left mb-4 w-full font-display text-base font-bold text-navy-900">
+            Commercial Contact Details
+          </legend>
           <div className="grid grid-cols-1 clear-both gap-4 sm:grid-cols-2">
             <Input id="company-contactPerson" label="Contact person" value={values.contactPerson} onChange={set('contactPerson')} />
             <Input id="company-contactEmail" label="Contact email" type="email" value={values.contactEmail} onChange={set('contactEmail')} error={errors.contactEmail} />
             <Input id="company-contactPhone" label="Contact phone" type="tel" value={values.contactPhone} onChange={set('contactPhone')} error={errors.contactPhone} />
             <Input id="company-contactAddress" label="Address" value={values.contactAddress} onChange={set('contactAddress')} />
           </div>
-          <p className="mt-3 text-xs text-muted">Shown on your public company profile.</p>
         </fieldset>
 
-        <div className="flex justify-end"><Button type="submit" size="lg" icon={Save}>Save company profile</Button></div>
+        <div className="flex justify-end">
+          <Button type="submit" size="md" icon={Save}>
+            Save Company Profile
+          </Button>
+        </div>
       </form>
+
+      {/* Security & Authentication Credentials Card */}
+      <div className="ts-card p-5 sm:p-6 space-y-4">
+        <div className="flex items-center gap-2 border-b pb-3">
+          <KeyRound className="size-5 text-emerald-800" />
+          <div>
+            <h3 className="font-bold text-sm text-navy-950">Account Security & Credentials</h3>
+            <p className="text-xs text-muted">Update your portal password and manage active authentication sessions.</p>
+          </div>
+        </div>
+
+        <form onSubmit={handlePasswordChange} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <div>
+            <label className="font-bold text-xs text-navy-900 block mb-1">Current Password</label>
+            <input
+              type="password"
+              required
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-navy-950 focus:border-emerald-700 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="font-bold text-xs text-navy-900 block mb-1">New Password</label>
+            <input
+              type="password"
+              required
+              minLength={8}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="At least 8 characters"
+              className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-navy-950 focus:border-emerald-700 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="font-bold text-xs text-navy-900 block mb-1">Confirm New Password</label>
+            <input
+              type="password"
+              required
+              minLength={8}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter password"
+              className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-navy-950 focus:border-emerald-700 focus:outline-none"
+            />
+          </div>
+
+          <div className="sm:col-span-3 flex justify-end">
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              icon={Lock}
+              disabled={changingPassword}
+            >
+              {changingPassword ? 'Updating...' : 'Update Password'}
+            </Button>
+          </div>
+        </form>
+
+        <div className="border-t pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div>
+            <span className="font-bold text-navy-900 block">Session Management</span>
+            <span className="text-muted text-[11px]">Signed in as: {user?.email} ({user?.role?.toUpperCase()})</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={LogOut}
+            onClick={logout}
+            className="text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+          >
+            Sign out of all sessions
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
 
 export default function SupplierSettings() {
-  useDocumentTitle('Company settings');
+  useDocumentTitle('Settings & Security · TradeExpress');
   return <SupplierGuard>{(company) => <Settings key={company.id} company={company} />}</SupplierGuard>;
 }

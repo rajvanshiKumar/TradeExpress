@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build && node scripts/copy404.mjs",
     "preview": "vite preview",
-    "admin:hash": "node scripts/hash-admin-password.mjs"
+    "admin:hash": "node scripts/hash-admin-password.mjs",
+    "test": "node --test tests/**/*.test.js"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

@@ -1,6 +1,24 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Boxes, CircleDollarSign, FileText, MessageSquare, Package, Plus, TriangleAlert, Crown, Check, Scale, TrendingUp, ShieldCheck } from 'lucide-react';
+import {
+  Boxes,
+  CircleDollarSign,
+  FileText,
+  MessageSquare,
+  Package,
+  Plus,
+  TriangleAlert,
+  Crown,
+  Check,
+  Scale,
+  TrendingUp,
+  ShieldCheck,
+  Truck,
+  ClipboardList,
+  ArrowRight,
+  ExternalLink,
+  Percent,
+} from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import StatCard from '../../components/common/StatCard';
 import Button from '../../components/common/Button';
@@ -18,6 +36,7 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { companyOrderValue } from '../../utils/analytics';
 import { formatDate } from '../../utils/formatDate';
 import { LOW_STOCK_FACTOR } from '../../utils/constants';
+import { fetchSupplierOverview } from '../../services/supplierDashboardApi';
 
 function Overview({ company, products }) {
   const { user } = useAuth();
@@ -27,14 +46,82 @@ function Overview({ company, products }) {
   const { money } = useCurrency();
   const { products: allCatalogueProducts, getCompany } = useProducts();
 
-  const myOrders = orders.filter((order) => order.items.some((item) => item.companyId === company.id));
-  const revenue = myOrders.filter((order) => order.status !== 'Cancelled').reduce((sum, order) => sum + companyOrderValue(order, company.id), 0);
-  const myInquiries = inquiries.filter((inquiry) => inquiry.companyId === company.id);
-  const openInquiries = myInquiries.filter((inquiry) => ['Submitted', 'Viewed'].includes(inquiry.status));
-  const lowStock = products.filter((product) => product.stock < product.moq * LOW_STOCK_FACTOR);
+  const [liveData, setLiveData] = useState(null);
+  const [loadingLive, setLoadingLive] = useState(true);
   const [showPlansModal, setShowPlansModal] = useState(false);
 
-  // Competitor benchmarking / similar products in the marketplace from other sellers
+  useEffect(() => {
+    let mounted = true;
+    fetchSupplierOverview()
+      .then((res) => {
+        if (mounted && res) {
+          setLiveData(res);
+        }
+      })
+      .catch((err) => {
+        console.warn('Supplier live overview load notice:', err.message);
+      })
+      .finally(() => {
+        if (mounted) setLoadingLive(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Compute fallback or live metrics
+  const myOrders = orders.filter((order) => order.items.some((item) => item.companyId === company.id));
+  const fallbackRevenue = myOrders.filter((order) => order.status !== 'Cancelled').reduce((sum, order) => sum + companyOrderValue(order, company.id), 0);
+  const myInquiries = inquiries.filter((inquiry) => inquiry.companyId === company.id);
+  const fallbackLowStock = products.filter((product) => product.stock < product.moq * LOW_STOCK_FACTOR);
+
+  const metrics = liveData?.metrics || {
+    totalProducts: products.length,
+    activeProducts: products.filter((p) => p.status === 'Active').length,
+    pendingApproval: 0,
+    rejectedProducts: 0,
+    lowStockCount: fallbackLowStock.length,
+    totalOrders: myOrders.length,
+    pendingOrders: myOrders.filter((o) => ['Pending', 'Processing'].includes(o.status)).length,
+    completedOrders: myOrders.filter((o) => o.status === 'Delivered').length,
+    grossSales: fallbackRevenue,
+    pendingPayouts: 0,
+    releasedPayouts: fallbackRevenue,
+    netEarnings: Math.round(fallbackRevenue * 0.975),
+    openInquiriesCount: myInquiries.length,
+    openQuotations: 0,
+    expiringQuotations: 0,
+    unreadMessages: unreadCount,
+  };
+
+  const verification = liveData?.verification || {
+    isVerified: company.isVerified || user?.isVerified,
+    isPhoneVerified: user?.isPhoneVerified,
+    kycStatus: user?.kycStatus || 'NOT_SUBMITTED',
+    panAadhaarStatus: company.panAadhaarStatus || user?.panAadhaarStatus || 'NOT_STARTED',
+    panAadhaarLinked: company.panAadhaarLinked || user?.panAadhaarLinked,
+    panAadhaarMaskedPan: company.panAadhaarMaskedPan || user?.panAadhaarMaskedPan,
+    gstin: company.gstin || user?.gstin,
+    pan: company.pan || user?.pan,
+    supplierCode: company.supplierCode || user?.supplierCode || 'SUP-ACTIVE',
+  };
+
+  const recentOrders = liveData?.recentOrders || myOrders.slice(0, 5).map((o) => ({
+    id: o.id,
+    orderNumber: o.id,
+    buyerName: o.buyerName,
+    buyerCompany: o.buyerCompany,
+    total: companyOrderValue(o, company.id),
+    orderStatus: o.status,
+    paymentStatus: o.paymentStatus || 'PAID',
+    createdAt: o.createdAt,
+    firstProduct: o.items?.[0]?.name || 'Order product',
+  }));
+
+  const recentInquiries = liveData?.recentInquiries || myInquiries.slice(0, 5);
+  const lowStockAlerts = liveData?.lowStockAlerts || fallbackLowStock.slice(0, 5);
+
+  // Competitor benchmarking
   const marketCompetitors = useMemo(() => {
     if (!products || products.length === 0) return [];
     const otherProducts = (allCatalogueProducts || []).filter((p) => p.companyId !== company.id);
@@ -49,7 +136,6 @@ function Overview({ company, products }) {
       });
 
       if (competing.length > 0) {
-        // Enforce distinct companies: Don't repeat same company product
         const seenCompanies = new Set();
         const distinct = [];
         for (const c of competing) {
@@ -76,9 +162,75 @@ function Overview({ company, products }) {
 
   return (
     <div className="space-y-8">
-      <SectionHeading title={company.name} description="Supplier overview" actions={<><Button to={`/suppliers/${company.slug}`} variant="outline" size="sm">View public profile</Button><Button to="/supplier/products/new" size="sm" icon={Plus}>Add product</Button></>} />
+      <SectionHeading
+        title={company.name || 'TradeExpress Supplier HQ'}
+        description="Supplier Enterprise Command Center"
+        actions={
+          <>
+            <Button to={`/suppliers/${company.slug || company.id}`} variant="outline" size="sm">
+              View Public Catalog
+            </Button>
+            <Button to="/supplier/products/new" size="sm" icon={Plus} variant="primary">
+              Add New Product
+            </Button>
+          </>
+        }
+      />
 
-      {/* Subscription Tier Banner */}
+      {/* Quick Action Navigation Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <Link
+          to="/supplier/products/new"
+          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-navy-950 shadow-2xs hover:border-emerald-600 hover:text-emerald-800 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0">
+            <Plus className="size-4" />
+          </div>
+          <span>Add Product</span>
+        </Link>
+
+        <Link
+          to="/supplier/quotations"
+          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-navy-950 shadow-2xs hover:border-emerald-600 hover:text-emerald-800 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-blue-50 text-blue-800 flex items-center justify-center shrink-0">
+            <ClipboardList className="size-4" />
+          </div>
+          <span>My Quotations ({metrics.openQuotations})</span>
+        </Link>
+
+        <Link
+          to="/supplier/shipping"
+          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-navy-950 shadow-2xs hover:border-emerald-600 hover:text-emerald-800 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center shrink-0">
+            <Truck className="size-4" />
+          </div>
+          <span>Fulfillment ({metrics.pendingOrders})</span>
+        </Link>
+
+        <Link
+          to="/supplier/payments"
+          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-navy-950 shadow-2xs hover:border-emerald-600 hover:text-emerald-800 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0">
+            <CircleDollarSign className="size-4" />
+          </div>
+          <span>Escrow & Payouts</span>
+        </Link>
+
+        <Link
+          to="/supplier/verification"
+          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-navy-950 shadow-2xs hover:border-emerald-600 hover:text-emerald-800 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-slate-50 text-slate-800 flex items-center justify-center shrink-0">
+            <ShieldCheck className="size-4" />
+          </div>
+          <span>Verification Status</span>
+        </Link>
+      </div>
+
+      {/* Tier Banner */}
       <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex size-11 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm font-black text-sm">
@@ -87,10 +239,12 @@ function Overview({ company, products }) {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-navy-950 text-sm">Gold Merchant Membership · Active</h3>
-              <span className="rounded-full bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 text-[10px]">VERIFIED TIER</span>
+              <span className="rounded-full bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 text-[10px]">
+                {verification.isVerified ? 'VERIFIED MERCHANT' : 'KYC PENDING'}
+              </span>
             </div>
             <p className="text-xs text-muted mt-0.5">
-              Active Catalogue: <strong className="text-navy-900">{products.length} of 100</strong> listings used · Priority RFQ matching · 0% escrow delay
+              Active Catalogue: <strong className="text-navy-900">{metrics.activeProducts} of {metrics.totalProducts}</strong> listings active · Priority buyer inquiries · Direct Escrow
             </p>
           </div>
         </div>
@@ -101,76 +255,105 @@ function Overview({ company, products }) {
         </div>
       </div>
 
+      {/* 4-Card Primary Metrics Grid */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard icon={Boxes} label="Products listed" value={products.length} hint={`${products.filter((product) => product.status === 'Active').length} active`} to="/supplier/products" />
-        <StatCard icon={Package} tone="brand" label="Orders" value={myOrders.length} hint={`${myOrders.filter((order) => order.status === 'Pending').length} awaiting confirmation`} to="/supplier/orders" />
-        <StatCard icon={CircleDollarSign} tone="success" label="Order value" value={money(revenue)} hint="Excludes cancelled orders" to="/supplier/analytics" />
-        <StatCard icon={FileText} tone="warning" label="Open inquiries" value={openInquiries.length} hint={`${unreadCount} unread ${unreadCount === 1 ? 'message' : 'messages'}`} to="/supplier/inquiries" />
+        <StatCard
+          icon={Boxes}
+          label="Catalog Products"
+          value={metrics.totalProducts}
+          hint={`${metrics.activeProducts} active · ${metrics.pendingApproval || 0} pending review`}
+          to="/supplier/products"
+        />
+        <StatCard
+          icon={Package}
+          tone="brand"
+          label="Purchase Orders"
+          value={metrics.totalOrders}
+          hint={`${metrics.pendingOrders} awaiting fulfillment`}
+          to="/supplier/orders"
+        />
+        <StatCard
+          icon={CircleDollarSign}
+          tone="success"
+          label="Gross Confirmed Sales"
+          value={money(metrics.grossSales)}
+          hint={`${money(metrics.pendingPayouts || 0)} held in escrow`}
+          to="/supplier/payments"
+        />
+        <StatCard
+          icon={FileText}
+          tone="warning"
+          label="Buyer Inquiries & Quotes"
+          value={metrics.openInquiriesCount}
+          hint={`${metrics.openQuotations} open quotes · ${metrics.expiringQuotations} expiring`}
+          to="/supplier/quotations"
+        />
       </div>
 
-      {/* Account & Statutory Compliance Card */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      {/* Statutory Compliance & Identity Verification Card */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-4">
           <div>
             <h3 className="font-bold text-navy-950 text-sm flex items-center gap-2">
               <ShieldCheck className="size-4 text-emerald-700" />
-              Account & Statutory Compliance Details
+              Statutory Compliance & Identity Credential Status
             </h3>
             <p className="text-xs text-muted mt-0.5">
-              Verified identity credentials and statutory compliance status.
+              Verified business credentials and PAN-Aadhaar linkage status.
             </p>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-mono font-semibold text-slate-700">
-              Code: {company.supplierCode || user?.supplierCode || 'SUP-ACTIVE'}
+              Code: {verification.supplierCode}
             </span>
-            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-              company.isVerified || user?.isVerified
-                ? 'bg-emerald-100 text-emerald-800'
-                : 'bg-amber-100 text-amber-800'
-            }`}>
-              {company.isVerified || user?.isVerified ? 'Verified Merchant' : 'KYC Under Review'}
-            </span>
+            <Link
+              to="/supplier/verification"
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                verification.isVerified
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {verification.isVerified ? '✓ Verified Merchant' : 'Review Documents →'}
+            </Link>
           </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs">
           <div>
-            <span className="text-muted block">Legal Entity / Company:</span>
-            <span className="font-semibold text-navy-900">{company.name}</span>
+            <span className="text-muted block">Legal Entity Name:</span>
+            <span className="font-semibold text-navy-900">{company.name || user?.company || 'Supplier Entity'}</span>
           </div>
           <div>
-            <span className="text-muted block">Business Type:</span>
-            <span className="font-semibold text-navy-900">{company.businessType || user?.businessType || 'Manufacturer'}</span>
-          </div>
-          <div>
-            <span className="text-muted block">PAN Card Number:</span>
+            <span className="text-muted block">GSTIN Number:</span>
             <span className="font-mono font-semibold text-navy-900">
-              {company.pan || user?.pan ? company.pan || user?.pan : '—'}
+              {verification.gstin || company.gstin || '—'}
+            </span>
+          </div>
+          <div>
+            <span className="text-muted block">PAN Number:</span>
+            <span className="font-mono font-semibold text-navy-900">
+              {verification.pan || company.pan || '—'}
             </span>
           </div>
           <div>
             <span className="text-muted block">Aadhaar (Masked):</span>
             <span className="font-mono font-semibold text-navy-900">
-              {company.aadhaarLast4 || user?.aadhaarLast4
-                ? `•••• •••• ${company.aadhaarLast4 || user?.aadhaarLast4}`
+              {user?.aadhaarLast4 || company.aadhaarLast4
+                ? `•••• •••• ${user?.aadhaarLast4 || company.aadhaarLast4}`
                 : '—'}
             </span>
           </div>
           <div>
             <span className="text-muted block">PAN–Aadhaar Link:</span>
             <span className="inline-flex items-center gap-1 mt-0.5">
-              {(company.panAadhaarStatus === 'LINKED' || user?.panAadhaarStatus === 'LINKED') ? (
+              {verification.panAadhaarStatus === 'LINKED' ? (
                 <span className="rounded-full bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 text-[11px]">
-                  ✓ Linked {company.panAadhaarMaskedPan || user?.panAadhaarMaskedPan ? `(${company.panAadhaarMaskedPan || user?.panAadhaarMaskedPan})` : ''}
+                  ✓ Linked {verification.panAadhaarMaskedPan ? `(${verification.panAadhaarMaskedPan})` : ''}
                 </span>
-              ) : (company.panAadhaarStatus === 'NOT_LINKED' || user?.panAadhaarStatus === 'NOT_LINKED') ? (
+              ) : verification.panAadhaarStatus === 'NOT_LINKED' ? (
                 <span className="rounded-full bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 text-[11px]">
                   ⚠ Not Linked
-                </span>
-              ) : (company.panAadhaarStatus === 'UNABLE_TO_VERIFY' || user?.panAadhaarStatus === 'UNABLE_TO_VERIFY') ? (
-                <span className="rounded-full bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 text-[11px]">
-                  Unable to Verify
                 </span>
               ) : (
                 <span className="rounded-full bg-slate-100 text-slate-500 font-medium px-2 py-0.5 text-[11px]">
@@ -180,86 +363,83 @@ function Overview({ company, products }) {
             </span>
           </div>
         </div>
-        <p className="mt-3 border-t border-slate-100 pt-2 text-[10px] text-slate-400">
-          * Statutory compliance notice: PAN–Aadhaar linkage reflects ITD registry alignment only and is kept confidential. It does not replace full KYC identity verification or confer Gold Supplier status.
-        </p>
       </div>
 
-      {/* Plans Comparison Modal */}
-      <Modal open={showPlansModal} onClose={() => setShowPlansModal(false)} title="TradeExpress Supplier Plans" className="max-w-2xl">
-        <div className="space-y-4">
-          <p className="text-xs text-muted">Compare wholesale merchant tiers and listing capacity:</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Free */}
-            <div className="rounded-xl border p-4 bg-white space-y-2 text-xs">
-              <span className="font-bold text-slate-700">Free Tier</span>
-              <p className="text-lg font-black text-navy-900">₹0 <span className="text-[10px] font-normal text-muted">/mo</span></p>
-              <ul className="space-y-1.5 text-muted pt-2 border-t">
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Up to 5 listings</li>
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Standard RFQs</li>
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Standard Escrow</li>
-              </ul>
-            </div>
-
-            {/* Silver */}
-            <div className="rounded-xl border p-4 bg-white space-y-2 text-xs">
-              <span className="font-bold text-slate-700">Silver Verified</span>
-              <p className="text-lg font-black text-navy-900">₹4,999 <span className="text-[10px] font-normal text-muted">/yr</span></p>
-              <ul className="space-y-1.5 text-muted pt-2 border-t">
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Up to 25 listings</li>
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Verified Badge</li>
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Priority RFQ alerts</li>
-              </ul>
-            </div>
-
-            {/* Gold */}
-            <div className="rounded-xl border-2 border-amber-400 bg-amber-50/50 p-4 space-y-2 text-xs relative">
-              <span className="absolute -top-2.5 right-3 bg-amber-500 text-white font-bold text-[9px] px-2 py-0.5 rounded-full">ACTIVE</span>
-              <span className="font-bold text-amber-900">Gold Verified</span>
-              <p className="text-lg font-black text-navy-900">₹14,999 <span className="text-[10px] font-normal text-muted">/yr</span></p>
-              <ul className="space-y-1.5 text-navy-900 pt-2 border-t border-amber-200">
-                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> 100 listings allowed</li>
-                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Instant Escrow Payout</li>
-                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Dedicated Account Mgr</li>
-                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Top Supplier Placement</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </Modal>
-
+      {/* Recent Orders & Low Stock Tables */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {/* Recent Orders */}
         <section className="ts-card overflow-hidden" aria-labelledby="supplier-recent-orders">
-          <div className="flex items-center justify-between px-5 py-4">
-            <h2 id="supplier-recent-orders" className="text-base font-bold">Recent orders</h2>
-            <Link to="/supplier/orders" className="text-sm font-semibold text-brand-600 hover:text-brand-700">Manage orders</Link>
+          <div className="flex items-center justify-between px-5 py-4 border-b">
+            <h2 id="supplier-recent-orders" className="text-sm font-bold text-navy-950">
+              Recent Purchase Orders
+            </h2>
+            <Link to="/supplier/orders" className="text-xs font-semibold text-emerald-800 hover:text-emerald-900">
+              Manage all orders →
+            </Link>
           </div>
-          {myOrders.length === 0 ? <EmptyState icon={Package} className="!py-10" title="No orders yet" text="Orders that include your products will appear here." /> : (
-            <ul className="divide-y border-t">
-              {myOrders.slice(0, 5).map((order) => (
-                <li key={order.id} className="flex items-center justify-between gap-3 px-5 py-3">
+          {recentOrders.length === 0 ? (
+            <EmptyState
+              icon={Package}
+              className="!py-10"
+              title="No orders placed yet"
+              text="When buyers purchase your products, orders appear here with fulfillment workflows."
+            />
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {recentOrders.map((order) => (
+                <li key={order.id} className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-slate-50/50">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-ink">{order.id} · {order.buyerName}</p>
-                    <p className="text-xs text-muted">{formatDate(order.createdAt)} · {money(companyOrderValue(order, company.id))}</p>
+                    <p className="truncate text-xs font-bold text-navy-900">
+                      {order.orderNumber} · {order.buyerCompany || order.buyerName}
+                    </p>
+                    <p className="text-[11px] text-muted mt-0.5">
+                      {formatDate(order.createdAt)} · {money(order.total)}
+                    </p>
                   </div>
-                  <StatusBadge status={order.status} />
+                  <div className="text-right shrink-0">
+                    <StatusBadge status={order.orderStatus} />
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </section>
 
+        {/* Low Stock Alerts */}
         <section className="ts-card overflow-hidden" aria-labelledby="supplier-low-stock">
-          <div className="flex items-center justify-between px-5 py-4">
-            <h2 id="supplier-low-stock" className="flex items-center gap-2 text-base font-bold"><TriangleAlert className="size-4 text-warning" aria-hidden="true" />Low stock</h2>
-            <Link to="/supplier/products" className="text-sm font-semibold text-brand-600 hover:text-brand-700">Manage inventory</Link>
+          <div className="flex items-center justify-between px-5 py-4 border-b">
+            <h2 id="supplier-low-stock" className="flex items-center gap-2 text-sm font-bold text-navy-950">
+              <TriangleAlert className="size-4 text-warning" aria-hidden="true" />
+              <span>Low-Stock Inventory Alerts</span>
+            </h2>
+            <Link to="/supplier/products" className="text-xs font-semibold text-emerald-800 hover:text-emerald-900">
+              Update inventory →
+            </Link>
           </div>
-          {lowStock.length === 0 ? <EmptyState icon={Boxes} className="!py-10" title="Stock levels look healthy" text="Products with fewer than two minimum orders in stock are listed here." /> : (
-            <ul className="divide-y border-t">
-              {lowStock.slice(0, 5).map((product) => (
-                <li key={product.id} className="flex items-center justify-between gap-3 px-5 py-3">
-                  <Link to={`/supplier/products/${product.id}/edit`} className="min-w-0 truncate text-sm font-semibold text-ink hover:text-brand-600">{product.name}</Link>
-                  <span className={`shrink-0 text-sm font-bold ${product.stock <= 0 ? 'text-danger' : 'text-warning'}`}>{product.stock.toLocaleString('en-IN')} left</span>
+          {lowStockAlerts.length === 0 ? (
+            <EmptyState
+              icon={Boxes}
+              className="!py-10"
+              title="Inventory levels are healthy"
+              text="No products are currently below safety threshold levels."
+            />
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {lowStockAlerts.map((product) => (
+                <li key={product.id} className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-slate-50/50">
+                  <Link
+                    to={`/supplier/products/${product.id}/edit`}
+                    className="min-w-0 truncate text-xs font-bold text-navy-900 hover:text-emerald-700"
+                  >
+                    {product.name}
+                  </Link>
+                  <span
+                    className={`shrink-0 text-xs font-bold ${
+                      product.stock <= 0 ? 'text-danger' : 'text-amber-700'
+                    }`}
+                  >
+                    {product.stock.toLocaleString('en-IN')} {product.unit || 'units'} left
+                  </span>
                 </li>
               ))}
             </ul>
@@ -267,17 +447,17 @@ function Overview({ company, products }) {
         </section>
       </div>
 
-      {/* Real-time Market Competitor Benchmarking Section */}
+      {/* Competitor Benchmarking */}
       {marketCompetitors.length > 0 && (
-        <section className="ts-card overflow-hidden" aria-labelledby="supplier-competitor-intelligence">
+        <section className="ts-card overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-navy-900/[0.08] bg-navy-50/30">
             <div>
-              <h2 id="supplier-competitor-intelligence" className="text-base font-bold text-navy-950 flex items-center gap-2">
-                <Scale className="size-4 text-brand-600" />
-                <span>Live Marketplace Competitor Intelligence & Benchmarking</span>
+              <h2 className="text-sm font-bold text-navy-950 flex items-center gap-2">
+                <Scale className="size-4 text-emerald-800" />
+                <span>Live Marketplace Wholesale Price Intelligence</span>
               </h2>
               <p className="text-xs text-muted mt-0.5">
-                Real-time wholesale pricing and MOQ comparison against other verified suppliers selling similar products.
+                Real-time competitor pricing and MOQ comparisons against other verified TradeExpress sellers.
               </p>
             </div>
             <Button
@@ -296,10 +476,12 @@ function Overview({ company, products }) {
               <div key={myProduct.id} className="rounded-xl border border-navy-900/[0.08] p-4 bg-white space-y-3 shadow-2xs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2.5">
                   <div className="min-w-0">
-                    <span className="text-[11px] font-bold text-brand-700 uppercase tracking-wider">Your Product</span>
+                    <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                      Your Product Listing
+                    </span>
                     <h3 className="font-bold text-sm text-navy-950 truncate">{myProduct.name}</h3>
                     <p className="text-xs text-navy-600">
-                      Your Base Price: <span className="font-bold text-navy-950">{money(myProduct.price)}</span> · MOQ: <span className="font-bold">{myProduct.moq} {myProduct.unit}s</span>
+                      Your Base Price: <strong className="text-navy-950">{money(myProduct.price)}</strong> · MOQ: <strong>{myProduct.moq} {myProduct.unit || 'units'}</strong>
                     </p>
                   </div>
                   <Button
@@ -313,15 +495,17 @@ function Overview({ company, products }) {
                 </div>
 
                 <div>
-                  <span className="text-[11px] font-semibold text-muted block mb-2">Competing Sellers in this Category:</span>
+                  <span className="text-[11px] font-semibold text-muted block mb-2">
+                    Competing Sellers in this Category:
+                  </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                     {competingListings.map((comp) => {
                       const isLowerPrice = comp.price < myProduct.price;
                       return (
                         <div key={comp.id} className="rounded-lg border bg-slate-50/60 p-2.5 text-xs space-y-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="font-bold text-navy-900 truncate">{comp.flag} {comp.companyName}</span>
-                          </div>
+                          <span className="font-bold text-navy-900 truncate block">
+                            {comp.flag} {comp.companyName}
+                          </span>
                           <p className="text-[11px] text-muted truncate">{comp.name}</p>
                           <div className="flex items-baseline justify-between pt-1 border-t">
                             <span className={`font-black ${isLowerPrice ? 'text-amber-700' : 'text-emerald-700'}`}>
@@ -340,33 +524,52 @@ function Overview({ company, products }) {
         </section>
       )}
 
-      <section className="ts-card overflow-hidden" aria-labelledby="supplier-recent-inquiries">
-        <div className="flex items-center justify-between px-5 py-4">
-          <h2 id="supplier-recent-inquiries" className="text-base font-bold">Latest inquiries</h2>
-          <div className="flex gap-4">
-            <Link to="/messages" className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy-900 hover:text-brand-600"><MessageSquare className="size-4" aria-hidden="true" />Messages</Link>
-            <Link to="/supplier/inquiries" className="text-sm font-semibold text-brand-600 hover:text-brand-700">View all</Link>
+      {/* Plans Modal */}
+      <Modal open={showPlansModal} onClose={() => setShowPlansModal(false)} title="TradeExpress Supplier Plans" className="max-w-2xl">
+        <div className="space-y-4 text-xs">
+          <p className="text-muted">Compare wholesale merchant tiers and listing capacity:</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-xl border p-4 bg-white space-y-2">
+              <span className="font-bold text-slate-700">Free Tier</span>
+              <p className="text-lg font-black text-navy-900">₹0 <span className="text-[10px] font-normal text-muted">/mo</span></p>
+              <ul className="space-y-1.5 text-muted pt-2 border-t text-[11px]">
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Up to 5 listings</li>
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Standard RFQs</li>
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Standard Escrow</li>
+              </ul>
+            </div>
+
+            <div className="rounded-xl border p-4 bg-white space-y-2">
+              <span className="font-bold text-slate-700">Silver Verified</span>
+              <p className="text-lg font-black text-navy-900">₹4,999 <span className="text-[10px] font-normal text-muted">/yr</span></p>
+              <ul className="space-y-1.5 text-muted pt-2 border-t text-[11px]">
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Up to 25 listings</li>
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Verified Badge</li>
+                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Priority RFQ alerts</li>
+              </ul>
+            </div>
+
+            <div className="rounded-xl border-2 border-amber-400 bg-amber-50/50 p-4 space-y-2 relative">
+              <span className="absolute -top-2.5 right-3 bg-amber-500 text-white font-bold text-[9px] px-2 py-0.5 rounded-full">
+                ACTIVE
+              </span>
+              <span className="font-bold text-amber-900">Gold Verified</span>
+              <p className="text-lg font-black text-navy-900">₹14,999 <span className="text-[10px] font-normal text-muted">/yr</span></p>
+              <ul className="space-y-1.5 text-navy-900 pt-2 border-t border-amber-200 text-[11px]">
+                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> 100 listings allowed</li>
+                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Instant Escrow Payout</li>
+                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Dedicated Account Mgr</li>
+                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Top Supplier Placement</li>
+              </ul>
+            </div>
           </div>
         </div>
-        {myInquiries.length === 0 ? <EmptyState icon={FileText} className="!py-10" title="No inquiries yet" text="Quote requests for your products will appear here." /> : (
-          <ul className="divide-y border-t">
-            {myInquiries.slice(0, 4).map((inquiry) => (
-              <li key={inquiry.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink">{inquiry.productName}</p>
-                  <p className="text-xs text-muted">{inquiry.buyerName} · {inquiry.quantity.toLocaleString('en-IN')} {inquiry.unit}s · {formatDate(inquiry.createdAt)}</p>
-                </div>
-                <StatusBadge status={inquiry.status} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      </Modal>
     </div>
   );
 }
 
 export default function SupplierDashboard() {
-  useDocumentTitle('Supplier dashboard');
+  useDocumentTitle('Supplier Dashboard · TradeExpress');
   return <SupplierGuard>{(company, products) => <Overview company={company} products={products} />}</SupplierGuard>;
 }

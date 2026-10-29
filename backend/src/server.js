@@ -22,6 +22,18 @@ async function startServer() {
     const httpServer = http.createServer(app);
     initSocket(httpServer);
 
+    httpServer.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`\n❌ [Port Conflict] Port ${ENV.PORT} is already in use by another running process.`);
+        console.error(`👉 A previous instance of the backend is already running on port ${ENV.PORT}.`);
+        console.error(`   To free port ${ENV.PORT}, terminate the existing process or run:`);
+        console.error(`   powershell -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort ${ENV.PORT}).OwningProcess -Force"\n`);
+      } else {
+        console.error('Server error:', err);
+      }
+      process.exit(1);
+    });
+
     const server = httpServer.listen(ENV.PORT, () => {
       console.log(`=======================================================`);
       console.log(`🚀 TradeExpress Backend Server running on port ${ENV.PORT}`);
