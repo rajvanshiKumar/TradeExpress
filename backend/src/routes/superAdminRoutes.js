@@ -48,6 +48,7 @@ router.patch('/orders/:id', controller.updateOrderAdmin);
 // Payments & Commissions
 router.get('/payments', controller.listPayments);
 router.get('/commission', controller.getCommissionSettings);
+router.get('/commission/metrics', controller.getCommissionMetrics);
 router.post('/commission', controller.updateCommissionSetting);
 router.post('/refunds/:orderId', controller.processRefund);
 

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import CustomSelect from '../../components/common/CustomSelect';
 
 export default function SuperAdminTickets() {
   const { showToast } = useNotifications();
@@ -131,17 +132,19 @@ export default function SuperAdminTickets() {
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <span className="text-xs text-slate-500 font-semibold">Status:</span>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          >
-            <option value="ALL">All Tickets</option>
-            <option value="OPEN">Open (New)</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="RESOLVED">Resolved</option>
-            <option value="CLOSED">Closed</option>
-          </select>
+          <div className="w-40">
+            <CustomSelect
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              options={[
+                { value: 'ALL', label: 'All Tickets' },
+                { value: 'OPEN', label: 'Open (New)' },
+                { value: 'IN_PROGRESS', label: 'In Progress' },
+                { value: 'RESOLVED', label: 'Resolved' },
+                { value: 'CLOSED', label: 'Closed' }
+              ]}
+            />
+          </div>
         </div>
       </div>
 
@@ -264,15 +267,17 @@ export default function SuperAdminTickets() {
                     <label className="font-bold text-slate-700">Send Administrative Reply</label>
                     <div className="flex items-center gap-1.5">
                       <span className="text-slate-500 font-semibold">Update Status:</span>
-                      <select
-                        value={targetStatus}
-                        onChange={(e) => setTargetStatus(e.target.value)}
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-bold text-slate-800"
-                      >
-                        <option value="IN_PROGRESS">In Progress</option>
-                        <option value="RESOLVED">Resolved</option>
-                        <option value="CLOSED">Closed</option>
-                      </select>
+                      <div className="w-36">
+                        <CustomSelect
+                          value={targetStatus}
+                          onChange={(e) => setTargetStatus(e.target.value)}
+                          options={[
+                            { value: 'IN_PROGRESS', label: 'In Progress' },
+                            { value: 'RESOLVED', label: 'Resolved' },
+                            { value: 'CLOSED', label: 'Closed' }
+                          ]}
+                        />
+                      </div>
                     </div>
                   </div>
 

@@ -13,7 +13,13 @@ const NAMES = { buyer: 'Buyer', supplier: 'Supplier', admin: 'Admin', super_admi
 export default function RoleRoute({ roles }) {
   const { user } = useAuth();
   const { showToast } = useNotifications();
-  const allowed = Boolean(user && (roles.includes(user.role) || (user.role === 'super_admin' && roles.includes('admin'))));
+  const userRole = user?.role?.toLowerCase();
+  const normalizedRoles = (roles || []).map((r) => r.toLowerCase());
+  const allowed = Boolean(
+    user &&
+      (normalizedRoles.includes(userRole) ||
+        (userRole === 'super_admin' && normalizedRoles.includes('admin')))
+  );
   const warned = useRef(false);
 
   useEffect(() => {
@@ -24,5 +30,5 @@ export default function RoleRoute({ roles }) {
   }, [allowed, user, roles, showToast]);
 
   if (allowed) return <Outlet />;
-  return <Navigate to={user ? (ROLE_HOME[user.role] || '/') : '/login'} replace />;
+  return <Navigate to={user ? (ROLE_HOME[userRole] || '/') : '/login'} replace />;
 }

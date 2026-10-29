@@ -7,7 +7,10 @@ export default function ScrollToTop() {
 
   useEffect(() => {
     if (hash) {
-      const timer = window.setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView(), 60);
+      const timer = window.setTimeout(
+        () => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+        60,
+      );
       return () => window.clearTimeout(timer);
     }
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });

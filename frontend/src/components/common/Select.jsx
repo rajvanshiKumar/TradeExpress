@@ -6,10 +6,10 @@ export { CustomSelect };
 
 /**
  * Universal Select component.
- * When `custom={true}`, renders the custom search & animated dropdown panel.
- * When native, renders the accessible native select styled with the design system.
+ * By default renders the ultra-premium TradeExpress CustomSelect with search & keyboard navigation.
+ * Set `native={true}` if explicit native browser select behavior is required.
  *
- * options: ['A', 'B'] or [{ value, label }]
+ * options: ['A', 'B'] or [{ value, label, description, badge }]
  */
 const Select = forwardRef(function Select(
   {
@@ -22,7 +22,8 @@ const Select = forwardRef(function Select(
     placeholder,
     wrapperClassName = '',
     className = '',
-    custom = false,
+    custom = true,
+    native = false,
     searchable = true,
     value,
     onChange,
@@ -31,7 +32,9 @@ const Select = forwardRef(function Select(
   },
   ref
 ) {
-  if (custom) {
+  const shouldUseCustom = custom && !native;
+
+  if (shouldUseCustom) {
     return (
       <Field
         id={id}
@@ -46,10 +49,12 @@ const Select = forwardRef(function Select(
           value={value}
           onChange={onChange}
           options={options}
-          placeholder={placeholder}
+          placeholder={placeholder || 'Select an option'}
           searchable={searchable}
           disabled={disabled}
           className={className}
+          required={required}
+          aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
           {...rest}
         />
       </Field>

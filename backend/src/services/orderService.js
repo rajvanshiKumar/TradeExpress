@@ -2,7 +2,13 @@ import prisma from '../config/db.js';
 import { generateOrderNumber } from '../utils/orderNumber.js';
 import { sendOrderConfirmationEmail } from './emailService.js';
 import { initiateEscrowForOrder } from './escrowService.js';
+import {
+  calculateOrderCommission,
+  getActiveCommissionPolicy,
+  roundINR,
+} from './commissionTierService.js';
 import { createNotification } from './notificationService.js';
+import { broadcastInventoryUpdate, broadcastProductStock } from './socketService.js';
 
 export async function validateAndCalculateOrder({ lines, shippingMethod = 'standard', deliveryAddress = null }) {
   if (!lines || !Array.isArray(lines) || lines.length === 0) {
@@ -212,6 +218,14 @@ export async function validateAndCalculateOrder({ lines, shippingMethod = 'stand
   const discount = 0;
   const total = Math.round((subtotal + shippingFee + tax - discount) * 100) / 100;
 
+  // Calculate declining order-level commission (base: product subtotal minus product discount)
+  const commissionPolicy = await getActiveCommissionPolicy();
+  const commissionCalc = calculateOrderCommission({
+    subtotal,
+    discount,
+    policy: commissionPolicy,
+  });
+
   return {
     items: validatedItems,
     totals: {
@@ -224,6 +238,7 @@ export async function validateAndCalculateOrder({ lines, shippingMethod = 'stand
       isInterState,
       discount,
       total,
+      commission: commissionCalc,
     },
     shippingMethod,
     shippingEta,
@@ -272,12 +287,43 @@ export async function createOrder({
 
   // Execute database atomic transaction
   const order = await prisma.$transaction(async (tx) => {
-    // 1. Decrement stock
+    // 1. Concurrency-safe atomic stock reservation & negative stock prevention
     for (const item of calculation.items) {
-      await tx.product.update({
+      const affected = await tx.$executeRaw`
+        UPDATE products 
+        SET reservedStock = reservedStock + ${item.quantity} 
+        WHERE id = ${item.productId} AND (stock - reservedStock) >= ${item.quantity}
+      `;
+
+      if (affected === 0) {
+        const error = new Error(`Insufficient available stock for "${item.productName}". Remaining units were already claimed by another buyer.`);
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const current = await tx.product.findUnique({
         where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
+        select: { id: true, stock: true, reservedStock: true, supplierId: true, sku: true },
       });
+
+      if (current) {
+        await tx.inventoryLog.create({
+          data: {
+            productId: item.productId,
+            supplierId: current.supplierId || item.supplierId,
+            previousStock: current.stock,
+            newStock: current.stock,
+            changeAmount: 0,
+            previousReserved: Math.max(0, current.reservedStock - item.quantity),
+            newReserved: current.reservedStock,
+            reason: 'ORDER_RESERVED',
+            notes: `Reserved ${item.quantity} ${item.unit || 'unit'}(s) for Order #${orderNumber}`,
+            orderId: orderNumber,
+            actorId: userId || 'Buyer',
+            actorName: buyerName || 'Buyer',
+          },
+        });
+      }
     }
 
     const primarySupplierCompanyId = calculation.items[0]?.companyId || 'SUP';
@@ -314,6 +360,11 @@ export async function createOrder({
         isInterState: calculation.totals.isInterState,
         discount: calculation.totals.discount,
         total: calculation.totals.total,
+        commissionEligibleSubtotal: calculation.totals.commission?.eligibleSubtotal ?? Math.max(0, calculation.totals.subtotal - calculation.totals.discount),
+        commissionRate: calculation.totals.commission?.commissionRate ?? 8.0,
+        commissionFee: calculation.totals.commission?.commissionFee ?? 0,
+        commissionPolicy: calculation.totals.commission?.policyVersion ?? 'TIERED_V1',
+        commissionCalculatedAt: calculation.totals.commission?.calculatedAt ?? new Date(),
         isPartialPayment: Boolean(isPartialPayment),
         advanceAmount,
         balanceDue,
@@ -385,6 +436,33 @@ export async function createOrder({
       message: `Received new bulk order of ₹${Number(order.total).toLocaleString('en-IN')} from ${order.buyerCompany || order.buyerName}.`,
       type: 'ORDER',
       link: `/supplier/orders?order=${order.orderNumber}`,
+    }).catch(() => {});
+  }
+
+  // Broadcast real-time stock updates to supplier and buyers
+  for (const item of calculation.items) {
+    prisma.product.findUnique({
+      where: { id: item.productId },
+      select: { id: true, sku: true, stock: true, reservedStock: true, supplierId: true, lowStockThreshold: true },
+    }).then((prod) => {
+      if (prod) {
+        const available = Math.max(0, prod.stock - prod.reservedStock);
+        if (prod.supplierId) {
+          broadcastInventoryUpdate(prod.supplierId, {
+            productId: prod.id,
+            sku: prod.sku,
+            stock: prod.stock,
+            reservedStock: prod.reservedStock,
+            availableStock: available,
+            lowStockThreshold: prod.lowStockThreshold,
+          });
+        }
+        broadcastProductStock(prod.id, {
+          sku: prod.sku,
+          availableStock: available,
+          inStock: available > 0,
+        });
+      }
     }).catch(() => {});
   }
 
@@ -475,13 +553,38 @@ export async function cancelBuyerOrder({ orderId, userId, reason = '' }) {
   }
 
   return prisma.$transaction(async (tx) => {
-    // 1. Restore stock
+    // 1. Release reserved stock
     for (const item of order.items) {
       if (item.productId) {
-        await tx.product.update({
+        await tx.$executeRaw`
+          UPDATE products
+          SET reservedStock = GREATEST(0, reservedStock - ${item.quantity})
+          WHERE id = ${item.productId}
+        `;
+
+        const current = await tx.product.findUnique({
           where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
+          select: { id: true, stock: true, reservedStock: true, supplierId: true, sku: true },
         });
+
+        if (current) {
+          await tx.inventoryLog.create({
+            data: {
+              productId: item.productId,
+              supplierId: current.supplierId,
+              previousStock: current.stock,
+              newStock: current.stock,
+              changeAmount: 0,
+              previousReserved: current.reservedStock + item.quantity,
+              newReserved: current.reservedStock,
+              reason: 'ORDER_CANCELLED',
+              notes: `Released ${item.quantity} reserved unit(s) due to Order #${order.orderNumber} cancellation.`,
+              orderId: order.orderNumber,
+              actorId: userId || 'Buyer',
+              actorName: 'Buyer',
+            },
+          });
+        }
       }
     }
 
@@ -508,6 +611,35 @@ export async function cancelBuyerOrder({ orderId, userId, reason = '' }) {
         changedBy: 'Buyer',
       },
     });
+
+    // Broadcast released stock to supplier and buyers
+    for (const item of order.items) {
+      if (item.productId) {
+        prisma.product.findUnique({
+          where: { id: item.productId },
+          select: { id: true, sku: true, stock: true, reservedStock: true, supplierId: true, lowStockThreshold: true },
+        }).then((prod) => {
+          if (prod) {
+            const available = Math.max(0, prod.stock - prod.reservedStock);
+            if (prod.supplierId) {
+              broadcastInventoryUpdate(prod.supplierId, {
+                productId: prod.id,
+                sku: prod.sku,
+                stock: prod.stock,
+                reservedStock: prod.reservedStock,
+                availableStock: available,
+                lowStockThreshold: prod.lowStockThreshold,
+              });
+            }
+            broadcastProductStock(prod.id, {
+              sku: prod.sku,
+              availableStock: available,
+              inStock: available > 0,
+            });
+          }
+        }).catch(() => {});
+      }
+    }
 
     const formatted = formatOrder(updated);
 
@@ -538,11 +670,17 @@ function formatOrder(order) {
     total: Number(order.total),
     advanceAmount: Number(order.advanceAmount || 0),
     balanceDue: Number(order.balanceDue || 0),
+    commissionEligibleSubtotal: order.commissionEligibleSubtotal !== null && order.commissionEligibleSubtotal !== undefined ? Number(order.commissionEligibleSubtotal) : null,
+    commissionRate: order.commissionRate !== null && order.commissionRate !== undefined ? Number(order.commissionRate) : null,
+    commissionFee: order.commissionFee !== null && order.commissionFee !== undefined ? Number(order.commissionFee) : null,
+    commissionPolicy: order.commissionPolicy || null,
+    commissionCalculatedAt: order.commissionCalculatedAt || null,
     escrowLedger: order.escrowLedger ? {
       ...order.escrowLedger,
       amountHeld: Number(order.escrowLedger.amountHeld),
       commissionRate: Number(order.escrowLedger.commissionRate),
       commissionFee: Number(order.escrowLedger.commissionFee),
+      refundedCommission: Number(order.escrowLedger.refundedCommission || 0),
       payoutAmount: Number(order.escrowLedger.payoutAmount),
     } : null,
     items: (order.items || []).map((item) => ({

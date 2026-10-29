@@ -1,10 +1,12 @@
 import { Suspense } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { PageSkeleton } from '../common/Skeleton';
-import { Boxes, Building2, ChartColumn, FileText, Heart, Info, LayoutDashboard, LayoutGrid, MapPin, MessageSquare, Package, Scale, Settings, ShieldCheck, Users, Truck, CircleDollarSign, Bell, User, ClipboardList } from 'lucide-react';
+import { Boxes, Building2, ChartColumn, FileText, Heart, Info, LayoutDashboard, LayoutGrid, MapPin, MessageSquare, Package, Scale, Settings, ShieldCheck, Users, Truck, CircleDollarSign, Bell, User, ClipboardList, Warehouse } from 'lucide-react';
 import AnnouncementBar from './AnnouncementBar';
 import Header from './Header';
 import Footer from './Footer';
+import BuyerSidebar from './BuyerSidebar';
+import SupplierSidebar from './SupplierSidebar';
 import ResetDataButton from '../common/ResetDataButton';
 import CompanyLogo from '../common/CompanyLogo';
 import VerificationBadge from '../common/VerificationBadge';
@@ -12,11 +14,11 @@ import useAuth from '../../hooks/useAuth';
 import useProducts from '../../hooks/useProducts';
 import { dashboardNav } from '../../data/navigation';
 
-const ICONS = { LayoutDashboard, Package, FileText, Scale, MessageSquare, Heart, MapPin, Settings, Boxes, ChartColumn, Building2, Users, LayoutGrid, ShieldCheck, Truck, CircleDollarSign, Bell, User, ClipboardList };
+const ICONS = { LayoutDashboard, Package, FileText, Scale, MessageSquare, Heart, MapPin, Settings, Boxes, ChartColumn, Building2, Users, LayoutGrid, ShieldCheck, Truck, CircleDollarSign, Bell, User, ClipboardList, Warehouse };
 
-const TITLES = { buyer: 'Buyer workspace', supplier: 'Supplier Enterprise Portal', admin: 'Admin console' };
+const TITLES = { buyer: 'Buyer Workspace', supplier: 'Supplier Enterprise Portal', admin: 'Admin Console' };
 const NOTES = {
-  buyer: 'Your orders, quotes and saved items are stored in this browser.',
+  buyer: 'Your orders, quotes and saved items are securely tracked in TradeExpress.',
   supplier: 'Catalogue changes go live in the marketplace immediately, in this browser.',
   admin: 'Prototype admin area: data and role checks live in this browser and are not a secure administration system.',
 };
@@ -30,6 +32,60 @@ export default function DashboardLayout({ role }) {
   const company = role === 'supplier' && user?.companyId ? getCompany(user.companyId) : null;
   const isActive = (to) => (to === `/${role}` ? location.pathname === to : location.pathname === to || location.pathname.startsWith(`${to}/`));
 
+  // Dedicated Buyer Workspace Layout with Premium Collapsible Sidebar & Mobile Drawer
+  if (role === 'buyer') {
+    return (
+      <div className="flex min-h-dvh flex-col bg-ivory scroll-smooth">
+        <AnnouncementBar />
+        <Header />
+        <div className="ts-container flex-1 py-6 lg:py-8">
+          <div className="lg:flex lg:gap-8 items-start">
+            <BuyerSidebar />
+            <main id="main" tabIndex={-1} className="flex-1 min-w-0 focus:outline-none scroll-smooth">
+              <div key={location.pathname} className="ts-page-enter">
+                <Suspense fallback={<PageSkeleton />}>
+                  <Outlet />
+                </Suspense>
+              </div>
+              <div className="mt-8 rounded-[1.25rem] bg-white p-4 text-xs text-muted ring-1 ring-navy-900/[0.06] lg:hidden">
+                <p className="flex gap-2">
+                  <Info className="mt-0.5 size-3.5 shrink-0 text-brand-600" aria-hidden="true" />
+                  {NOTES.buyer}
+                </p>
+                <ResetDataButton className="mt-3" />
+              </div>
+            </main>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  // Dedicated Supplier Enterprise Portal Layout with Consistent Collapsible Sidebar & Drawer
+  if (role === 'supplier') {
+    return (
+      <div className="flex min-h-dvh flex-col bg-ivory scroll-smooth">
+        <AnnouncementBar />
+        <Header />
+        <div className="ts-container flex-1 py-6 lg:py-8">
+          <div className="lg:flex lg:gap-8 items-start">
+            <SupplierSidebar />
+            <main id="main" tabIndex={-1} className="flex-1 min-w-0 focus:outline-none scroll-smooth">
+              <div key={location.pathname} className="ts-page-enter">
+                <Suspense fallback={<PageSkeleton />}>
+                  <Outlet />
+                </Suspense>
+              </div>
+            </main>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  // Supplier & Admin Dashboard Layout
   return (
     <div className="flex min-h-dvh flex-col bg-ivory">
       <AnnouncementBar />

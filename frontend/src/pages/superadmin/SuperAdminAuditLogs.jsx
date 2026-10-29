@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import CustomSelect from '../../components/common/CustomSelect';
 
 export default function SuperAdminAuditLogs() {
   const { showToast } = useNotifications();
@@ -97,44 +98,47 @@ export default function SuperAdminAuditLogs() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
             <span>Resource:</span>
-            <select
-              value={resource}
-              onChange={(e) => setResource(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="ALL">All Resources</option>
-              <option value="USERS">Users</option>
-              <option value="SUPPLIERS">Suppliers</option>
-              <option value="PRODUCTS">Products</option>
-              <option value="CATEGORIES">Categories</option>
-              <option value="ORDERS">Orders</option>
-              <option value="PAYMENTS">Payments</option>
-              <option value="DISPUTES">Disputes</option>
-              <option value="ADMINS">Admins</option>
-              <option value="SETTINGS">Settings</option>
-              <option value="SYSTEM">System</option>
-            </select>
+            <div className="w-36">
+              <CustomSelect
+                value={resource}
+                onChange={(e) => setResource(e.target.value)}
+                options={[
+                  { value: 'ALL', label: 'All Resources' },
+                  { value: 'USERS', label: 'Users' },
+                  { value: 'SUPPLIERS', label: 'Suppliers' },
+                  { value: 'PRODUCTS', label: 'Products' },
+                  { value: 'CATEGORIES', label: 'Categories' },
+                  { value: 'ORDERS', label: 'Orders' },
+                  { value: 'PAYMENTS', label: 'Payments' },
+                  { value: 'DISPUTES', label: 'Disputes' },
+                  { value: 'ADMINS', label: 'Admins' },
+                  { value: 'SETTINGS', label: 'Settings' },
+                  { value: 'SYSTEM', label: 'System' }
+                ]}
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
             <span>Action:</span>
-            <select
-              value={action}
-              onChange={(e) => setAction(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="ALL">All Actions</option>
-              <option value="USER_STATUS_CHANGE">User Status Change</option>
-              <option value="KYC_REVIEW">KYC Review</option>
-              <option value="PRODUCT_MODERATE">Product Moderate</option>
-              <option value="ORDER_ADMIN_OVERRIDE">Order Override</option>
-              <option value="COMMISSION_UPDATE">Commission Update</option>
-              <option value="REFUND_PROCESSED">Refund Processed</option>
-              <option value="DISPUTE_RESOLVED">Dispute Resolved</option>
-              <option value="ADMIN_CREATE">Admin Create</option>
-              <option value="SETTING_UPDATE">Setting Update</option>
-              <option value="BOOTSTRAP">Bootstrap</option>
-            </select>
+            <div className="w-48">
+              <CustomSelect
+                value={action}
+                onChange={(e) => setAction(e.target.value)}
+                options={[
+                  { value: 'ALL', label: 'All Actions' },
+                  { value: 'USER_STATUS_CHANGE', label: 'User Status Change' },
+                  { value: 'KYC_REVIEW', label: 'KYC Review' },
+                  { value: 'PRODUCT_MODERATE', label: 'Product Moderate' },
+                  { value: 'ORDER_ADMIN_OVERRIDE', label: 'Order Override' },
+                  { value: 'COMMISSION_UPDATE', label: 'Commission Update' },
+                  { value: 'REFUND_PROCESSED', label: 'Refund Processed' },
+                  { value: 'DISPUTE_RESOLVED', label: 'Dispute Resolved' },
+                  { value: 'ADMIN_CREATE', label: 'Admin Create' },
+                  { value: 'SETTING_UPDATE', label: 'Setting Update' }
+                ]}
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -1,5 +1,10 @@
 import prisma from '../config/db.js';
 import { createNotification } from './notificationService.js';
+import {
+  calculateOrderCommission,
+  getActiveCommissionPolicy,
+  roundINR,
+} from './commissionTierService.js';
 
 /**
  * Calculates and initiates an escrow ledger entry for an order once payment is confirmed.
@@ -11,6 +16,7 @@ export async function initiateEscrowForOrder(orderId) {
       items: {
         include: { product: true },
       },
+      escrowLedger: true,
     },
   });
 
@@ -20,36 +26,48 @@ export async function initiateEscrowForOrder(orderId) {
     throw error;
   }
 
-  // Determine applicable commission rate
-  let commissionRate = 5.0; // Global default
+  // 1. Resolve or compute immutable order-level commission snapshot
+  let commissionRate = order.commissionRate !== null && order.commissionRate !== undefined
+    ? Number(order.commissionRate)
+    : null;
+  let commissionFee = order.commissionFee !== null && order.commissionFee !== undefined
+    ? Number(order.commissionFee)
+    : null;
+  let eligibleSubtotal = order.commissionEligibleSubtotal !== null && order.commissionEligibleSubtotal !== undefined
+    ? Number(order.commissionEligibleSubtotal)
+    : null;
+  let commissionPolicy = order.commissionPolicy || 'TIERED_V1';
 
-  // Check category override if products exist
-  const firstCategory = order.items?.[0]?.product?.categorySlug;
-  if (firstCategory) {
-    const catSetting = await prisma.commissionSetting.findFirst({
-      where: { type: 'CATEGORY', targetId: firstCategory },
+  if (commissionRate === null || commissionFee === null || eligibleSubtotal === null) {
+    const policy = await getActiveCommissionPolicy();
+    const subtotal = Number(order.subtotal || 0);
+    const discount = Number(order.discount || 0);
+    const calc = calculateOrderCommission({ subtotal, discount, policy });
+
+    eligibleSubtotal = calc.eligibleSubtotal;
+    commissionRate = calc.commissionRate;
+    commissionFee = calc.commissionFee;
+    commissionPolicy = calc.policyVersion;
+
+    // Persist immutable snapshot back on the order
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        commissionEligibleSubtotal: eligibleSubtotal,
+        commissionRate,
+        commissionFee,
+        commissionPolicy,
+        commissionCalculatedAt: new Date(),
+      },
     });
-    if (catSetting) {
-      commissionRate = Number(catSetting.percentage);
-    } else {
-      const globalSetting = await prisma.commissionSetting.findFirst({
-        where: { type: 'GLOBAL' },
-      });
-      if (globalSetting) commissionRate = Number(globalSetting.percentage);
-    }
-  } else {
-    const globalSetting = await prisma.commissionSetting.findFirst({
-      where: { type: 'GLOBAL' },
-    });
-    if (globalSetting) commissionRate = Number(globalSetting.percentage);
   }
 
   const amountHeld = order.isPartialPayment && Number(order.advanceAmount) > 0
-    ? Number(order.advanceAmount)
-    : Number(order.total);
+    ? roundINR(Number(order.advanceAmount))
+    : roundINR(Number(order.total));
 
-  const commissionFee = Math.round((amountHeld * (commissionRate / 100)) * 100) / 100;
-  const payoutAmount = Math.max(0, Math.round((amountHeld - commissionFee) * 100) / 100);
+  // Payout amount = amount held minus server-calculated platform commission
+  const payoutAmount = Math.max(0, roundINR(amountHeld - commissionFee));
 
   const ledger = await prisma.escrowLedger.upsert({
     where: { orderId },
@@ -64,6 +82,7 @@ export async function initiateEscrowForOrder(orderId) {
       amountHeld,
       commissionRate,
       commissionFee,
+      refundedCommission: 0,
       payoutAmount,
       status: 'HELD',
     },
@@ -186,12 +205,25 @@ export async function refundEscrow(orderId, { refundAmount = null } = {}) {
   const ledger = await prisma.escrowLedger.findUnique({ where: { orderId } });
   if (!ledger) return null;
 
+  const totalHeld = Number(ledger.amountHeld || 0);
+  const commFee = Number(ledger.commissionFee || 0);
+  const requested = refundAmount !== null ? Number(refundAmount) : totalHeld;
+  const actualRefund = Math.min(totalHeld, Math.max(0, requested));
+  const isFullRefund = actualRefund >= totalHeld;
+
+  const refundRatio = totalHeld > 0 ? actualRefund / totalHeld : 1;
+  const refundedCommission = isFullRefund ? commFee : roundINR(commFee * refundRatio);
+  const remainingCommission = Math.max(0, roundINR(commFee - refundedCommission));
+  const remainingHeld = Math.max(0, roundINR(totalHeld - actualRefund));
+  const payoutAmount = Math.max(0, roundINR(remainingHeld - remainingCommission));
+
   return prisma.escrowLedger.update({
     where: { orderId },
     data: {
-      status: 'REFUNDED',
-      payoutAmount: 0,
-      releasedAt: new Date(),
+      status: isFullRefund ? 'REFUNDED' : 'PARTIALLY_REFUNDED',
+      refundedCommission,
+      payoutAmount,
+      releasedAt: isFullRefund ? new Date() : ledger.releasedAt,
     },
   });
 }

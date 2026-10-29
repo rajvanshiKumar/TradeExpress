@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useMemo } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import useCollection from '../hooks/useCollection';
 import orderService from '../services/orderService';
+import { AuthContext } from './AuthContext';
 import { NotificationContext } from './NotificationContext';
 import { ProductContext } from './ProductContext';
 
@@ -11,6 +12,74 @@ export function OrderProvider({ children }) {
   const { items: orders, setItems, loading, error, reload } = useCollection(orderService.listOrders, orderService.saveOrders);
   const { addNotification } = useContext(NotificationContext);
   const { products, updateProduct } = useContext(ProductContext);
+  const { user } = useContext(AuthContext);
+
+  const seenStorageKey = user?.id ? `tradesphere:v3:seen-orders:${user.id}` : 'tradesphere:v3:seen-orders:default';
+
+  const [seenOrderIds, setSeenOrderIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem(seenStorageKey);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Re-sync seenOrderIds when the authenticated user changes
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(seenStorageKey);
+      setSeenOrderIds(raw ? JSON.parse(raw) : []);
+    } catch {
+      setSeenOrderIds([]);
+    }
+  }, [seenStorageKey]);
+
+  // Persist seenOrderIds to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(seenStorageKey, JSON.stringify(seenOrderIds));
+    } catch {
+      // Ignore storage write issues
+    }
+  }, [seenOrderIds, seenStorageKey]);
+
+  // Unseen orders count for the authenticated buyer (excluding historic seed/sample orders)
+  const unseenOrdersCount = useMemo(() => {
+    if (!user?.id) return 0;
+    const myOrders = (orders || []).filter((o) => o.buyerId === user.id);
+    return myOrders.filter((o) => {
+      if (o.isSample) return false;
+      const orderId = o.id;
+      const orderNum = o.orderNumber;
+      return !seenOrderIds.includes(orderId) && (!orderNum || !seenOrderIds.includes(orderNum));
+    }).length;
+  }, [orders, user?.id, seenOrderIds]);
+
+  const markOrderSeen = useCallback((id) => {
+    if (!id) return;
+    setSeenOrderIds((prev) => {
+      if (prev.includes(id)) return prev;
+      return [...prev, id];
+    });
+  }, []);
+
+  const markAllOrdersSeen = useCallback(() => {
+    if (!user?.id) return;
+    const myOrderIds = (orders || [])
+      .filter((o) => o.buyerId === user.id)
+      .flatMap((o) => [o.id, o.orderNumber])
+      .filter(Boolean);
+
+    setSeenOrderIds((prev) => Array.from(new Set([...prev, ...myOrderIds])));
+  }, [orders, user?.id]);
+
+  const isOrderSeen = useCallback((order) => {
+    if (!order) return true;
+    if (typeof order === 'string') return seenOrderIds.includes(order);
+    if (order.isSample) return true;
+    return seenOrderIds.includes(order.id) || (order.orderNumber && seenOrderIds.includes(order.orderNumber));
+  }, [seenOrderIds]);
 
   const placeOrder = useCallback(async (payload) => {
     const order = await orderService.createOrder(payload);
@@ -37,8 +106,19 @@ export function OrderProvider({ children }) {
 
   const getOrder = useCallback((id) => orders.find((item) => item.id === id) ?? null, [orders]);
 
-  const value = useMemo(() => ({ orders, loading, error, reload, placeOrder, updateOrderStatus, getOrder }),
-    [orders, loading, error, reload, placeOrder, updateOrderStatus, getOrder]);
+  const value = useMemo(() => ({
+    orders,
+    loading,
+    error,
+    reload,
+    placeOrder,
+    updateOrderStatus,
+    getOrder,
+    unseenOrdersCount,
+    markOrderSeen,
+    markAllOrdersSeen,
+    isOrderSeen,
+  }), [orders, loading, error, reload, placeOrder, updateOrderStatus, getOrder, unseenOrdersCount, markOrderSeen, markAllOrdersSeen, isOrderSeen]);
 
   return <OrderContext.Provider value={value}>{children}</OrderContext.Provider>;
 }

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import CustomSelect from '../../components/common/CustomSelect';
 
 export default function SuperAdminDisputes() {
   const { showToast } = useNotifications();
@@ -159,17 +160,19 @@ export default function SuperAdminDisputes() {
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <span className="text-xs text-slate-500 font-semibold">Dispute Status:</span>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          >
-            <option value="ALL">All Disputes</option>
-            <option value="OPEN">Open (Active)</option>
-            <option value="UNDER_REVIEW">Under Review</option>
-            <option value="RESOLVED_REFUND">Resolved (Refunded)</option>
-            <option value="RESOLVED_REJECTED">Resolved (Rejected)</option>
-          </select>
+          <div className="w-44">
+            <CustomSelect
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              options={[
+                { value: 'ALL', label: 'All Disputes' },
+                { value: 'OPEN', label: 'Open (Active)' },
+                { value: 'UNDER_REVIEW', label: 'Under Review' },
+                { value: 'RESOLVED_REFUND', label: 'Resolved (Refunded)' },
+                { value: 'RESOLVED_REJECTED', label: 'Resolved (Rejected)' }
+              ]}
+            />
+          </div>
         </div>
       </div>
 
@@ -372,15 +375,15 @@ export default function SuperAdminDisputes() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block font-semibold text-slate-600 mb-1">Mediation Verdict</label>
-                        <select
+                        <CustomSelect
                           value={resolutionAction}
                           onChange={(e) => setResolutionAction(e.target.value)}
-                          className="w-full p-2 rounded-lg border border-slate-200 bg-white font-bold text-slate-800"
-                        >
-                          <option value="REFUND_BUYER">Refund Buyer (Full / Partial)</option>
-                          <option value="RELEASE_SUPPLIER">Release Escrow to Supplier</option>
-                          <option value="REJECT_CLAIM">Reject Dispute Claim</option>
-                        </select>
+                          options={[
+                            { value: 'REFUND_BUYER', label: 'Refund Buyer (Full / Partial)' },
+                            { value: 'RELEASE_SUPPLIER', label: 'Release Escrow to Supplier' },
+                            { value: 'REJECT_CLAIM', label: 'Reject Dispute Claim' }
+                          ]}
+                        />
                       </div>
 
                       {resolutionAction === 'REFUND_BUYER' && (

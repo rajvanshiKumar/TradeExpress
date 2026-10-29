@@ -261,6 +261,16 @@ export async function getCommissionSettings(req, res, next) {
   }
 }
 
+export async function getCommissionMetrics(req, res, next) {
+  try {
+    const { startDate, endDate } = req.query;
+    const data = await superAdminService.getCommissionMetrics({ startDate, endDate });
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function updateCommissionSetting(req, res, next) {
   try {
     const data = await superAdminService.updateCommissionSetting({

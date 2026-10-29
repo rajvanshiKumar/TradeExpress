@@ -25,7 +25,7 @@ export default function Modal({ open, onClose, title, description, children, foo
           </div>
           <IconButton icon={X} label="Close dialog" size="sm" tone="muted" onClick={onClose} className="-mr-2 -mt-1" />
         </header>
-        <div className="overflow-y-auto px-5 py-5">{children}</div>
+        <div className="overflow-y-auto overscroll-contain ts-slim-scrollbar scroll-smooth px-5 py-5">{children}</div>
         {footer ? <footer className="flex flex-wrap justify-end gap-3 border-t bg-surface/60 px-5 py-4 sm:rounded-b-2xl">{footer}</footer> : null}
       </div>
     </div>,

@@ -28,6 +28,7 @@ import useNotifications from '../hooks/useNotifications';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import Breadcrumbs from '../components/common/Breadcrumbs';
 import Button from '../components/common/Button';
+import CustomSelect from '../components/common/CustomSelect';
 import Modal from '../components/common/Modal';
 import { photoUrl } from '../utils/images';
 
@@ -1055,18 +1056,20 @@ export default function Exporters() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-navy-900 mb-1">Unit</label>
-                  <select
+                  <CustomSelect
                     value={rfqForm.unit}
                     onChange={(e) => setRfqForm({ ...rfqForm, unit: e.target.value })}
-                    className="w-full h-9.5 px-2 rounded-lg border text-sm bg-white focus:border-navy-900 focus:outline-none"
-                  >
-                    <option value="Units">Units (Pieces)</option>
-                    <option value="Metric Tons">Metric Tons</option>
-                    <option value="Kilograms">Kilograms (KG)</option>
-                    <option value="Square Meters">SQM (Tiles/Stone)</option>
-                    <option value="20ft Containers">20ft Container (FCL)</option>
-                    <option value="40ft Containers">40ft Container (FCL)</option>
-                  </select>
+                    options={[
+                      { value: 'Units', label: 'Units (Pieces)' },
+                      { value: 'Metric Tons', label: 'Metric Tons' },
+                      { value: 'Kilograms', label: 'Kilograms (KG)' },
+                      { value: 'Square Meters', label: 'SQM (Tiles/Stone)' },
+                      { value: '20ft Containers', label: '20ft Container (FCL)' },
+                      { value: '40ft Containers', label: '40ft Container (FCL)' },
+                    ]}
+                    compact
+                    searchable={false}
+                  />
                 </div>
               </div>
             </div>
@@ -1074,21 +1077,23 @@ export default function Exporters() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-bold text-navy-900 mb-1">Destination Country *</label>
-                <select
+                <CustomSelect
                   value={rfqForm.destination}
                   onChange={(e) => setRfqForm({ ...rfqForm, destination: e.target.value })}
-                  className="w-full h-9.5 px-2 rounded-lg border text-sm bg-white focus:border-navy-900 focus:outline-none"
-                >
-                  <option value="United States">United States</option>
-                  <option value="United Kingdom">United Kingdom</option>
-                  <option value="United Arab Emirates">United Arab Emirates</option>
-                  <option value="Germany">Germany</option>
-                  <option value="Australia">Australia</option>
-                  <option value="Saudi Arabia">Saudi Arabia</option>
-                  <option value="Canada">Canada</option>
-                  <option value="Singapore">Singapore</option>
-                  <option value="Other">Other Country</option>
-                </select>
+                  options={[
+                    'United States',
+                    'United Kingdom',
+                    'United Arab Emirates',
+                    'Germany',
+                    'Australia',
+                    'Saudi Arabia',
+                    'Canada',
+                    'Singapore',
+                    'Other',
+                  ]}
+                  compact
+                  searchable
+                />
               </div>
 
               <div>
@@ -1104,17 +1109,19 @@ export default function Exporters() {
 
               <div>
                 <label className="block text-xs font-bold text-navy-900 mb-1">Incoterms</label>
-                <select
+                <CustomSelect
                   value={rfqForm.incoterm}
                   onChange={(e) => setRfqForm({ ...rfqForm, incoterm: e.target.value })}
-                  className="w-full h-9.5 px-2 rounded-lg border text-sm bg-white focus:border-navy-900 focus:outline-none"
-                >
-                  <option value="FOB">FOB (Free on Board)</option>
-                  <option value="CIF">CIF (Cost, Insurance & Freight)</option>
-                  <option value="EXW">EXW (Ex Works)</option>
-                  <option value="CFR">CFR (Cost & Freight)</option>
-                  <option value="DDP">DDP (Delivered Duty Paid)</option>
-                </select>
+                  options={[
+                    { value: 'FOB', label: 'FOB (Free on Board)' },
+                    { value: 'CIF', label: 'CIF (Cost, Insurance & Freight)' },
+                    { value: 'EXW', label: 'EXW (Ex Works)' },
+                    { value: 'CFR', label: 'CFR (Cost & Freight)' },
+                    { value: 'DDP', label: 'DDP (Delivered Duty Paid)' },
+                  ]}
+                  compact
+                  searchable={false}
+                />
               </div>
             </div>
 

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import CustomSelect from '../../components/common/CustomSelect';
 
 export default function SuperAdminProducts() {
   const { showToast } = useNotifications();
@@ -152,32 +153,32 @@ export default function SuperAdminProducts() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
             <span>Status:</span>
-            <select
-              value={moderationStatus}
-              onChange={(e) => setModerationStatus(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="ALL">All Moderation</option>
-              <option value="APPROVED">Approved</option>
-              <option value="PENDING">Pending Review</option>
-              <option value="REJECTED">Rejected</option>
-            </select>
+            <div className="w-44">
+              <CustomSelect
+                value={moderationStatus}
+                onChange={(e) => setModerationStatus(e.target.value)}
+                options={[
+                  { value: 'ALL', label: 'All Moderation' },
+                  { value: 'APPROVED', label: 'Approved' },
+                  { value: 'PENDING', label: 'Pending Review' },
+                  { value: 'REJECTED', label: 'Rejected' }
+                ]}
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
             <span>Category:</span>
-            <select
-              value={categorySlug}
-              onChange={(e) => setCategorySlug(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 max-w-[160px]"
-            >
-              <option value="ALL">All Categories</option>
-              {categories.map((c) => (
-                <option key={c.slug} value={c.slug}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <div className="w-44">
+              <CustomSelect
+                value={categorySlug}
+                onChange={(e) => setCategorySlug(e.target.value)}
+                options={[
+                  { value: 'ALL', label: 'All Categories' },
+                  ...categories.map((c) => ({ value: c.slug, label: c.name }))
+                ]}
+              />
+            </div>
           </div>
         </div>
       </div>

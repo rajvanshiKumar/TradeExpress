@@ -14,27 +14,35 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // Security and utility middleware
-app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, or Postman)
-      if (!origin) return callback(null, true);
-      // Allow localhost frontend development
-      if (
-        origin === ENV.FRONTEND_URL ||
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1')
-      ) {
-        return callback(null, true);
-      }
-      callback(null, true); // Permissive in dev to avoid CORS blocking
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-session-id', 'x-idempotency-key'],
+  helmet({
+    crossOriginResourcePolicy: false,
+    crossOriginOpenerPolicy: false,
   })
 );
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, or Postman)
+    if (!origin) return callback(null, true);
+    // Allow localhost frontend development, LAN IPs, and configured frontend URL
+    if (
+      ENV.NODE_ENV !== 'production' ||
+      origin === ENV.FRONTEND_URL ||
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1')
+    ) {
+      return callback(null, true);
+    }
+    callback(null, true); // Permissive in dev to avoid CORS blocking
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.use(morgan(ENV.NODE_ENV === 'development' ? 'dev' : 'combined'));
 app.use(

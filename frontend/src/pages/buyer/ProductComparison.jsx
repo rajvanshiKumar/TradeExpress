@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import Breadcrumbs from '../../components/common/Breadcrumbs';
 import Button from '../../components/common/Button';
+import CustomSelect from '../../components/common/CustomSelect';
 import Image from '../../components/common/Image';
 import Rating from '../../components/common/Rating';
 import useAuth from '../../hooks/useAuth';
@@ -598,22 +599,24 @@ export default function ProductComparison() {
             {/* Filter and Sort Dropdowns */}
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Sort By Dropdown */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-[11rem]">
                 <span className="text-xs font-semibold text-navy-600">Sort:</span>
-                <select
+                <CustomSelect
                   id="sort-products-by"
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="rounded-lg border border-navy-200 bg-white px-3 py-1.5 text-xs font-semibold text-navy-800 shadow-2xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
-                >
-                  <option value="relevance">Best Match</option>
-                  <option value="price-asc">Price: Low to High</option>
-                  <option value="price-desc">Price: High to Low</option>
-                  <option value="moq-asc">MOQ: Low to High</option>
-                  <option value="moq-desc">MOQ: High to Low</option>
-                  <option value="delivery-asc">Fastest Dispatch</option>
-                  <option value="rating-desc">Top Rated Supplier</option>
-                </select>
+                  options={[
+                    { value: 'relevance', label: 'Best Match' },
+                    { value: 'price-asc', label: 'Price: Low to High' },
+                    { value: 'price-desc', label: 'Price: High to Low' },
+                    { value: 'moq-asc', label: 'MOQ: Low to High' },
+                    { value: 'moq-desc', label: 'MOQ: High to Low' },
+                    { value: 'delivery-asc', label: 'Fastest Dispatch' },
+                    { value: 'rating-desc', label: 'Top Rated Supplier' },
+                  ]}
+                  compact
+                  searchable={false}
+                />
               </div>
 
               {/* Verified Filter Pill */}

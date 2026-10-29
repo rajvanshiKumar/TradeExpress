@@ -21,6 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 import Button from '../common/Button';
+import CustomSelect from '../common/CustomSelect';
 import Badge from '../common/Badge';
 import Rating from '../common/Rating';
 import VerificationBadge from '../common/VerificationBadge';
@@ -345,17 +346,19 @@ export default function ProductSupplierListing({ product }) {
             Verified only
           </label>
 
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="ts-input !py-2 !text-xs font-semibold"
-            aria-label="Sort suppliers"
-          >
-            <option value="price-asc">Price: Low to High</option>
-            <option value="price-desc">Price: High to Low</option>
-            <option value="lead-time">Fastest Lead Time</option>
-            <option value="moq-asc">Lowest Minimum Order (MOQ)</option>
-          </select>
+          <div className="w-52">
+            <CustomSelect
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              aria-label="Sort suppliers"
+              options={[
+                { value: 'price-asc', label: 'Price: Low to High' },
+                { value: 'price-desc', label: 'Price: High to Low' },
+                { value: 'lead-time', label: 'Fastest Lead Time' },
+                { value: 'moq-asc', label: 'Lowest Minimum Order (MOQ)' }
+              ]}
+            />
+          </div>
         </div>
       </div>
 

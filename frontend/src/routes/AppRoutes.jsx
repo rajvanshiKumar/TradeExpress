@@ -35,6 +35,10 @@ const BuyerQuotes = lazy(() => import('../pages/buyer/BuyerQuotes'));
 const ProductComparison = lazy(() => import('../pages/buyer/ProductComparison'));
 const BuyerProfile = lazy(() => import('../pages/buyer/BuyerProfile'));
 const BuyerAddresses = lazy(() => import('../pages/buyer/BuyerAddresses'));
+const BuyerPayments = lazy(() => import('../pages/buyer/BuyerPayments'));
+const BuyerNotifications = lazy(() => import('../pages/buyer/BuyerNotifications'));
+const BuyerDisputes = lazy(() => import('../pages/buyer/BuyerDisputes'));
+const BuyerSettings = lazy(() => import('../pages/buyer/BuyerSettings'));
 const SupplierDashboard = lazy(() => import('../pages/supplier/SupplierDashboard'));
 const SupplierProducts = lazy(() => import('../pages/supplier/SupplierProducts'));
 const SupplierProductForm = lazy(() => import('../pages/supplier/SupplierProductForm'));
@@ -48,6 +52,7 @@ const SupplierShipping = lazy(() => import('../pages/supplier/SupplierShipping')
 const SupplierPayments = lazy(() => import('../pages/supplier/SupplierPayments'));
 const SupplierProfile = lazy(() => import('../pages/supplier/SupplierProfile'));
 const SupplierNotifications = lazy(() => import('../pages/supplier/SupplierNotifications'));
+const SupplierInventory = lazy(() => import('../pages/supplier/SupplierInventory'));
 const AdminDashboard = lazy(() => import('../pages/admin/AdminDashboard'));
 const AdminProducts = lazy(() => import('../pages/admin/AdminProducts'));
 const AdminCompanies = lazy(() => import('../pages/admin/AdminCompanies'));
@@ -135,12 +140,17 @@ export default function AppRoutes() {
             <Route path="/buyer/wishlist" element={<BuyerWishlist />} />
             <Route path="/buyer/addresses" element={<BuyerAddresses />} />
             <Route path="/buyer/profile" element={<BuyerProfile />} />
+            <Route path="/buyer/payments" element={<BuyerPayments />} />
+            <Route path="/buyer/notifications" element={<BuyerNotifications />} />
+            <Route path="/buyer/disputes" element={<BuyerDisputes />} />
+            <Route path="/buyer/settings" element={<BuyerSettings />} />
           </Route>
         </Route>
         <Route element={<RoleRoute roles={['supplier']} />}>
           <Route element={<DashboardLayout role="supplier" />}>
             <Route path="/supplier" element={<SupplierDashboard />} />
             <Route path="/supplier/products" element={<SupplierProducts />} />
+            <Route path="/supplier/inventory" element={<SupplierInventory />} />
             <Route path="/supplier/products/new" element={<SupplierProductForm />} />
             <Route path="/supplier/products/:id/edit" element={<SupplierProductForm />} />
             <Route path="/supplier/orders" element={<SupplierOrders />} />

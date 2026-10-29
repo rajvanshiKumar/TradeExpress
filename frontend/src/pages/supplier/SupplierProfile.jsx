@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Button from '../../components/common/Button';
+import CustomSelect from '../../components/common/CustomSelect';
 import useNotifications from '../../hooks/useNotifications';
 import useAuth from '../../hooks/useAuth';
 import { fetchSupplierProfile, updateSupplierProfile } from '../../services/supplierDashboardApi';
@@ -178,17 +179,17 @@ export default function SupplierProfile() {
           </div>
 
           <div>
-            <label className="font-bold text-navy-900 block mb-1">Business Classification / Type</label>
-            <select
+            <CustomSelect
+              label="Business Classification / Type"
               value={form.businessType}
               onChange={(e) => setForm({ ...form, businessType: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-navy-950 focus:border-emerald-700 focus:outline-none"
-            >
-              <option value="Manufacturer">Manufacturer / OEM</option>
-              <option value="Wholesaler">Wholesaler & Stockist</option>
-              <option value="Distributor">Authorized Distributor</option>
-              <option value="Exporter">Direct Exporter</option>
-            </select>
+              options={[
+                { value: 'Manufacturer', label: 'Manufacturer / OEM' },
+                { value: 'Wholesaler', label: 'Wholesaler & Stockist' },
+                { value: 'Distributor', label: 'Authorized Distributor' },
+                { value: 'Exporter', label: 'Direct Exporter' }
+              ]}
+            />
           </div>
 
           <div>

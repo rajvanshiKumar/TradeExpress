@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import CustomSelect from '../../components/common/CustomSelect';
 
 export default function SuperAdminRfqs() {
   const { showToast } = useNotifications();
@@ -118,16 +119,18 @@ export default function SuperAdminRfqs() {
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <span className="text-xs text-slate-500 font-semibold">Status:</span>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          >
-            <option value="ALL">All RFQs</option>
-            <option value="OPEN">Open (Bidding)</option>
-            <option value="QUOTED">Quoted</option>
-            <option value="CLOSED">Closed</option>
-          </select>
+          <div className="w-40">
+            <CustomSelect
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              options={[
+                { value: 'ALL', label: 'All RFQs' },
+                { value: 'OPEN', label: 'Open (Bidding)' },
+                { value: 'QUOTED', label: 'Quoted' },
+                { value: 'CLOSED', label: 'Closed' }
+              ]}
+            />
+          </div>
         </div>
       </div>
 

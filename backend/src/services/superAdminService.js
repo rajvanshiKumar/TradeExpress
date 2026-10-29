@@ -1,4 +1,10 @@
 import prisma from '../config/db.js';
+import {
+  getActiveCommissionPolicy,
+  updateCommissionPolicy,
+  getCommissionMetrics,
+  roundINR,
+} from './commissionTierService.js';
 import bcrypt from 'bcryptjs';
 import { logAuditAction } from './auditService.js';
 
@@ -1026,7 +1032,7 @@ export async function getPayments({ page = 1, limit = 20, status = 'ALL', search
     ];
   }
 
-  const [total, payments, escrowHeldAgg, commissionAgg] = await Promise.all([
+  const [total, payments, escrowHeldAgg, commissionAgg, releasedAgg, refundedAgg, eligibleSubtotalAgg] = await Promise.all([
     prisma.payment.count({ where }),
     prisma.payment.findMany({
       where,
@@ -1040,7 +1046,13 @@ export async function getPayments({ page = 1, limit = 20, status = 'ALL', search
             orderNumber: true,
             buyerName: true,
             buyerEmail: true,
+            subtotal: true,
+            discount: true,
             total: true,
+            commissionEligibleSubtotal: true,
+            commissionRate: true,
+            commissionFee: true,
+            commissionPolicy: true,
             escrowLedger: true,
           },
         },
@@ -1053,13 +1065,34 @@ export async function getPayments({ page = 1, limit = 20, status = 'ALL', search
     prisma.escrowLedger.aggregate({
       _sum: { commissionFee: true },
     }),
+    prisma.escrowLedger.aggregate({
+      _sum: { commissionFee: true },
+      where: { status: 'RELEASED' },
+    }),
+    prisma.escrowLedger.aggregate({
+      _sum: { refundedCommission: true },
+    }),
+    prisma.order.aggregate({
+      _sum: { commissionEligibleSubtotal: true },
+      where: { orderStatus: { notIn: ['CANCELLED'] } },
+    }),
   ]);
+
+  const totalCommissionEarned = roundINR(Math.max(0, Number(releasedAgg._sum.commissionFee || 0) - Number(refundedAgg._sum.refundedCommission || 0)));
+  const pendingCommission = roundINR(Number(escrowHeldAgg._sum.amountHeld ? commissionAgg._sum.commissionFee - releasedAgg._sum.commissionFee : 0));
+  const settledCommission = roundINR(Number(releasedAgg._sum.commissionFee || 0));
+  const refundedCommission = roundINR(Number(refundedAgg._sum.refundedCommission || 0));
+  const grossEligibleSubtotal = roundINR(Number(eligibleSubtotalAgg._sum.commissionEligibleSubtotal || 0));
 
   return {
     payments,
     summary: {
-      totalEscrowHeld: Number(escrowHeldAgg._sum.amountHeld || 0),
-      totalCommissionEarned: Number(commissionAgg._sum.commissionFee || 0),
+      totalEscrowHeld: roundINR(Number(escrowHeldAgg._sum.amountHeld || 0)),
+      totalCommissionEarned,
+      pendingCommission,
+      settledCommission,
+      refundedCommission,
+      grossEligibleSubtotal,
     },
     pagination: {
       page: parseInt(page, 10),
@@ -1071,13 +1104,43 @@ export async function getPayments({ page = 1, limit = 20, status = 'ALL', search
 }
 
 export async function getCommissionSettings() {
-  const settings = await prisma.commissionSetting.findMany({
-    orderBy: { createdAt: 'desc' },
-  });
-  return settings;
+  const [policy, legacySettings] = await Promise.all([
+    getActiveCommissionPolicy(),
+    prisma.commissionSetting.findMany({ orderBy: { createdAt: 'desc' } }),
+  ]);
+  return {
+    policy,
+    settings: legacySettings,
+  };
 }
 
-export async function updateCommissionSetting({ type = 'GLOBAL', targetId = null, percentage, req }) {
+export async function updateCommissionSetting({
+  threshold1,
+  threshold2,
+  rate1,
+  rate2,
+  rate3,
+  reason,
+  type = 'GLOBAL',
+  targetId = null,
+  percentage,
+  req,
+}) {
+  // If declining tier parameters are present, update tier policy
+  if (threshold1 !== undefined && threshold2 !== undefined && rate1 !== undefined) {
+    return updateCommissionPolicy({
+      threshold1,
+      threshold2,
+      rate1,
+      rate2,
+      rate3,
+      reason,
+      actor: req?.user,
+      req,
+    });
+  }
+
+  // Backwards compatibility with legacy flat commission
   const num = parseFloat(percentage);
   if (isNaN(num) || num < 0 || num > 100) {
     const error = new Error('Percentage must be a number between 0 and 100.');
@@ -1111,6 +1174,8 @@ export async function updateCommissionSetting({ type = 'GLOBAL', targetId = null
   return setting;
 }
 
+export { getCommissionMetrics };
+
 export async function processRefund({ orderId, amount, reason, req }) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -1139,7 +1204,15 @@ export async function processRefund({ orderId, amount, reason, req }) {
       ? [
           prisma.escrowLedger.update({
             where: { id: order.escrowLedger.id },
-            data: { status: 'REFUNDED' },
+            data: {
+              status: refundAmount >= Number(order.total) ? 'REFUNDED' : 'PARTIALLY_REFUNDED',
+              refundedCommission: refundAmount >= Number(order.total)
+                ? Number(order.escrowLedger.commissionFee)
+                : roundINR(Number(order.escrowLedger.commissionFee) * (refundAmount / Number(order.total))),
+              payoutAmount: refundAmount >= Number(order.total)
+                ? 0
+                : Math.max(0, roundINR(Number(order.escrowLedger.amountHeld) - refundAmount - (Number(order.escrowLedger.commissionFee) - roundINR(Number(order.escrowLedger.commissionFee) * (refundAmount / Number(order.total)))))),
+            },
           }),
         ]
       : []),

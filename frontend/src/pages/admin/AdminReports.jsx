@@ -22,6 +22,7 @@ import Tabs, { TabPanel } from '../../components/common/Tabs';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorState from '../../components/common/ErrorState';
 import { TableSkeleton } from '../../components/common/Skeleton';
+import CustomSelect from '../../components/common/CustomSelect';
 import OrderDetails from '../../components/forms/OrderDetails';
 import useOrders from '../../hooks/useOrders';
 import useInquiries from '../../hooks/useInquiries';
@@ -526,19 +527,13 @@ export default function AdminReports() {
                       <label htmlFor="catSelect" className="block text-xs font-semibold uppercase tracking-wider text-muted">
                         Category
                       </label>
-                      <select
+                      <CustomSelect
                         id="catSelect"
                         value={newCatId}
                         onChange={(e) => setNewCatId(e.target.value)}
-                        className="ts-input mt-1"
-                      >
-                        <option value="">Select category...</option>
-                        {categories.map((c) => (
-                          <option key={c.id || c.slug} value={c.slug || c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Select category..."
+                        options={categories.map((c) => ({ value: c.slug || c.id, label: c.name }))}
+                      />
                     </div>
                     <div className="w-full sm:w-28">
                       <label htmlFor="catRateInput" className="block text-xs font-semibold uppercase tracking-wider text-muted">
@@ -639,13 +634,18 @@ export default function AdminReports() {
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
                   <input id="ar-search" type="search" className="ts-input pl-9" placeholder={tab === 'inquiries' ? 'Search by ID, product, buyer or supplier' : 'Search by order ID or buyer'} value={search} onChange={(event) => setSearch(event.target.value)} />
                 </div>
-                <select aria-label="Filter by status" className="ts-input" value={status} onChange={(event) => setStatus(event.target.value)}>
-                  <option value="">All statuses</option>
-                  {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-                <select aria-label="Sort" className="ts-input" value={sort} onChange={(event) => setSort(event.target.value)}>
-                  {Object.entries(SORTS).filter(([value]) => tab === 'inquiries' || value !== 'quantity').map(([value, item]) => <option key={value} value={value}>{item.label}</option>)}
-                </select>
+                <CustomSelect
+                  aria-label="Filter by status"
+                  value={status}
+                  onChange={(event) => setStatus(event.target.value)}
+                  options={[{ value: '', label: 'All statuses' }, ...statuses.map((item) => ({ value: item, label: item }))]}
+                />
+                <CustomSelect
+                  aria-label="Sort"
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value)}
+                  options={Object.entries(SORTS).filter(([value]) => tab === 'inquiries' || value !== 'quantity').map(([value, item]) => ({ value, label: item.label }))}
+                />
               </div>
 
               <div className="ts-card overflow-hidden">
@@ -669,9 +669,14 @@ export default function AdminReports() {
                               <td>
                                 <div className="flex items-center gap-2">
                                   <StatusBadge status={inquiry.status} />
-                                  <select value={inquiry.status} onChange={(event) => { setInquiryStatus(inquiry.id, event.target.value); showToast(`${inquiry.id} marked as ${event.target.value}.`, 'info'); }} aria-label={`Change status of ${inquiry.id}`} className="ts-input !min-h-9 w-36 !py-1 text-sm">
-                                    {INQUIRY_STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
-                                  </select>
+                                  <div className="w-36">
+                                    <CustomSelect
+                                      value={inquiry.status}
+                                      onChange={(event) => { setInquiryStatus(inquiry.id, event.target.value); showToast(`${inquiry.id} marked as ${event.target.value}.`, 'info'); }}
+                                      aria-label={`Change status of ${inquiry.id}`}
+                                      options={INQUIRY_STATUSES.map((item) => ({ value: item, label: item }))}
+                                    />
+                                  </div>
                                 </div>
                               </td>
                             </tr>
@@ -697,9 +702,14 @@ export default function AdminReports() {
                             <td>
                               <div className="flex items-center gap-2">
                                 <StatusBadge status={order.status} />
-                                <select value={order.status} onChange={(event) => { updateOrderStatus(order.id, event.target.value); showToast(`${order.id} marked as ${event.target.value}.`, 'info'); }} aria-label={`Change status of ${order.id}`} className="ts-input !min-h-9 w-40 !py-1 text-sm">
-                                  {ORDER_STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
-                                </select>
+                                <div className="w-40">
+                                  <CustomSelect
+                                    value={order.status}
+                                    onChange={(event) => { updateOrderStatus(order.id, event.target.value); showToast(`${order.id} marked as ${event.target.value}.`, 'info'); }}
+                                    aria-label={`Change status of ${order.id}`}
+                                    options={ORDER_STATUSES.map((item) => ({ value: item, label: item }))}
+                                  />
+                                </div>
                               </div>
                             </td>
                             <td><Button variant="outline" size="sm" icon={Eye} onClick={() => setOpenOrder(order.id)} aria-label={`View order ${order.id}`}>View</Button></td>

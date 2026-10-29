@@ -1,5 +1,15 @@
 import { Link } from 'react-router-dom';
-import { FileText, Heart, MessageSquare, Package } from 'lucide-react';
+import {
+  FileText,
+  Heart,
+  MapPin,
+  MessageSquare,
+  Package,
+  Receipt,
+  Scale,
+  Search,
+  ShieldAlert,
+} from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import StatCard from '../../components/common/StatCard';
 import Button from '../../components/common/Button';
@@ -33,8 +43,69 @@ export default function BuyerDashboard() {
   const viewed = recentlyViewed.map((id) => products.find((product) => product.id === id && product.status === 'Active')).filter(Boolean).slice(0, 12);
 
   return (
-    <div className="space-y-8">
-      <SectionHeading title={`Welcome back, ${user.name.split(' ')[0]}`} description={`${user.company || 'Buyer account'} · Buyer account`} actions={<Button to="/rfq" size="sm" icon={FileText}>Request a Quote</Button>} />
+    <div className="space-y-6">
+      <SectionHeading
+        title={`Welcome back, ${user.name.split(' ')[0]}`}
+        description={`${user.company || 'Enterprise Procurement Account'} · Verified Buyer`}
+        actions={
+          <Button to="/rfq" size="sm" icon={FileText} variant="primary">
+            Request a Quote
+          </Button>
+        }
+      />
+
+      {/* Quick Navigation Shortcuts */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <Link
+          to="/products"
+          className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0">
+            <Search className="size-3.5" />
+          </div>
+          <span className="truncate">Find Products</span>
+        </Link>
+
+        <Link
+          to="/compare-products"
+          className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-blue-50 text-blue-800 flex items-center justify-center shrink-0">
+            <Scale className="size-3.5" />
+          </div>
+          <span className="truncate">Compare Items</span>
+        </Link>
+
+        <Link
+          to="/buyer/payments"
+          className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0">
+            <Receipt className="size-3.5" />
+          </div>
+          <span className="truncate">Invoices & Escrow</span>
+        </Link>
+
+        <Link
+          to="/buyer/disputes"
+          className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center shrink-0">
+            <ShieldAlert className="size-3.5" />
+          </div>
+          <span className="truncate">Help & Disputes</span>
+        </Link>
+
+        <Link
+          to="/buyer/addresses"
+          className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+            <MapPin className="size-3.5" />
+          </div>
+          <span className="truncate">Address Book</span>
+        </Link>
+      </div>
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard icon={Package} label="Orders" value={ordersLoading ? '…' : myOrders.length} hint={`${myOrders.filter((order) => !['Delivered', 'Cancelled'].includes(order.status)).length} in progress`} to="/buyer/orders" />
@@ -51,7 +122,7 @@ export default function BuyerDashboard() {
         {ordersLoading ? <TableSkeleton rows={3} /> : myOrders.length === 0 ? (
           <EmptyState icon={Package} className="!py-10" title="No orders yet" text="Place an order to see it here." action={<Button to="/products" variant="navy" size="sm">Browse products</Button>} />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto ts-slim-scrollbar scroll-smooth">
             <table className="ts-table">
               <thead><tr><th scope="col">Order</th><th scope="col">Date</th><th scope="col">Items</th><th scope="col">Total</th><th scope="col">Status</th></tr></thead>
               <tbody>

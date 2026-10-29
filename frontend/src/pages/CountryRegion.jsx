@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Globe, ExternalLink, AlertCircle, ArrowLeft, Check, ChevronDown } from 'lucide-react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { useTranslation } from '../i18n/LanguageContext';
+import CustomSelect from '../components/common/CustomSelect';
 
 export default function CountryRegion() {
   const { country, setCountry, supportedCountries, t } = useTranslation();
@@ -89,26 +90,21 @@ export default function CountryRegion() {
                 {t('countryRegion.sectionTitle', {}, 'Select your preferred country/region website')}
               </label>
 
-              {/* Styled Dropdown Selector */}
-              <div className="relative mt-2">
-                <select
+              {/* Custom Dropdown Selector */}
+              <div className="mt-2">
+                <CustomSelect
                   id={selectId}
                   value={selectedCountryName}
                   onChange={(e) => {
                     setSelectedCountryName(e.target.value);
                     setStatusMessage(null);
                   }}
-                  className="w-full appearance-none rounded-xl border border-slate-300 bg-white py-3 pl-4 pr-10 text-sm font-semibold text-slate-900 shadow-2xs focus:border-emerald-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20"
-                >
-                  {supportedCountries.map((c) => (
-                    <option key={c.code} value={c.name}>
-                      {c.flag} {c.name} ({c.currency})
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-500">
-                  <ChevronDown className="size-4" aria-hidden="true" />
-                </div>
+                  options={supportedCountries.map((c) => ({
+                    value: c.name,
+                    label: `${c.flag} ${c.name} (${c.currency})`,
+                  }))}
+                  searchable
+                />
               </div>
 
               {/* Note below selector */}

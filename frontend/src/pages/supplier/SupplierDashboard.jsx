@@ -308,11 +308,10 @@ function Overview({ company, products }) {
             </span>
             <Link
               to="/supplier/verification"
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                verification.isVerified
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-amber-100 text-amber-800'
-              }`}
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${verification.isVerified
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-amber-100 text-amber-800'
+                }`}
             >
               {verification.isVerified ? '✓ Verified Merchant' : 'Review Documents →'}
             </Link>
@@ -434,9 +433,8 @@ function Overview({ company, products }) {
                     {product.name}
                   </Link>
                   <span
-                    className={`shrink-0 text-xs font-bold ${
-                      product.stock <= 0 ? 'text-danger' : 'text-amber-700'
-                    }`}
+                    className={`shrink-0 text-xs font-bold ${product.stock <= 0 ? 'text-danger' : 'text-amber-700'
+                      }`}
                   >
                     {product.stock.toLocaleString('en-IN')} {product.unit || 'units'} left
                   </span>
@@ -573,3 +571,5 @@ export default function SupplierDashboard() {
   useDocumentTitle('Supplier Dashboard · TradeExpress');
   return <SupplierGuard>{(company, products) => <Overview company={company} products={products} />}</SupplierGuard>;
 }
+
+

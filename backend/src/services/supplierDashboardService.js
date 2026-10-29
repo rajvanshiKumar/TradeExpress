@@ -478,14 +478,54 @@ export async function getSupplierPayments(supplierUser, { page = 1, limit = 20, 
 
   const ledger = orders.map((o) => {
     const gross = Number(o.total || 0);
-    const commRate = o.escrow?.commissionRate ? Number(o.escrow.commissionRate) : defaultCommissionRate;
-    const commFee = o.escrow?.commissionFee ? Number(o.escrow.commissionFee) : (gross * commRate) / 100;
-    const netSupplier = gross - commFee;
+    const subtotal = Number(o.subtotal || 0);
+    const discount = Number(o.discount || 0);
+    const eligibleSubtotal = o.commissionEligibleSubtotal !== null && o.commissionEligibleSubtotal !== undefined
+      ? Number(o.commissionEligibleSubtotal)
+      : Math.max(0, subtotal - discount);
+
+    const commRate = o.commissionRate !== null && o.commissionRate !== undefined
+      ? Number(o.commissionRate)
+      : (o.escrow?.commissionRate ? Number(o.escrow.commissionRate) : (eligibleSubtotal <= 50000 ? 8.0 : eligibleSubtotal <= 200000 ? 6.0 : 4.0));
+
+    const commFee = o.commissionFee !== null && o.commissionFee !== undefined
+      ? Number(o.commissionFee)
+      : (o.escrow?.commissionFee ? Number(o.escrow.commissionFee) : Math.round(eligibleSubtotal * (commRate / 100) * 100) / 100);
+
+    const shippingFee = Number(o.shippingFee || 0);
+    const tax = Number(o.tax || 0);
+    const refundedCommission = Number(o.escrow?.refundedCommission || 0);
+
+    const isRefunded = o.orderStatus === 'REFUNDED' || o.paymentStatus === 'REFUNDED';
+    const isCancelled = o.orderStatus === 'CANCELLED';
+
+    // Refunds if any on this order
+    const refundAmount = isRefunded
+      ? gross
+      : o.escrow?.refundedCommission
+      ? Math.max(0, Math.round((Number(o.escrow.amountHeld) - Number(o.escrow.payoutAmount)) * 100) / 100)
+      : 0;
+
+    const netSupplier = Math.max(0, Math.round((gross - commFee - refundAmount) * 100) / 100);
 
     const escrowStatus = o.escrow?.status || (o.paymentStatus === 'PAID' ? 'HELD' : 'PENDING');
-    const payoutStatus = escrowStatus === 'RELEASED' ? 'SETTLED' : escrowStatus === 'HELD' ? 'HELD_IN_ESCROW' : 'PENDING_PAYMENT';
+    const payoutStatus = isCancelled
+      ? 'CANCELLED'
+      : isRefunded
+      ? 'REFUNDED'
+      : escrowStatus === 'RELEASED'
+      ? 'SETTLED'
+      : escrowStatus === 'HELD'
+      ? 'HELD_IN_ESCROW'
+      : 'PENDING_PAYMENT';
 
-    if (o.orderStatus !== 'CANCELLED' && o.orderStatus !== 'REFUNDED') {
+    const tierLabel = eligibleSubtotal <= 50000
+      ? 'Tier 1 (≤ ₹50k)'
+      : eligibleSubtotal <= 200000
+      ? 'Tier 2 (₹50k-₹200k)'
+      : 'Tier 3 (> ₹200k)';
+
+    if (!isCancelled && !isRefunded) {
       if (o.paymentStatus === 'PAID' || o.orderStatus === 'DELIVERED') {
         grossTotal += gross;
         totalCommission += commFee;
@@ -507,10 +547,19 @@ export async function getSupplierPayments(supplierUser, { page = 1, limit = 20, 
       paymentMethod: o.paymentMethod,
       paymentStatus: o.paymentStatus,
       orderStatus: o.orderStatus,
+      productSubtotal: Math.round(subtotal * 100) / 100,
+      eligibleSubtotal: Math.round(eligibleSubtotal * 100) / 100,
+      discount: Math.round(discount * 100) / 100,
+      shippingFee: Math.round(shippingFee * 100) / 100,
+      tax: Math.round(tax * 100) / 100,
       grossAmount: Math.round(gross * 100) / 100,
       commissionRate: commRate,
       commissionAmount: Math.round(commFee * 100) / 100,
+      refundedCommission: Math.round(refundedCommission * 100) / 100,
+      refundAmount: Math.round(refundAmount * 100) / 100,
+      tierLabel,
       netSupplierAmount: Math.round(netSupplier * 100) / 100,
+      estimatedNetPayable: Math.round(netSupplier * 100) / 100,
       escrowStatus,
       payoutStatus,
       releasedAt: o.escrow?.releasedAt || null,

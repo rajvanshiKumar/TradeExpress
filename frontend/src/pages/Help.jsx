@@ -30,6 +30,7 @@ import useNotifications from '../hooks/useNotifications';
 import Breadcrumbs from '../components/common/Breadcrumbs';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
+import CustomSelect from '../components/common/CustomSelect';
 import SupportTicketsSection from '../components/support/SupportTicketsSection';
 
 export const HELP_CATEGORIES = [
@@ -737,23 +738,21 @@ export default function Help() {
 
         {/* Language Selection & Assistance Footer (Matching bottom of user's screenshot) */}
         <div className="mt-14 text-center border-t border-navy-900/[0.08] pt-8">
-          <div className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-navy-900/10 shadow-2xs mb-4">
-            <Globe className="size-4 text-navy-700" />
-            <span className="text-xs font-semibold text-navy-900">Select Language:</span>
-            <select
-              value={selectedLanguage}
-              onChange={(e) => {
-                setSelectedLanguage(e.target.value);
-                showToast(`Language set to ${LANGUAGES.find((l) => l.code === e.target.value)?.label}`, 'info');
-              }}
-              className="text-xs font-bold text-navy-900 bg-transparent focus:outline-none cursor-pointer"
-            >
-              {LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.label}
-                </option>
-              ))}
-            </select>
+          <div className="inline-flex items-center gap-2.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs mb-4">
+            <Globe className="size-4 text-emerald-700 shrink-0" />
+            <span className="text-xs font-semibold text-navy-900 shrink-0">Select Language:</span>
+            <div className="min-w-[10rem]">
+              <CustomSelect
+                value={selectedLanguage}
+                onChange={(e) => {
+                  setSelectedLanguage(e.target.value);
+                  showToast(`Language set to ${LANGUAGES.find((l) => l.code === e.target.value)?.label}`, 'info');
+                }}
+                options={LANGUAGES.map((lang) => ({ value: lang.code, label: lang.label }))}
+                compact
+                searchable={false}
+              />
+            </div>
           </div>
           <p className="text-[11px] text-muted">
             Powered by TradeExpress Multi-Language International Trade Assistant

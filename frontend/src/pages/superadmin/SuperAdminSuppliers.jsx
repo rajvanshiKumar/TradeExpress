@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import CustomSelect from '../../components/common/CustomSelect';
 
 export default function SuperAdminSuppliers() {
   const { showToast } = useNotifications();
@@ -125,17 +126,19 @@ export default function SuperAdminSuppliers() {
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <span className="text-xs text-slate-500 font-semibold">Verification Queue:</span>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          >
-            <option value="ALL">All Suppliers</option>
-            <option value="PENDING">Pending Review</option>
-            <option value="VERIFIED">Verified Approved</option>
-            <option value="REJECTED">Rejected</option>
-            <option value="RESUBMISSION_REQUESTED">Resubmission Requested</option>
-          </select>
+          <div className="w-48">
+            <CustomSelect
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              options={[
+                { value: 'ALL', label: 'All Suppliers' },
+                { value: 'PENDING', label: 'Pending Review' },
+                { value: 'VERIFIED', label: 'Verified Approved' },
+                { value: 'REJECTED', label: 'Rejected' },
+                { value: 'RESUBMISSION_REQUESTED', label: 'Resubmission Requested' }
+              ]}
+            />
+          </div>
         </div>
       </div>
 

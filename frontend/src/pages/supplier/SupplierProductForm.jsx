@@ -8,6 +8,7 @@ import Button from '../../components/common/Button';
 import Image from '../../components/common/Image';
 import EmptyState from '../../components/common/EmptyState';
 import PriceTiers from '../../components/products/PriceTiers';
+import ProductMediaUploader from '../../components/products/ProductMediaUploader';
 import SupplierGuard from './SupplierGuard';
 import useProducts from '../../hooks/useProducts';
 import useNotifications from '../../hooks/useNotifications';
@@ -47,6 +48,10 @@ function Form({ company, product }) {
   const navigate = useNavigate();
   const isEdit = Boolean(product);
 
+  const initialImages = Array.isArray(product?.images)
+    ? product.images.map((item) => (typeof item === 'string' ? item : item.url)).filter(Boolean)
+    : product?.photo ? [product.photo] : [];
+
   const [values, setValues] = useState(() => ({
     name: product?.name ?? '', category: product?.category ?? '', subcategory: product?.subcategory ?? '', summary: product?.summary ?? '',
     description: product?.description ?? '', price: product ? String(product.price) : '', unit: product?.unit ?? 'piece', moq: product ? String(product.moq) : '',
@@ -54,7 +59,9 @@ function Form({ company, product }) {
     specifications: specsToText(product?.specifications), sampleAvailable: product?.sampleAvailable ?? true, samplePrice: product?.samplePrice ? String(product.samplePrice) : '',
     readyToShip: product?.readyToShip ?? false, deal: product?.deal ?? false, status: product?.status ?? 'Active',
     hsnCode: product?.hsnCode ?? '84713010', gstRate: product?.gstRate ? String(product.gstRate) : '18', weightKg: product?.weightKg ? String(product.weightKg) : '1.0',
-    photo: product?.photo ?? null,
+    photo: product?.photo ?? (initialImages[0] || null),
+    images: initialImages,
+    videoUrl: product?.videoUrl || product?.video || null,
   }));
   const [customTiersEnabled, setCustomTiersEnabled] = useState(Boolean(product?.priceTiers && product.priceTiers.length));
   const [customTier1, setCustomTier1] = useState(product?.priceTiers?.[1]?.price ? String(product.priceTiers[1].price) : '');
@@ -91,6 +98,10 @@ function Form({ company, product }) {
   const handleImageFileChange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image file (PNG, JPG, WEBP).', 'error');
+      return;
+    }
 
     setUploadingImage(true);
     try {
@@ -120,6 +131,7 @@ function Form({ company, product }) {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (submitting) return;
     const found = validate(schema, values);
     setErrors(found);
     if (hasErrors(found)) return focusFirstError(found, 'product-');
@@ -130,6 +142,7 @@ function Form({ company, product }) {
     const basePrice = Number(values.price);
     const samplePrice = values.samplePrice ? Number(values.samplePrice) : basePrice;
 
+    const primaryPhoto = values.images?.[0] || values.photo || null;
     const data = {
       name: values.name.trim(),
       category: values.category,
@@ -152,7 +165,9 @@ function Form({ company, product }) {
       hsnCode: values.hsnCode.trim(),
       gstRate: Number(values.gstRate),
       weightKg: Number(values.weightKg || 1),
-      photo: values.photo,
+      photo: primaryPhoto,
+      images: values.images,
+      videoUrl: values.videoUrl,
       priceTiers: previewTiers,
       shippingEstimate: values.readyToShip ? 'Ships in 3–5 days from stock' : `Ships ${leadTimeDays}–${leadTimeDays + 7} days after order confirmation`,
     };
@@ -168,7 +183,7 @@ function Form({ company, product }) {
         }
         updateProduct(product.id, {
           ...data,
-          illustration: data.photo || (product.illustration?.startsWith('product-') ? product.illustration : category?.illustration ?? product.illustration),
+          illustration: primaryPhoto || (product.illustration?.startsWith('product-') ? product.illustration : category?.illustration ?? product.illustration),
         });
         showToast('Product updated. The catalogue shows the new details.');
       } else {
@@ -177,15 +192,20 @@ function Form({ company, product }) {
         try {
           const res = await apiPost('supplier/products', { ...data, companyId: company.id });
           createdBackendProduct = res?.data || res?.product || null;
-        } catch {
-          // Fallback smoothly
+        } catch (err) {
+          if (err?.status === 400 || err?.status === 422) {
+            showToast(err.message || 'Validation error while creating product.', 'error');
+            setSubmitting(false);
+            return;
+          }
+          console.warn('Backend product creation warning:', err);
         }
         addProduct({
           ...data,
           id: createdBackendProduct?.id || undefined,
           sku: createdBackendProduct?.sku || undefined,
           companyId: company.id,
-          illustration: data.photo || (category?.illustration ?? 'product-generic'),
+          illustration: primaryPhoto || (category?.illustration ?? 'product-generic'),
           packaging: { unitPack: `One ${values.unit} per polybag or box`, cartonQty: moq >= 100 ? 50 : 10, cartonSize: '55 × 40 × 35 cm', note: 'Custom packaging available on request.' },
         });
         showToast('Product added. It is now live in the catalogue.');
@@ -328,55 +348,70 @@ function Form({ company, product }) {
               )}
             </div>
           </fieldset>
+
+          <fieldset className="ts-card p-5 sm:p-6">
+            <legend className="float-left mb-4 w-full font-display text-base font-bold text-navy-900">
+              Product Visuals & Promotional Media (Up to 8 Images + 1 Video)
+            </legend>
+            <div className="clear-both">
+              <ProductMediaUploader
+                images={values.images}
+                setImages={(updater) =>
+                  setValues((prev) => {
+                    const next = typeof updater === 'function' ? updater(prev.images) : updater;
+                    return { ...prev, images: next, photo: next[0] || null };
+                  })
+                }
+                videoUrl={values.videoUrl}
+                setVideoUrl={(newVideo) =>
+                  setValues((prev) => ({ ...prev, videoUrl: newVideo }))
+                }
+                disabled={submitting}
+              />
+            </div>
+          </fieldset>
         </div>
 
         <aside className="space-y-4">
           <div className="ts-card p-5 xl:sticky xl:top-40">
-            <p className="ts-label">Product photograph / visual</p>
-            {values.photo ? (
-              <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-navy-900/[0.08] bg-surface group">
+            <p className="ts-label">Listing Preview & Media</p>
+            <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-100 group">
+              {values.images?.[0] || values.photo ? (
                 <img
-                  src={photoUrl(values.photo)}
-                  alt="Product preview"
-                  className="h-full w-full object-cover"
+                  src={photoUrl(values.images?.[0] || values.photo)}
+                  alt="Listing cover preview"
+                  className="size-full object-cover"
                 />
-                <button
-                  type="button"
-                  onClick={() => setValues((prev) => ({ ...prev, photo: null }))}
-                  className="absolute top-2 right-2 rounded-lg bg-navy-900/80 px-2.5 py-1 text-xs font-semibold text-white shadow backdrop-blur hover:bg-rose-600 transition"
-                  title="Remove image"
-                >
-                  Remove
-                </button>
-              </div>
-            ) : (
-              <Image
-                photo={null}
-                illustration={category?.illustration ?? 'product-generic'}
-                width={400}
-                height={400}
-                alt="Listing image preview"
-                className="aspect-square w-full rounded-xl bg-surface object-cover"
-              />
-            )}
+              ) : (
+                <Image
+                  photo={null}
+                  illustration={category?.illustration ?? 'product-generic'}
+                  width={400}
+                  height={400}
+                  alt="Listing placeholder"
+                  className="size-full object-cover"
+                />
+              )}
+              <span className="absolute bottom-2 left-2 rounded-md bg-navy-950/80 px-2 py-0.5 text-[10px] font-bold text-white shadow backdrop-blur-xs">
+                Cover Image
+              </span>
+            </div>
 
-            <div className="mt-3">
-              <label htmlFor="product-photo-upload" className="block text-xs font-semibold text-muted mb-1">
-                Upload Custom Image (T-Shirt, Electronics, etc.)
-              </label>
-              <input
-                id="product-photo-upload"
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/jpg"
-                onChange={handleImageFileChange}
-                disabled={uploadingImage}
-                className="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-navy-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-brand-600 cursor-pointer"
-              />
-              {uploadingImage && <p className="mt-1 text-xs text-brand-600 font-medium animate-pulse">Uploading image to server...</p>}
+            <div className="mt-3 rounded-xl border border-slate-200/80 bg-slate-50 p-2.5 text-xs text-slate-600 space-y-1">
+              <div className="flex justify-between font-semibold">
+                <span>Photos Attached:</span>
+                <span className="text-emerald-700 font-bold">{values.images?.length || 0} / 8</span>
+              </div>
+              <div className="flex justify-between font-semibold">
+                <span>Video Showcase:</span>
+                <span className={values.videoUrl ? 'text-emerald-700 font-bold' : 'text-slate-400 font-normal'}>
+                  {values.videoUrl ? 'Attached (1/1)' : 'None'}
+                </span>
+              </div>
             </div>
 
             <div className="mt-5 grid gap-2">
-              <Button type="submit" icon={Save} full disabled={submitting || uploadingImage}>
+              <Button type="submit" icon={Save} full disabled={submitting}>
                 {submitting ? 'Saving...' : isEdit ? 'Save changes' : 'Publish product'}
               </Button>
               <Button to="/supplier/products" variant="outline" full>Cancel</Button>

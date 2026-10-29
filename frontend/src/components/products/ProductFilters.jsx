@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Button from '../common/Button';
 import { Checkbox } from '../common/Input';
 import { BUSINESS_TYPES } from '../../utils/constants';
+import CustomSelect from '../common/CustomSelect';
 
 function Group({ title, children }) {
   return (
@@ -60,27 +61,41 @@ export default function ProductFilters({ filters, onChange, categories, countrie
       {!hideCategory ? (
         <Group title="Category">
           <label htmlFor={`${idPrefix}-category`} className="sr-only">Category</label>
-          <select id={`${idPrefix}-category`} className="ts-input" value={filters.category} onChange={(event) => onChange({ category: event.target.value, subcategory: '' })}>
-            <option value="">All categories</option>
-            {categories.map((category) => <option key={category.id} value={category.slug}>{category.name}</option>)}
-          </select>
+          <CustomSelect
+            id={`${idPrefix}-category`}
+            value={filters.category}
+            onChange={(event) => onChange({ category: event.target.value, subcategory: '' })}
+            placeholder="All categories"
+            options={[{ value: '', label: 'All categories' }, ...categories.map((c) => ({ value: c.slug, label: c.name }))]}
+            compact
+          />
           {activeCategory?.subcategories.length ? (
             <>
               <label htmlFor={`${idPrefix}-sub`} className="sr-only">Subcategory</label>
-              <select id={`${idPrefix}-sub`} className="ts-input mt-2" value={filters.subcategory} onChange={(event) => onChange({ subcategory: event.target.value })}>
-                <option value="">All {activeCategory.name}</option>
-                {activeCategory.subcategories.map((sub) => <option key={sub} value={sub}>{sub}</option>)}
-              </select>
+              <div className="mt-2">
+                <CustomSelect
+                  id={`${idPrefix}-sub`}
+                  value={filters.subcategory}
+                  onChange={(event) => onChange({ subcategory: event.target.value })}
+                  placeholder={`All ${activeCategory.name}`}
+                  options={[{ value: '', label: `All ${activeCategory.name}` }, ...activeCategory.subcategories.map((sub) => ({ value: sub, label: sub }))]}
+                  compact
+                />
+              </div>
             </>
           ) : null}
         </Group>
       ) : activeCategory?.subcategories.length ? (
         <Group title="Subcategory">
           <label htmlFor={`${idPrefix}-sub`} className="sr-only">Subcategory</label>
-          <select id={`${idPrefix}-sub`} className="ts-input" value={filters.subcategory} onChange={(event) => onChange({ subcategory: event.target.value })}>
-            <option value="">All {activeCategory.name}</option>
-            {activeCategory.subcategories.map((sub) => <option key={sub} value={sub}>{sub}</option>)}
-          </select>
+          <CustomSelect
+            id={`${idPrefix}-sub`}
+            value={filters.subcategory}
+            onChange={(event) => onChange({ subcategory: event.target.value })}
+            placeholder={`All ${activeCategory.name}`}
+            options={[{ value: '', label: `All ${activeCategory.name}` }, ...activeCategory.subcategories.map((sub) => ({ value: sub, label: sub }))]}
+            compact
+          />
         </Group>
       ) : null}
 

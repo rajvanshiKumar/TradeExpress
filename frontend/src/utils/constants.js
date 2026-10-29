@@ -29,6 +29,7 @@ export const STORAGE_KEYS = {
   contactMessages: 'contact-messages',
   buyNow: 'buy-now',
   savedSuppliers: 'saved-suppliers',
+  seenOrders: 'seen-orders',
 };
 
 // All prices are stored and shown in Indian Rupees.

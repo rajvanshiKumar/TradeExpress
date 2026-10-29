@@ -164,21 +164,36 @@
 
   .ts-slim-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgb(16 185 129 / 0.35) transparent;
+    scrollbar-color: rgba(18, 63, 37, 0.28) transparent;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
   }
   .ts-slim-scrollbar::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
   }
   .ts-slim-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
   .ts-slim-scrollbar::-webkit-scrollbar-thumb {
-    background: rgb(16 185 129 / 0.35);
+    background-color: rgba(18, 63, 37, 0.25);
     border-radius: 9999px;
+    border: 1.5px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 0.18s ease;
   }
   .ts-slim-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgb(16 185 129 / 0.7);
+    background-color: rgba(18, 63, 37, 0.55);
+    background-clip: padding-box;
+  }
+  .ts-slim-scrollbar::-webkit-scrollbar-thumb:active {
+    background-color: rgba(18, 63, 37, 0.75);
+    background-clip: padding-box;
+  }
+
+  .ts-smooth-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Subtle world-grid texture used on navy sections */

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import CustomSelect from '../../components/common/CustomSelect';
 
 const PRESET_ROLES = [
   {
@@ -386,17 +387,11 @@ export default function SuperAdminAdmins() {
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Administrative Role Template</label>
-                <select
+                <CustomSelect
                   value={formData.adminRole}
                   onChange={(e) => handlePresetChange(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800"
-                >
-                  {PRESET_ROLES.map((r) => (
-                    <option key={r.key} value={r.key}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
+                  options={PRESET_ROLES.map((r) => ({ value: r.key, label: r.label }))}
+                />
               </div>
 
               {/* Granular Checkboxes */}

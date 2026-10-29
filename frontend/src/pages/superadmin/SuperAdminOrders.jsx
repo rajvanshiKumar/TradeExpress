@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import CustomSelect from '../../components/common/CustomSelect';
 
 export default function SuperAdminOrders() {
   const { showToast } = useNotifications();
@@ -142,35 +143,39 @@ export default function SuperAdminOrders() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
             <span>Status:</span>
-            <select
-              value={orderStatus}
-              onChange={(e) => setOrderStatus(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="ORDER_PLACED">Order Placed</option>
-              <option value="ORDER_CONFIRMED">Confirmed</option>
-              <option value="PROCESSING">In Production</option>
-              <option value="PACKED">Packed</option>
-              <option value="SHIPPED">Shipped</option>
-              <option value="DELIVERED">Delivered</option>
-              <option value="CANCELLED">Cancelled</option>
-              <option value="REFUNDED">Refunded</option>
-            </select>
+            <div className="w-44">
+              <CustomSelect
+                value={orderStatus}
+                onChange={(e) => setOrderStatus(e.target.value)}
+                options={[
+                  { value: 'ALL', label: 'All Statuses' },
+                  { value: 'ORDER_PLACED', label: 'Order Placed' },
+                  { value: 'ORDER_CONFIRMED', label: 'Confirmed' },
+                  { value: 'PROCESSING', label: 'In Production' },
+                  { value: 'PACKED', label: 'Packed' },
+                  { value: 'SHIPPED', label: 'Shipped' },
+                  { value: 'DELIVERED', label: 'Delivered' },
+                  { value: 'CANCELLED', label: 'Cancelled' },
+                  { value: 'REFUNDED', label: 'Refunded' }
+                ]}
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
             <span>Payment:</span>
-            <select
-              value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="ALL">All Payments</option>
-              <option value="PAID">Paid</option>
-              <option value="PENDING">Pending</option>
-              <option value="REFUNDED">Refunded</option>
-            </select>
+            <div className="w-36">
+              <CustomSelect
+                value={paymentStatus}
+                onChange={(e) => setPaymentStatus(e.target.value)}
+                options={[
+                  { value: 'ALL', label: 'All Payments' },
+                  { value: 'PAID', label: 'Paid' },
+                  { value: 'PENDING', label: 'Pending' },
+                  { value: 'REFUNDED', label: 'Refunded' }
+                ]}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -380,21 +385,20 @@ export default function SuperAdminOrders() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                     <div>
                       <label className="block font-semibold text-slate-600 mb-1">Order Status</label>
-                      <select
+                      <CustomSelect
                         value={newStatus}
                         onChange={(e) => setNewStatus(e.target.value)}
-                        className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-800"
-                      >
-                        <option value="ORDER_PLACED">Order Placed</option>
-                        <option value="ORDER_CONFIRMED">Order Confirmed</option>
-                        <option value="PROCESSING">In Production / Processing</option>
-                        <option value="PACKED">Packed</option>
-                        <option value="SHIPPED">Shipped</option>
-                        <option value="OUT_FOR_DELIVERY">Out for Delivery</option>
-                        <option value="DELIVERED">Delivered</option>
-                        <option value="CANCELLED">Cancelled</option>
-                        <option value="REFUNDED">Refunded</option>
-                      </select>
+                        options={[
+                          { value: 'ORDER_PLACED', label: 'Order Placed' },
+                          { value: 'ORDER_CONFIRMED', label: 'Order Confirmed' },
+                          { value: 'PROCESSING', label: 'In Production / Processing' },
+                          { value: 'PACKED', label: 'Packed' },
+                          { value: 'SHIPPED', label: 'Shipped' },
+                          { value: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' },
+                          { value: 'DELIVERED', label: 'Delivered' },
+                          { value: 'CANCELLED', label: 'Cancelled' }
+                        ]}
+                      />
                     </div>
 
                     <div>

@@ -10,6 +10,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import Button from '../common/Button';
+import CustomSelect from '../common/CustomSelect';
 import Modal from '../common/Modal';
 import EmptyState from '../common/EmptyState';
 import { TableSkeleton } from '../common/Skeleton';
@@ -250,32 +251,32 @@ export default function SupportTicketsSection() {
               <label htmlFor="ticketCategory" className="ts-label">
                 Category
               </label>
-              <select
+              <CustomSelect
                 id="ticketCategory"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="ts-input mt-1"
-              >
-                <option value="GENERAL">General Inquiry</option>
-                <option value="ORDER">Order & Shipping</option>
-                <option value="BILLING">Billing & GST</option>
-                <option value="TECHNICAL">Technical / Account</option>
-              </select>
+                options={[
+                  { value: 'GENERAL', label: 'General Inquiry' },
+                  { value: 'ORDER', label: 'Order & Shipping' },
+                  { value: 'BILLING', label: 'Billing & GST' },
+                  { value: 'TECHNICAL', label: 'Technical / Account' }
+                ]}
+              />
             </div>
             <div>
               <label htmlFor="ticketPriority" className="ts-label">
                 Priority
               </label>
-              <select
+              <CustomSelect
                 id="ticketPriority"
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
-                className="ts-input mt-1"
-              >
-                <option value="NORMAL">Normal</option>
-                <option value="HIGH">High</option>
-                <option value="URGENT">Urgent (Delayed Shipment)</option>
-              </select>
+                options={[
+                  { value: 'NORMAL', label: 'Normal' },
+                  { value: 'HIGH', label: 'High' },
+                  { value: 'URGENT', label: 'Urgent (Delayed Shipment)' }
+                ]}
+              />
             </div>
           </div>
 

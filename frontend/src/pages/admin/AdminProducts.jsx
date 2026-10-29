@@ -12,6 +12,7 @@ import { Textarea } from '../../components/common/Input';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorState from '../../components/common/ErrorState';
 import { TableSkeleton } from '../../components/common/Skeleton';
+import CustomSelect from '../../components/common/CustomSelect';
 import useProducts from '../../hooks/useProducts';
 import useCurrency from '../../hooks/useCurrency';
 import useNotifications from '../../hooks/useNotifications';
@@ -113,28 +114,45 @@ export default function AdminProducts() {
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
           <input id="ap-search" type="search" className="ts-input pl-9" placeholder="Search by name, ID or SKU" value={search} onChange={change(setSearch)} />
         </div>
-        <select aria-label="Filter by category" className="ts-input" value={category} onChange={change(setCategory)}>
-          <option value="">All categories</option>
-          {categories.map((item) => <option key={item.id} value={item.slug}>{item.name}</option>)}
-        </select>
-        <select aria-label="Filter by company" className="ts-input" value={companyId} onChange={change(setCompanyId)}>
-          <option value="">All companies</option>
-          {companies.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
-        <select aria-label="Filter by status" className="ts-input" value={status} onChange={change(setStatus)}>
-          <option value="">All visibility</option>
-          <option value="Active">Active</option>
-          <option value="Hidden">Hidden</option>
-        </select>
-        <select aria-label="Filter by moderation" className="ts-input" value={moderationFilter} onChange={change(setModerationFilter)}>
-          <option value="">All moderation</option>
-          <option value="PENDING">Pending Moderation</option>
-          <option value="APPROVED">Approved</option>
-          <option value="REJECTED">Rejected</option>
-        </select>
-        <select aria-label="Sort products" className="ts-input" value={sort} onChange={change(setSort)}>
-          {Object.entries(SORTS).map(([value, item]) => <option key={value} value={value}>{item.label}</option>)}
-        </select>
+        <CustomSelect
+          aria-label="Filter by category"
+          value={category}
+          onChange={change(setCategory)}
+          options={[{ value: '', label: 'All categories' }, ...categories.map((item) => ({ value: item.slug, label: item.name }))]}
+        />
+        <CustomSelect
+          aria-label="Filter by company"
+          value={companyId}
+          onChange={change(setCompanyId)}
+          options={[{ value: '', label: 'All companies' }, ...companies.map((item) => ({ value: item.id, label: item.name }))]}
+        />
+        <CustomSelect
+          aria-label="Filter by status"
+          value={status}
+          onChange={change(setStatus)}
+          options={[
+            { value: '', label: 'All visibility' },
+            { value: 'Active', label: 'Active' },
+            { value: 'Hidden', label: 'Hidden' }
+          ]}
+        />
+        <CustomSelect
+          aria-label="Filter by moderation"
+          value={moderationFilter}
+          onChange={change(setModerationFilter)}
+          options={[
+            { value: '', label: 'All moderation' },
+            { value: 'PENDING', label: 'Pending Moderation' },
+            { value: 'APPROVED', label: 'Approved' },
+            { value: 'REJECTED', label: 'Rejected' }
+          ]}
+        />
+        <CustomSelect
+          aria-label="Sort products"
+          value={sort}
+          onChange={change(setSort)}
+          options={Object.entries(SORTS).map(([value, item]) => ({ value, label: item.label }))}
+        />
       </div>
 
       <div className="ts-card overflow-hidden">

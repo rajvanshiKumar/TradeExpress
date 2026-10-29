@@ -7,6 +7,7 @@ import { normalizeEmail } from '../utils/validators';
 import { hashPassword, isCryptoAvailable, verifyPassword } from '../utils/passwords';
 import { removeStorage } from '../utils/storage';
 import makeId from '../utils/ids';
+import { authFetch } from '../api/authClient';
 
 // Front-end prototype authentication.
 export const AuthContext = createContext(null);
@@ -47,18 +48,15 @@ export function AuthProvider({ children }) {
     if (session?.userId && (session.role === 'super_admin' || session.role === 'admin')) {
       const existingToken = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
       if (!existingToken) {
-        const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:5000/api').replace(/\/+$/, '');
-        fetch(`${baseUrl}/auth/admin-login`, {
+        authFetch('/auth/admin-login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ email: 'krajvanshi244@gmail.com', password: 'super-raj@12345' }),
         })
-          .then((r) => r.json())
-          .then((data) => {
-            if (data?.success && data?.data?.token) {
+          .then((res) => {
+            if (res.ok && res.data?.success && res.data?.data?.token) {
               try {
-                localStorage.setItem('tradeexpress_auth_token', data.data.token);
-                localStorage.setItem('tradesphere_auth_token', data.data.token);
+                localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
+                localStorage.setItem('tradesphere_auth_token', res.data.data.token);
               } catch {
                 // Ignore
               }
@@ -116,30 +114,25 @@ export function AuthProvider({ children }) {
     }
 
     // Backend MySQL verification
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:5000/api').replace(/\/+$/, '');
     try {
-      if (baseUrl) {
-        const response = await fetch(`${baseUrl}/auth/admin-login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ email: clean, password: cleanPassword || password }),
-        });
-        const data = await response.json();
-        if (response.ok && data.success) {
-          if (data.data?.token) {
-            try {
-              localStorage.setItem('tradeexpress_auth_token', data.data.token);
-              localStorage.setItem('tradesphere_auth_token', data.data.token);
-            } catch {
-              // Ignore
-            }
+      const res = await authFetch('/auth/admin-login', {
+        method: 'POST',
+        body: JSON.stringify({ email: clean, password: cleanPassword || password }),
+      });
+      if (res.ok && res.data?.success) {
+        if (res.data.data?.token) {
+          try {
+            localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
+            localStorage.setItem('tradesphere_auth_token', res.data.data.token);
+          } catch {
+            // Ignore
           }
-          if (data.data?.user?.role === 'SUPER_ADMIN') {
-            valid = true;
-            isSuper = true;
-          } else if (data.data?.user?.role === 'ADMIN') {
-            valid = true;
-          }
+        }
+        if (res.data.data?.user?.role === 'SUPER_ADMIN') {
+          valid = true;
+          isSuper = true;
+        } else if (res.data.data?.user?.role === 'ADMIN') {
+          valid = true;
         }
       }
     } catch {
@@ -163,17 +156,15 @@ export function AuthProvider({ children }) {
 
     // Ensure token is stored in localStorage if not set yet
     const currentToken = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
-    if (!currentToken && baseUrl) {
+    if (!currentToken) {
       try {
-        const tokenRes = await fetch(`${baseUrl}/auth/admin-login`, {
+        const tokenRes = await authFetch('/auth/admin-login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ email: 'krajvanshi244@gmail.com', password: 'super-raj@12345' }),
         });
-        const tokenData = await tokenRes.json().catch(() => null);
-        if (tokenRes.ok && tokenData?.success && tokenData?.data?.token) {
-          localStorage.setItem('tradeexpress_auth_token', tokenData.data.token);
-          localStorage.setItem('tradesphere_auth_token', tokenData.data.token);
+        if (tokenRes.ok && tokenRes.data?.success && tokenRes.data?.data?.token) {
+          localStorage.setItem('tradeexpress_auth_token', tokenRes.data.data.token);
+          localStorage.setItem('tradesphere_auth_token', tokenRes.data.data.token);
         }
       } catch {
         // Standalone fallback
@@ -196,36 +187,32 @@ export function AuthProvider({ children }) {
     if (!isCryptoAvailable()) return { ok: false, error: 'Sign-in needs a secure connection (https or localhost).' };
     const clean = normalizeEmail(email).toLowerCase();
 
-
     // Try backend sign-in with email, password, role, and email OTP
     let backendUser = null;
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || 'http://localhost:5000/api').replace(/\/+$/, '');
-    if (baseUrl) {
-      try {
-        const response = await fetch(`${baseUrl}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({
-            email: clean,
-            password,
-            role: expectedRole ? expectedRole.toUpperCase() : undefined,
-            otp: options?.otp,
-          }),
-        });
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-          recordFailure();
-          return { ok: false, error: data.message || GENERIC_FAILURE };
-        }
-        if (data.data?.token) {
-          localStorage.setItem('tradeexpress_auth_token', data.data.token);
-          localStorage.setItem('tradesphere_auth_token', data.data.token);
-          backendUser = data.data.user;
-        }
-      } catch (err) {
-        console.warn('Backend login connection error:', err);
-        return { ok: false, error: 'Unable to connect to the authentication server. Please try again.' };
+    try {
+      const res = await authFetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: clean,
+          password,
+          role: expectedRole ? expectedRole.toUpperCase() : undefined,
+          otp: options?.otp,
+        }),
+      });
+
+      if (!res.ok || !res.data?.success) {
+        recordFailure();
+        return { ok: false, error: res.data?.message || res.error || GENERIC_FAILURE };
       }
+
+      if (res.data?.data?.token) {
+        localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
+        localStorage.setItem('tradesphere_auth_token', res.data.data.token);
+        backendUser = res.data.data.user;
+      }
+    } catch (err) {
+      console.warn('Backend login connection error:', err);
+      return { ok: false, error: err?.message || 'Unable to connect to the authentication server. Please try again.' };
     }
 
     if (!backendUser) {
@@ -238,6 +225,7 @@ export function AuthProvider({ children }) {
 
     if (activeAccount) {
       activeAccount = {
+        ...backendUser,
         ...activeAccount,
         id: backendUser.id,
         status: backendUser.status === 'SUSPENDED' ? 'Suspended' : 'Active',
@@ -246,10 +234,14 @@ export function AuthProvider({ children }) {
         company: backendUser.company || backendUser.companyName || activeAccount.company || '',
         companyId: backendUser.companyId || activeAccount.companyId || null,
         phone: backendUser.phone || activeAccount.phone || '',
+        kycStatus: backendUser.kycStatus || activeAccount.kycStatus || 'PENDING',
+        kycRejectionReason: backendUser.kycRejectionReason || activeAccount.kycRejectionReason || null,
+        isVerified: backendUser.isVerified !== undefined ? Boolean(backendUser.isVerified) : Boolean(activeAccount.isVerified),
       };
       setAccounts((prev) => [activeAccount, ...prev.filter((a) => a.email.toLowerCase() !== clean)]);
     } else {
       activeAccount = {
+        ...backendUser,
         id: backendUser.id,
         status: backendUser.status === 'SUSPENDED' ? 'Suspended' : 'Active',
         name: backendUser.name,
@@ -260,9 +252,12 @@ export function AuthProvider({ children }) {
         country: backendUser.country || 'India',
         city: backendUser.city || '',
         phone: backendUser.phone || '',
+        kycStatus: backendUser.kycStatus || 'PENDING',
+        kycRejectionReason: backendUser.kycRejectionReason || null,
+        isVerified: Boolean(backendUser.isVerified),
         joinedAt: backendUser.createdAt || new Date().toISOString(),
         notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
-        passwordHash: password ? await hashPassword(password) : '',
+        passwordHash: '',
       };
       setAccounts((prev) => [activeAccount, ...prev.filter((a) => a.email.toLowerCase() !== clean)]);
     }
@@ -286,32 +281,29 @@ export function AuthProvider({ children }) {
     if (!cleanOtp) return { ok: false, error: 'Please enter the verification OTP.' };
 
     let backendUser = null;
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || 'http://localhost:5000/api').replace(/\/+$/, '');
-    if (baseUrl) {
-      try {
-        const response = await fetch(`${baseUrl}/auth/login-mobile`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({
-            phone,
-            country,
-            otp: cleanOtp,
-            role: role ? role.toUpperCase() : undefined,
-          }),
-        });
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-          recordFailure();
-          return { ok: false, error: data.message || 'Mobile OTP verification failed.' };
-        }
-        if (data.data?.token) {
-          localStorage.setItem('tradeexpress_auth_token', data.data.token);
-          localStorage.setItem('tradesphere_auth_token', data.data.token);
-          backendUser = data.data.user;
-        }
-      } catch (err) {
-        return { ok: false, error: 'Unable to connect to the authentication server. Please try again.' };
+    try {
+      const res = await authFetch('/auth/login-mobile', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone,
+          country,
+          otp: cleanOtp,
+          role: role ? role.toUpperCase() : undefined,
+        }),
+      });
+
+      if (!res.ok || !res.data?.success) {
+        recordFailure();
+        return { ok: false, error: res.data?.message || res.error || 'Mobile OTP verification failed.' };
       }
+
+      if (res.data?.data?.token) {
+        localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
+        localStorage.setItem('tradesphere_auth_token', res.data.data.token);
+        backendUser = res.data.data.user;
+      }
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Unable to connect to the authentication server. Please try again.' };
     }
 
     if (!backendUser) {
@@ -357,41 +349,37 @@ export function AuthProvider({ children }) {
     
     // Register directly on backend MySQL database first
     let backendUser = null;
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || 'http://localhost:5000/api').replace(/\/+$/, '');
-    if (baseUrl) {
-      try {
-        const response = await fetch(`${baseUrl}/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({
-            name: name.trim(),
-            email: clean,
-            password,
-            role: role.toUpperCase(),
-            company: company?.trim() || '',
-            companyName: company?.trim() || '',
-            phone: phone || '',
-            city: city?.trim() || '',
-            country: country || 'India',
-            verificationToken: verificationToken || '',
-            emailVerificationToken: emailVerificationToken || '',
-          }),
-        });
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-          return { ok: false, error: data.message || 'An account with this email already exists.' };
+    try {
+      const res = await authFetch('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: name.trim(),
+          email: clean,
+          password,
+          role: role.toUpperCase(),
+          company: company?.trim() || '',
+          companyName: company?.trim() || '',
+          phone: phone || '',
+          city: city?.trim() || '',
+          country: country || 'India',
+          verificationToken: verificationToken || '',
+          emailVerificationToken: emailVerificationToken || '',
+        }),
+      });
 
-        }
-        if (data.data) {
-          backendUser = data.data.user;
-          if (data.data.token) {
-            localStorage.setItem('tradeexpress_auth_token', data.data.token);
-            localStorage.setItem('tradesphere_auth_token', data.data.token);
-          }
-        }
-      } catch (err) {
-        console.warn('Backend registration failed, falling back to local verification:', err);
+      if (!res.ok || !res.data?.success) {
+        return { ok: false, error: res.data?.message || res.error || 'An account with this email already exists.' };
       }
+
+      if (res.data?.data) {
+        backendUser = res.data.data.user;
+        if (res.data.data.token) {
+          localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
+          localStorage.setItem('tradesphere_auth_token', res.data.data.token);
+        }
+      }
+    } catch (err) {
+      console.warn('Backend registration failed, falling back to local verification:', err);
     }
 
     // Only if backend was unreachable, fall back to checking local memory
@@ -450,7 +438,6 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('tradesphere_auth_token');
     setAttempts({ count: 0, lockedUntil: 0 });
   }, [setSession]);
-
 
   const updateAccount = useCallback((id, patch) => {
     // Role and password hash can never be changed through profile updates.

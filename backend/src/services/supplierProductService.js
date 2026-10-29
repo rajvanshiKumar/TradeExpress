@@ -9,6 +9,16 @@ export async function createSupplierProduct(supplierUser, data) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)+/g, '') + `-${Date.now().toString(36)}`;
 
+  if (Array.isArray(data.images) && data.images.length > 8) {
+    const error = new Error('Maximum 8 product images allowed.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const rawImages = Array.isArray(data.images) ? data.images.filter(Boolean).slice(0, 8) : [];
+  const primaryPhoto = data.photo || rawImages[0] || null;
+  const videoUrl = data.videoUrl || data.video || null;
+
   const categorySlug = data.categorySlug || data.category;
 
   let category = await prisma.category.findUnique({
@@ -33,7 +43,8 @@ export async function createSupplierProduct(supplierUser, data) {
       subcategory: data.subcategory || null,
       summary: data.summary || data.name,
       description: data.description || data.summary || data.name,
-      photo: data.photo || (data.images && data.images[0]) || null,
+      photo: primaryPhoto,
+      videoUrl: videoUrl,
       currency: data.currency || 'INR',
       price: Number(data.price),
       unit: data.unit || 'piece',
@@ -51,9 +62,9 @@ export async function createSupplierProduct(supplierUser, data) {
       specifications: data.specifications || {},
       packaging: data.packaging || {},
       priceTiers: data.priceTiers || [],
-      images: Array.isArray(data.images)
+      images: rawImages.length > 0
         ? {
-            create: data.images.map((url, index) => ({
+            create: rawImages.map((url, index) => ({
               url,
               isPrimary: index === 0,
               sortOrder: index,
@@ -87,7 +98,33 @@ export async function updateSupplierProduct(supplierUser, productId, data) {
     }
   }
 
+  if (Array.isArray(data.images) && data.images.length > 8) {
+    const error = new Error('Maximum 8 product images allowed.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const updateData = {};
+  if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
+  else if (data.video !== undefined) updateData.videoUrl = data.video;
+
+  if (data.images !== undefined) {
+    const validImages = Array.isArray(data.images) ? data.images.filter(Boolean).slice(0, 8) : [];
+    await prisma.productImage.deleteMany({ where: { productId } });
+    if (validImages.length > 0) {
+      await prisma.productImage.createMany({
+        data: validImages.map((url, index) => ({
+          productId,
+          url,
+          isPrimary: index === 0,
+          sortOrder: index,
+        })),
+      });
+      updateData.photo = validImages[0];
+    } else if (data.photo !== undefined) {
+      updateData.photo = data.photo;
+    }
+  }
   if (data.name) updateData.name = data.name.trim();
   if (data.categorySlug) updateData.categorySlug = data.categorySlug;
   if (data.subcategory !== undefined) updateData.subcategory = data.subcategory;

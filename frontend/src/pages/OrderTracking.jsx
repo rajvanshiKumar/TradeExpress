@@ -27,6 +27,7 @@ import Modal from '../components/common/Modal';
 import Input, { Textarea } from '../components/common/Input';
 import { TableSkeleton } from '../components/common/Skeleton';
 import { StatusBadge } from '../components/common/Badge';
+import CustomSelect from '../components/common/CustomSelect';
 import { apiGet, apiPost, isApiConfigured } from '../services/apiClient';
 import orderService from '../services/orderService';
 import useCurrency from '../hooks/useCurrency';
@@ -997,33 +998,33 @@ export default function OrderTracking() {
             <label htmlFor="dispute-reason" className="block text-xs font-semibold uppercase tracking-wider text-muted">
               Primary Claim Reason
             </label>
-            <select
+            <CustomSelect
               id="dispute-reason"
               value={disputeValues.reason}
               onChange={(e) => setDisputeValues({ ...disputeValues, reason: e.target.value })}
-              className="ts-input mt-1"
-            >
-              <option value="QUALITY_MISMATCH">Quality Mismatch (Does not match sample/specifications)</option>
-              <option value="DAMAGED_GOODS">Damaged Goods in Transit</option>
-              <option value="SHORTAGE">Shortage / Quantity Less than Ordered</option>
-              <option value="INCORRECT_ITEMS">Incorrect Items Delivered</option>
-            </select>
+              options={[
+                { value: 'QUALITY_MISMATCH', label: 'Quality Mismatch (Does not match sample/specifications)' },
+                { value: 'DAMAGED_GOODS', label: 'Damaged Goods in Transit' },
+                { value: 'SHORTAGE', label: 'Shortage / Quantity Less than Ordered' },
+                { value: 'INCORRECT_ITEMS', label: 'Incorrect Items Delivered' }
+              ]}
+            />
           </div>
 
           <div>
             <label htmlFor="dispute-res" className="block text-xs font-semibold uppercase tracking-wider text-muted">
               Requested Resolution
             </label>
-            <select
+            <CustomSelect
               id="dispute-res"
               value={disputeValues.requestedResolution}
               onChange={(e) => setDisputeValues({ ...disputeValues, requestedResolution: e.target.value })}
-              className="ts-input mt-1"
-            >
-              <option value="FULL_REFUND">Full Refund to Original Payment Source</option>
-              <option value="PARTIAL_REFUND">Partial Refund / Price Adjustment</option>
-              <option value="REPLACEMENT">Replacement of Defective Goods</option>
-            </select>
+              options={[
+                { value: 'FULL_REFUND', label: 'Full Refund to Original Payment Source' },
+                { value: 'PARTIAL_REFUND', label: 'Partial Refund / Price Adjustment' },
+                { value: 'REPLACEMENT', label: 'Replacement of Defective Goods' }
+              ]}
+            />
           </div>
 
           <Textarea
@@ -1100,41 +1101,29 @@ export default function OrderTracking() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
             <div>
               <label className="block text-xs font-medium text-slate-700">Material Quality</label>
-              <select
+              <CustomSelect
                 value={reviewValues.qualityRating}
                 onChange={(e) => setReviewValues({ ...reviewValues, qualityRating: Number(e.target.value) })}
-                className="ts-input mt-1 text-xs"
-              >
-                {[5, 4, 3, 2, 1].map((r) => (
-                  <option key={r} value={r}>{r} Stars {r === 5 ? '(Excellent)' : ''}</option>
-                ))}
-              </select>
+                options={[5, 4, 3, 2, 1].map((r) => ({ value: r, label: `${r} Stars${r === 5 ? ' (Excellent)' : ''}` }))}
+              />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700">Packaging Protection</label>
-              <select
+              <CustomSelect
                 value={reviewValues.packagingRating}
                 onChange={(e) => setReviewValues({ ...reviewValues, packagingRating: Number(e.target.value) })}
-                className="ts-input mt-1 text-xs"
-              >
-                {[5, 4, 3, 2, 1].map((r) => (
-                  <option key={r} value={r}>{r} Stars {r === 5 ? '(Secure)' : ''}</option>
-                ))}
-              </select>
+                options={[5, 4, 3, 2, 1].map((r) => ({ value: r, label: `${r} Stars${r === 5 ? ' (Secure)' : ''}` }))}
+              />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700">Delivery Timeliness</label>
-              <select
+              <CustomSelect
                 value={reviewValues.timelinessRating}
                 onChange={(e) => setReviewValues({ ...reviewValues, timelinessRating: Number(e.target.value) })}
-                className="ts-input mt-1 text-xs"
-              >
-                {[5, 4, 3, 2, 1].map((r) => (
-                  <option key={r} value={r}>{r} Stars {r === 5 ? '(On-Time)' : ''}</option>
-                ))}
-              </select>
+                options={[5, 4, 3, 2, 1].map((r) => ({ value: r, label: `${r} Stars${r === 5 ? ' (On-Time)' : ''}` }))}
+              />
             </div>
           </div>
 

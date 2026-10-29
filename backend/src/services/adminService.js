@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { getActiveCommissionPolicy } from './commissionTierService.js';
 
 export async function listPendingKyc() {
   const users = await prisma.user.findMany({
@@ -113,10 +114,14 @@ export async function getCommissionSettings() {
     settings.unshift(global);
   }
 
-  return settings.map((s) => ({
-    ...s,
-    percentage: Number(s.percentage),
-  }));
+  const policy = await getActiveCommissionPolicy();
+  return {
+    policy,
+    settings: settings.map((s) => ({
+      ...s,
+      percentage: Number(s.percentage),
+    })),
+  };
 }
 
 export async function saveCommissionSetting({ type = 'GLOBAL', targetId = null, percentage }) {

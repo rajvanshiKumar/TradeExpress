@@ -11,6 +11,7 @@ import {
   User,
 } from 'lucide-react';
 import Button from '../common/Button';
+import CustomSelect from '../common/CustomSelect';
 import Modal from '../common/Modal';
 import EmptyState from '../common/EmptyState';
 import { TableSkeleton } from '../common/Skeleton';
@@ -135,17 +136,19 @@ export default function AdminSupportDesk() {
               className="ts-input pl-9"
             />
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="ts-input w-44"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="OPEN">Open Only</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="RESOLVED">Resolved</option>
-            <option value="CLOSED">Closed</option>
-          </select>
+          <div className="w-44">
+            <CustomSelect
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              options={[
+                { value: 'ALL', label: 'All Statuses' },
+                { value: 'OPEN', label: 'Open Only' },
+                { value: 'IN_PROGRESS', label: 'In Progress' },
+                { value: 'RESOLVED', label: 'Resolved' },
+                { value: 'CLOSED', label: 'Closed' }
+              ]}
+            />
+          </div>
         </div>
         <Button variant="ghost" size="sm" icon={RefreshCw} onClick={fetchTickets} loading={loading}>
           Refresh

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Eye, Package, Search, Truck, RotateCcw, FileText } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
@@ -9,6 +9,7 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorState from '../../components/common/ErrorState';
 import { TableSkeleton } from '../../components/common/Skeleton';
+import CustomSelect from '../../components/common/CustomSelect';
 import OrderDetails from '../../components/forms/OrderDetails';
 import useAuth from '../../hooks/useAuth';
 import useOrders from '../../hooks/useOrders';
@@ -23,7 +24,7 @@ import { getPaymentMethod, getPaymentStatus } from '../../utils/payments';
 
 export default function BuyerOrders() {
   const { user } = useAuth();
-  const { orders, loading, error, reload, updateOrderStatus } = useOrders();
+  const { orders, loading, error, reload, updateOrderStatus, markAllOrdersSeen, markOrderSeen } = useOrders();
   const { money } = useCurrency();
   const { showToast } = useNotifications();
   const navigate = useNavigate();
@@ -35,6 +36,13 @@ export default function BuyerOrders() {
   const [cancelId, setCancelId] = useState(null);
   useDocumentTitle('My orders');
 
+  // Mark all orders as seen when viewing the My Orders page
+  useEffect(() => {
+    if (user?.id && markAllOrdersSeen) {
+      markAllOrdersSeen();
+    }
+  }, [user?.id, markAllOrdersSeen, orders.length]);
+
   const mine = useMemo(() => orders.filter((order) => order.buyerId === user.id), [orders, user.id]);
   const visible = mine.filter((order) => {
     if (status && order.status !== status) return false;
@@ -44,7 +52,12 @@ export default function BuyerOrders() {
 
   const openId = searchParams.get('order');
   const selected = mine.find((order) => order.id === openId) ?? null;
-  const open = (id) => setSearchParams(id ? { order: id } : {});
+  const open = (id) => {
+    setSearchParams(id ? { order: id } : {});
+    if (id && markOrderSeen) {
+      markOrderSeen(id);
+    }
+  };
 
   const cancel = () => {
     updateOrderStatus(cancelId, 'Cancelled');
@@ -171,10 +184,18 @@ export default function BuyerOrders() {
           <input id="order-search" type="search" className="ts-input pl-9" placeholder="Search by order ID or product" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
         <label htmlFor="order-status" className="sr-only">Filter by status</label>
-        <select id="order-status" className="ts-input sm:w-52" value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="">All statuses</option>
-          {ORDER_STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
-        </select>
+        <div className="sm:w-52">
+          <CustomSelect
+            id="order-status"
+            aria-label="Filter by status"
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            options={[
+              { value: '', label: 'All statuses' },
+              ...ORDER_STATUSES.map((item) => ({ value: item, label: item }))
+            ]}
+          />
+        </div>
       </div>
 
       <div className="ts-card overflow-hidden">
@@ -183,7 +204,7 @@ export default function BuyerOrders() {
         ) : visible.length === 0 ? (
           <EmptyState icon={Search} title="No matching orders" text="Try a different search or status." action={<Button variant="outline" onClick={() => { setSearch(''); setStatus(''); }}>Clear filters</Button>} />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto ts-slim-scrollbar scroll-smooth">
             <table className="ts-table">
               <caption className="sr-only">Your orders</caption>
               <thead><tr><th scope="col">Order</th><th scope="col">Date</th><th scope="col">Items</th><th scope="col">Total</th><th scope="col">Payment</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>

@@ -1,19 +1,16 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Search, X } from 'lucide-react';
 
 /**
- * Ultra-premium Custom Select Dropdown with search filter, keyboard accessibility,
- * checkmarks, smooth animations, and drop-in synthetic event support.
- *
- * @param {string} id - HTML ID
- * @param {string} value - Currently selected value
- * @param {Function} onChange - Handler receiving { target: { value, name } }
- * @param {Array<{ value: string|number, label: string }|string>} options
- * @param {string} placeholder - Displayed when nothing selected
- * @param {boolean} searchable - Show search input when options count is high
- * @param {boolean} disabled - Disable trigger
- * @param {string} className - Trigger styling
- * @param {string} panelClassName - Dropdown panel styling
+ * Ultra-premium TradeExpress Custom Dropdown.
+ * Features:
+ * - Search filter for long option lists
+ * - Full WAI-ARIA keyboard accessibility (ArrowUp/Down, Enter, Esc, Home, End)
+ * - TradeExpress Emerald Green & Champagne Gold branding
+ * - Auto-scroll active item into view
+ * - Outside click & Escape dismissal
+ * - High z-index stacking for modals and scrollable containers
+ * - Drop-in synthetic event format: { target: { value, name } }
  */
 export default function CustomSelect({
   id,
@@ -27,50 +24,72 @@ export default function CustomSelect({
   compact = false,
   className = '',
   panelClassName = '',
+  required = false,
+  'aria-describedby': ariaDescribedBy,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+
   const rootRef = useRef(null);
   const triggerRef = useRef(null);
   const searchInputRef = useRef(null);
+  const listboxRef = useRef(null);
   const selectId = useId();
 
-  // Normalize options into { value, label, description, badge } objects
-  const normalizedOptions = options.map((opt) => {
-    if (typeof opt === 'object' && opt !== null) {
-      return {
-        value: opt.value,
-        label: opt.label ?? String(opt.value),
-        description: opt.description,
-        badge: opt.badge || opt.taxpayerType,
-      };
-    }
-    return { value: opt, label: String(opt) };
-  });
+  // Normalize options into uniform { value, label, description, badge }
+  const normalizedOptions = useMemo(() => {
+    return (options || []).map((opt) => {
+      if (typeof opt === 'object' && opt !== null) {
+        return {
+          value: opt.value !== undefined ? opt.value : '',
+          label: opt.label !== undefined ? String(opt.label) : String(opt.value ?? ''),
+          description: opt.description,
+          badge: opt.badge || opt.taxpayerType,
+        };
+      }
+      return { value: opt, label: String(opt) };
+    });
+  }, [options]);
 
   const safeVal = typeof value === 'object' && value !== null
     ? (value.value ?? value.target?.value ?? '')
     : (value ?? '');
 
-  const selectedOption = normalizedOptions.find(
-    (opt) => String(opt.value) === String(safeVal)
-  );
+  const selectedOption = useMemo(() => {
+    return normalizedOptions.find((opt) => String(opt.value) === String(safeVal));
+  }, [normalizedOptions, safeVal]);
 
-  const filteredOptions = normalizedOptions.filter((opt) =>
-    opt.label.toLowerCase().includes(query.toLowerCase()) ||
-    (opt.description && opt.description.toLowerCase().includes(query.toLowerCase()))
-  );
+  const filteredOptions = useMemo(() => {
+    if (!query.trim()) return normalizedOptions;
+    const lower = query.toLowerCase();
+    return normalizedOptions.filter(
+      (opt) =>
+        opt.label.toLowerCase().includes(lower) ||
+        (opt.description && opt.description.toLowerCase().includes(lower))
+    );
+  }, [normalizedOptions, query]);
 
-  // Focus search input when opened
+  const showSearch = searchable && normalizedOptions.length > 6;
+
+  // Sync highlighted index when filtered options change
   useEffect(() => {
-    if (open && searchable && normalizedOptions.length > 6) {
+    const selectedIdx = filteredOptions.findIndex(
+      (opt) => String(opt.value) === String(safeVal)
+    );
+    setHighlightedIndex(selectedIdx >= 0 ? selectedIdx : 0);
+  }, [filteredOptions, safeVal, open]);
+
+  // Focus search input on open
+  useEffect(() => {
+    if (open && showSearch) {
       setTimeout(() => {
         searchInputRef.current?.focus();
-      }, 50);
+      }, 40);
     } else {
       setQuery('');
     }
-  }, [open, searchable, normalizedOptions.length]);
+  }, [open, showSearch]);
 
   // Click outside and Esc key listener
   useEffect(() => {
@@ -80,19 +99,29 @@ export default function CustomSelect({
         setOpen(false);
       }
     };
-    const onKey = (event) => {
+    const onGlobalKey = (event) => {
       if (event.key === 'Escape') {
         setOpen(false);
         triggerRef.current?.focus();
       }
     };
     document.addEventListener('mousedown', onPointer);
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onGlobalKey);
     return () => {
       document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onGlobalKey);
     };
   }, [open]);
+
+  // Auto-scroll highlighted option into view
+  useEffect(() => {
+    if (open && listboxRef.current) {
+      const activeElement = listboxRef.current.children[highlightedIndex];
+      if (activeElement && typeof activeElement.scrollIntoView === 'function') {
+        activeElement.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [highlightedIndex, open]);
 
   const handleSelect = (val) => {
     if (onChange) {
@@ -102,10 +131,58 @@ export default function CustomSelect({
     triggerRef.current?.focus();
   };
 
-  const showSearch = searchable && normalizedOptions.length > 7;
+  const handleKeyDown = (e) => {
+    if (disabled) return;
+
+    if (!open) {
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) {
+        e.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev < filteredOptions.length - 1 ? prev + 1 : 0
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev > 0 ? prev - 1 : Math.max(0, filteredOptions.length - 1)
+        );
+        break;
+      case 'Home':
+        e.preventDefault();
+        setHighlightedIndex(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        setHighlightedIndex(Math.max(0, filteredOptions.length - 1));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (filteredOptions[highlightedIndex]) {
+          handleSelect(filteredOptions[highlightedIndex].value);
+        }
+        break;
+      case 'Tab':
+        setOpen(false);
+        break;
+      default:
+        break;
+    }
+  };
 
   return (
-    <div ref={rootRef} className="relative w-full">
+    <div
+      ref={rootRef}
+      className="relative w-full text-left"
+      onKeyDown={handleKeyDown}
+    >
       {/* Trigger Button */}
       <button
         ref={triggerRef}
@@ -116,23 +193,25 @@ export default function CustomSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={selectId}
+        aria-required={required || undefined}
+        aria-describedby={ariaDescribedBy}
         onClick={() => !disabled && setOpen((prev) => !prev)}
-        className={`group flex w-full items-center justify-between rounded-xl border bg-white text-left font-semibold transition-all shadow-2xs ${
-          compact ? 'px-2.5 py-2 text-xs' : 'px-3.5 py-2.5 text-xs sm:text-sm'
+        className={`group flex w-full items-center justify-between rounded-xl border bg-white font-semibold transition-all shadow-2xs ${
+          compact ? 'px-2.5 py-1.5 text-xs min-h-[2.25rem]' : 'px-3.5 py-2.5 text-xs sm:text-sm min-h-[2.625rem]'
         } ${
           open
             ? 'border-emerald-600 ring-4 ring-emerald-500/10'
             : 'border-slate-200/90 hover:border-slate-300'
         } ${disabled ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'cursor-pointer'} ${className}`}
       >
-        <span className={`truncate ${selectedOption ? 'text-slate-900 font-bold' : 'text-slate-400'}`}>
+        <span className={`truncate text-left ${selectedOption ? 'text-navy-950 font-bold' : 'text-slate-400 font-normal'}`}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
 
         {compact ? (
           <ChevronDown
-            className={`size-3 shrink-0 ml-1 transition-transform duration-200 ${
-              open ? 'rotate-180 text-emerald-700' : 'text-slate-400'
+            className={`size-3 shrink-0 ml-1.5 transition-transform duration-200 ${
+              open ? 'rotate-180 text-emerald-700' : 'text-slate-400 group-hover:text-slate-600'
             }`}
             aria-hidden="true"
           />
@@ -154,7 +233,7 @@ export default function CustomSelect({
           id={selectId}
           role="listbox"
           tabIndex={-1}
-          className={`ts-dropdown-anim absolute left-0 right-0 top-full z-50 mt-1.5 max-h-72 overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 backdrop-blur-2xl shadow-[0_20px_50px_-12px_rgba(11,39,22,0.18),0_0_0_1px_rgba(0,0,0,0.05)] ${panelClassName}`}
+          className={`ts-dropdown-anim absolute left-0 right-0 top-full z-50 mt-1.5 max-h-72 overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 backdrop-blur-2xl shadow-[0_20px_50px_-12px_rgba(11,39,22,0.18),0_0_0_1px_rgba(0,0,0,0.08)] ${panelClassName}`}
         >
           {/* Top Emerald Glow Accent */}
           <div
@@ -172,7 +251,7 @@ export default function CustomSelect({
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Type to filter..."
+                  placeholder="Type to search..."
                   className="w-full rounded-lg bg-slate-100/80 py-1.5 pl-8 pr-7 text-xs font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
                 {query && (
@@ -189,30 +268,40 @@ export default function CustomSelect({
           )}
 
           {/* Options List */}
-          <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5 ts-no-scrollbar">
+          <div
+            ref={listboxRef}
+            className="max-h-56 overflow-y-auto p-1.5 space-y-0.5 ts-no-scrollbar"
+          >
             {filteredOptions.length === 0 ? (
               <div className="px-3 py-4 text-center text-xs text-slate-400">
                 No matching options
               </div>
             ) : (
-              filteredOptions.map((opt) => {
-                const isSelected = String(opt.value) === String(value);
+              filteredOptions.map((opt, idx) => {
+                const isSelected = String(opt.value) === String(safeVal);
+                const isHighlighted = idx === highlightedIndex;
+
                 return (
                   <button
-                    key={String(opt.value)}
+                    key={String(opt.value) + '-' + idx}
                     type="button"
                     role="option"
                     aria-selected={isSelected}
                     onClick={() => handleSelect(opt.value)}
+                    onMouseEnter={() => setHighlightedIndex(idx)}
                     className={`group flex w-full items-start justify-between rounded-xl px-3 py-2.5 text-left text-xs transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-emerald-50 text-emerald-950 font-bold border border-emerald-300/70 shadow-2xs'
+                        : isHighlighted
+                        ? 'bg-slate-100/80 text-navy-950 font-semibold border border-slate-200/60'
                         : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
                     }`}
                   >
                     <div className="flex flex-col min-w-0 pr-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`truncate ${isSelected ? 'text-emerald-950 font-bold' : 'text-slate-900 font-semibold'}`}>{opt.label}</span>
+                        <span className={`truncate ${isSelected ? 'text-emerald-950 font-bold' : 'text-slate-900 font-semibold'}`}>
+                          {opt.label}
+                        </span>
                         {opt.badge && (
                           <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">
                             {opt.badge}

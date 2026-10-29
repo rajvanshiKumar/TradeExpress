@@ -179,3 +179,26 @@ export function broadcastMessagesRead(conversationId, userId, role) {
   });
   io.to(`user:${userId}`).emit('unread_count_updated', { conversationId });
 }
+
+/**
+ * Broadcasts an authorized inventory update to the supplier's private room.
+ */
+export function broadcastInventoryUpdate(supplierId, inventoryPayload) {
+  if (!io || !supplierId) return;
+  io.to(`user:${supplierId}`).emit('inventory:updated', {
+    ...inventoryPayload,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/**
+ * Broadcasts real-time product stock changes to all marketplace buyers.
+ */
+export function broadcastProductStock(productId, stockPayload) {
+  if (!io || !productId) return;
+  io.emit('product:stock_updated', {
+    productId,
+    ...stockPayload,
+    timestamp: new Date().toISOString(),
+  });
+}

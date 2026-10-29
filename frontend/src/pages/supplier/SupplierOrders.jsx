@@ -257,16 +257,14 @@ function Orders({ company }) {
                       )}
                     </td>
                     <td>
-                      <select
-                        value={order.status}
-                        onChange={(event) => changeStatus(order, event.target.value)}
-                        aria-label={`Status of order ${order.id}`}
-                        className="ts-input !min-h-9 w-36 !py-1 text-sm"
-                      >
-                        {ORDER_STATUSES.map((item) => (
-                          <option key={item} value={item}>{item}</option>
-                        ))}
-                      </select>
+                      <div className="w-36">
+                        <CustomSelect
+                          value={order.status}
+                          onChange={(event) => changeStatus(order, event.target.value)}
+                          aria-label={`Status of order ${order.id}`}
+                          options={ORDER_STATUSES.map((item) => ({ value: item, label: item }))}
+                        />
+                      </div>
                     </td>
                     <td>
                       <Button variant="outline" size="sm" icon={Eye} onClick={() => setOpenId(order.id)} aria-label={`View order ${order.id}`}>

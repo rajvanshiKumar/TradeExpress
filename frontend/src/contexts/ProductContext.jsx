@@ -1,4 +1,4 @@
-import { createContext, useCallback, useMemo } from 'react';
+import { createContext, useCallback, useEffect, useMemo } from 'react';
 import useCollection from '../hooks/useCollection';
 import useLocalStorage from '../hooks/useLocalStorage';
 import productService from '../services/productService';
@@ -7,6 +7,7 @@ import seedProducts, { buildPriceTiers } from '../data/products';
 import { MAX_RECENTLY_VIEWED, STORAGE_KEYS } from '../utils/constants';
 import { slugify } from '../utils/validators';
 import makeId from '../utils/ids';
+import { getSocket } from '../services/socketService';
 
 // The shared catalogue: products, companies and categories. Supplier and admin screens
 // change this state, so every catalogue page updates immediately.
@@ -32,6 +33,34 @@ export function ProductProvider({ children }) {
   const setProducts = productState.setItems;
   const setCompanies = companyState.setItems;
   const setCategories = categoryState.setItems;
+
+  // Real-time product stock synchronization from Socket.IO events
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleStockUpdated = (payload) => {
+      if (!payload || !payload.productId) return;
+      setProducts((previous) =>
+        previous.map((item) => {
+          if (item.id === payload.productId || item.sku === payload.sku) {
+            const newStock = payload.availableStock !== undefined ? payload.availableStock : item.stock;
+            return {
+              ...item,
+              stock: newStock,
+              readyToShip: newStock > 0,
+            };
+          }
+          return item;
+        })
+      );
+    };
+
+    socket.on('product:stock_updated', handleStockUpdated);
+    return () => {
+      socket.off('product:stock_updated', handleStockUpdated);
+    };
+  }, [setProducts]);
 
   const getProduct = useCallback((idOrSlug) => {
     if (!idOrSlug) return null;

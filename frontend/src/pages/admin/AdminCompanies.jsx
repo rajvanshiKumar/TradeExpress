@@ -10,6 +10,7 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorState from '../../components/common/ErrorState';
 import { TableSkeleton } from '../../components/common/Skeleton';
+import CustomSelect from '../../components/common/CustomSelect';
 import useProducts from '../../hooks/useProducts';
 import useNotifications from '../../hooks/useNotifications';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -61,22 +62,34 @@ export default function AdminCompanies() {
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
           <input id="ac-search" type="search" className="ts-input pl-9" placeholder="Search by name, city or industry" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
-        <select aria-label="Filter by country" className="ts-input" value={country} onChange={(event) => setCountry(event.target.value)}>
-          <option value="">All countries</option>
-          {countries.map((item) => <option key={item} value={item}>{item}</option>)}
-        </select>
-        <select aria-label="Filter by business type" className="ts-input" value={type} onChange={(event) => setType(event.target.value)}>
-          <option value="">All business types</option>
-          {BUSINESS_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}
-        </select>
-        <select aria-label="Filter by status" className="ts-input" value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="">All statuses</option>
-          <option value="Active">Active</option>
-          <option value="Suspended">Suspended</option>
-        </select>
-        <select aria-label="Sort companies" className="ts-input" value={sort} onChange={(event) => setSort(event.target.value)}>
-          {Object.entries(SORTS).map(([value, item]) => <option key={value} value={value}>{item.label}</option>)}
-        </select>
+        <CustomSelect
+          aria-label="Filter by country"
+          value={country}
+          onChange={(event) => setCountry(event.target.value)}
+          options={[{ value: '', label: 'All countries' }, ...countries.map((item) => ({ value: item, label: item }))]}
+        />
+        <CustomSelect
+          aria-label="Filter by business type"
+          value={type}
+          onChange={(event) => setType(event.target.value)}
+          options={[{ value: '', label: 'All business types' }, ...BUSINESS_TYPES.map((item) => ({ value: item, label: item }))]}
+        />
+        <CustomSelect
+          aria-label="Filter by status"
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          options={[
+            { value: '', label: 'All statuses' },
+            { value: 'Active', label: 'Active' },
+            { value: 'Suspended', label: 'Suspended' }
+          ]}
+        />
+        <CustomSelect
+          aria-label="Sort companies"
+          value={sort}
+          onChange={(event) => setSort(event.target.value)}
+          options={Object.entries(SORTS).map(([value, item]) => ({ value, label: item.label }))}
+        />
       </div>
 
       <div className="ts-card overflow-hidden">

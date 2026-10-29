@@ -184,6 +184,10 @@ export const superAdminApi = {
     return request(`/payments${q ? `?${q}` : ''}`);
   },
   getCommissionSettings: () => request('/commission'),
+  getCommissionMetrics: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/commission/metrics${q ? `?${q}` : ''}`);
+  },
   updateCommissionSetting: (payload) =>
     request('/commission', {
       method: 'POST',

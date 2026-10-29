@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import CustomSelect from '../../components/common/CustomSelect';
 
 export default function SuperAdminUsers() {
   const { showToast } = useNotifications();
@@ -169,31 +170,35 @@ export default function SuperAdminUsers() {
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
             <Filter className="size-3.5" />
             <span>Role:</span>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="ALL">All Roles</option>
-              <option value="BUYER">Buyer</option>
-              <option value="SUPPLIER">Supplier</option>
-              <option value="ADMIN">Admin</option>
-              <option value="SUPER_ADMIN">Super Admin</option>
-            </select>
+            <div className="w-36">
+              <CustomSelect
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                options={[
+                  { value: 'ALL', label: 'All Roles' },
+                  { value: 'BUYER', label: 'Buyer' },
+                  { value: 'SUPPLIER', label: 'Supplier' },
+                  { value: 'ADMIN', label: 'Admin' },
+                  { value: 'SUPER_ADMIN', label: 'Super Admin' }
+                ]}
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
             <span>Status:</span>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="ACTIVE">Active</option>
-              <option value="SUSPENDED">Suspended</option>
-              <option value="DEACTIVATED">Deactivated</option>
-            </select>
+            <div className="w-36">
+              <CustomSelect
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                options={[
+                  { value: 'ALL', label: 'All Statuses' },
+                  { value: 'ACTIVE', label: 'Active' },
+                  { value: 'SUSPENDED', label: 'Suspended' },
+                  { value: 'DEACTIVATED', label: 'Deactivated' }
+                ]}
+              />
+            </div>
           </div>
         </div>
       </div>

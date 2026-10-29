@@ -27,6 +27,7 @@ import {
   rules,
   validate,
 } from "../../utils/validators";
+import { authFetch } from "../../api/authClient";
 
 const ROLE_NAMES = {
   buyer: "Buyer",
@@ -153,26 +154,24 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     setErrors((prev) => ({ ...prev, phone: "" }));
 
     try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || "http://localhost:5000/api").replace(/\/+$/, "");
-      const res = await fetch(`${baseUrl}/auth/send-mobile-login-otp`, {
+      const res = await authFetch("/auth/send-mobile-login-otp", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
           phone: values.phone.trim(),
           country: values.country,
           role: role ? role.toUpperCase() : undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setFormError(data.message || "Failed to dispatch SMS verification code.");
+
+      if (!res.ok || !res.data?.success) {
+        setFormError(res.data?.message || res.error || "Failed to dispatch SMS verification code.");
       } else {
         setMobileOtpSent(true);
-        setMobileCooldown(data.cooldownSeconds || 60);
+        setMobileCooldown(res.data?.cooldownSeconds || 60);
         showToast("Verification code dispatched to your mobile number.");
       }
-    } catch {
-      setFormError("Unable to contact authentication server. Please check your connection.");
+    } catch (err) {
+      setFormError(err?.message || "Unable to contact authentication server. Please check your connection.");
     } finally {
       setSendingMobileOtp(false);
     }

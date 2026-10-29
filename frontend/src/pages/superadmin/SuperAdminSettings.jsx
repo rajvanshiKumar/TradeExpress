@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import CustomSelect from '../../components/common/CustomSelect';
 
 export default function SuperAdminSettings() {
   const { showToast } = useNotifications();
@@ -203,14 +204,7 @@ export default function SuperAdminSettings() {
 
             <div className="flex items-center justify-between">
               <span className="font-semibold text-slate-700">Display Alert Banner to Visitors</span>
-              <select
-                value={bannerActive}
-                onChange={(e) => setBannerActive(e.target.value)}
-                className="p-1.5 rounded-lg border border-slate-200 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="true">Enabled (Visible)</option>
-                <option value="false">Disabled (Hidden)</option>
-              </select>
+              <div className="w-48"><CustomSelect value={bannerActive} onChange={(e) => setBannerActive(e.target.value)} options={[{ value: 'true', label: 'Enabled (Visible)' }, { value: 'false', label: 'Disabled (Hidden)' }]} /></div>
             </div>
 
             <div className="flex justify-end pt-2">
@@ -248,14 +242,7 @@ export default function SuperAdminSettings() {
                 <p className="font-bold text-slate-900">Platform Maintenance Mode</p>
                 <p className="text-[11px] text-slate-500">Temporarily restrict order placement for upgrades</p>
               </div>
-              <select
-                value={maintenanceMode}
-                onChange={(e) => setMaintenanceMode(e.target.value)}
-                className="p-1.5 rounded-lg border border-slate-200 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="false">Live (Normal Operation)</option>
-                <option value="true">Active (Maintenance Mode)</option>
-              </select>
+              <div className="w-56"><CustomSelect value={maintenanceMode} onChange={(e) => setMaintenanceMode(e.target.value)} options={[{ value: 'false', label: 'Live (Normal Operation)' }, { value: 'true', label: 'Active (Maintenance Mode)' }]} /></div>
             </div>
 
             <div className="flex items-center justify-between">

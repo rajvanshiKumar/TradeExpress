@@ -1,5 +1,6 @@
 import prisma from '../config/db.js';
 import { createNotification } from './notificationService.js';
+import { broadcastInventoryUpdate, broadcastProductStock } from './socketService.js';
 
 export async function getSupplierOrders(supplierUser) {
   const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
@@ -70,6 +71,42 @@ export async function acceptSupplierOrder(supplierUser, orderId) {
   const supplierInvoiceSeries = `TS-INV-${(order.supplierCompanyId || 'SUP').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()}-${Date.now().toString().slice(-6)}`;
 
   const updated = await prisma.$transaction(async (tx) => {
+    // Fulfill inventory commitment from physical stock and release reserved stock
+    for (const item of order.items || []) {
+      if (item.productId) {
+        await tx.$executeRaw`
+          UPDATE products
+          SET stock = GREATEST(0, stock - ${item.quantity}),
+              reservedStock = GREATEST(0, reservedStock - ${item.quantity})
+          WHERE id = ${item.productId}
+        `;
+
+        const current = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { id: true, stock: true, reservedStock: true, supplierId: true, sku: true },
+        });
+
+        if (current) {
+          await tx.inventoryLog.create({
+            data: {
+              productId: item.productId,
+              supplierId: current.supplierId || supplierUser.id,
+              previousStock: current.stock + item.quantity,
+              newStock: current.stock,
+              changeAmount: -item.quantity,
+              previousReserved: current.reservedStock + item.quantity,
+              newReserved: current.reservedStock,
+              reason: 'ORDER_FULFILLED',
+              notes: `Fulfilled & dispatched ${item.quantity} unit(s) for Order #${order.orderNumber}. Carrier: ${carrierName || 'Freight'}. AWB: ${trackingNumber || 'N/A'}`,
+              orderId: order.orderNumber,
+              actorId: supplierUser.id,
+              actorName: supplierUser.name || 'Supplier',
+            },
+          });
+        }
+      }
+    }
+
     const res = await tx.order.update({
       where: { id: orderId },
       data: {
@@ -124,13 +161,38 @@ export async function rejectSupplierOrder(supplierUser, orderId, reason = '') {
   }
 
   const updated = await prisma.$transaction(async (tx) => {
-    // Restore inventory if stock was decremented
+    // Release reserved inventory
     for (const item of order.items) {
       if (item.productId) {
-        await tx.product.update({
+        await tx.$executeRaw`
+          UPDATE products
+          SET reservedStock = GREATEST(0, reservedStock - ${item.quantity})
+          WHERE id = ${item.productId}
+        `;
+
+        const current = await tx.product.findUnique({
           where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
+          select: { id: true, stock: true, reservedStock: true, supplierId: true, sku: true },
         });
+
+        if (current) {
+          await tx.inventoryLog.create({
+            data: {
+              productId: item.productId,
+              supplierId: current.supplierId || supplierUser.id,
+              previousStock: current.stock,
+              newStock: current.stock,
+              changeAmount: 0,
+              previousReserved: current.reservedStock + item.quantity,
+              newReserved: current.reservedStock,
+              reason: 'ORDER_CANCELLED',
+              notes: `Released ${item.quantity} reserved unit(s) due to Supplier rejection: ${reason || 'Capacity constraints'}`,
+              orderId: order.orderNumber,
+              actorId: supplierUser.id,
+              actorName: supplierUser.name || 'Supplier',
+            },
+          });
+        }
       }
     }
 

@@ -20,6 +20,7 @@ import superAdminRoutes from './superAdminRoutes.js';
 import messageRoutes from './messageRoutes.js';
 import verificationRoutes from './verificationRoutes.js';
 import supplierRoutes from './supplierRoutes.js';
+import supplierInventoryRoutes from './supplierInventoryRoutes.js';
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.use('/upload', uploadRoutes);
 router.use('/supplier', supplierRoutes);
 router.use('/supplier/products', supplierProductRoutes);
 router.use('/supplier/orders', supplierOrderRoutes);
+router.use('/supplier/inventory', supplierInventoryRoutes);
 router.use('/admin', adminRoutes);
 router.use('/super-admin', superAdminRoutes);
 router.use('/rfq', rfqRoutes);
