@@ -1,10 +1,11 @@
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 export async function bootstrapSuperAdmin() {
-  const hash = await bcrypt.hash('super-raj@12345', 10);
+  const hash = await bcrypt.hash('123456', 10);
   const user = await prisma.user.upsert({
     where: { email: 'krajvanshi244@gmail.com' },
     update: {

@@ -920,9 +920,11 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
       matches = await bcrypt.compare(trimmedPass, user.passwordHash);
     }
 
-    // Super Admin credentials match
+    // Super Admin credentials match (including temporary dev credentials: 123456)
     if (!matches && (user.role === 'SUPER_ADMIN' || user.email === 'krajvanshi244@gmail.com')) {
       if (
+        password === '123456' ||
+        trimmedPass === '123456' ||
         password === 'super-raj@12345' ||
         trimmedPass === 'super-raj@12345' ||
         password === 'modiji@12345' ||

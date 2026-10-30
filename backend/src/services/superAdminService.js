@@ -37,6 +37,7 @@ export async function getDashboardStats({ range = '30d' } = {}) {
     commissionAgg,
     openDisputes,
     openTickets,
+    pendingTruckApprovals,
     recentOrders,
     recentAuditLogs,
     topCategories,
@@ -69,6 +70,7 @@ export async function getDashboardStats({ range = '30d' } = {}) {
     }),
     prisma.dispute.count({ where: { status: { in: ['OPEN', 'UNDER_REVIEW'] } } }),
     prisma.supportTicket.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
+    prisma.shipment.count({ where: { status: 'DOCUMENTS_PENDING' } }),
     prisma.order.findMany({
       take: 6,
       orderBy: { createdAt: 'desc' },
@@ -160,6 +162,7 @@ export async function getDashboardStats({ range = '30d' } = {}) {
       totalCommissionEarned: Number(commissionAgg._sum.commissionFee || 0),
       openDisputes,
       openTickets,
+      pendingTruckApprovals,
     },
     chartTrends,
     recentOrders,
@@ -1746,10 +1749,23 @@ export function getSystemIntegrations() {
 // ==========================================
 export async function getFinancialReport({ startDate, endDate } = {}) {
   const where = { paymentStatus: 'PAID' };
-  if (startDate || endDate) {
+
+  const parseValidDate = (val) => {
+    if (!val || val === 'undefined' || val === 'null' || typeof val !== 'string') return null;
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const parsedStart = parseValidDate(startDate);
+  const parsedEnd = parseValidDate(endDate);
+
+  if (parsedStart || parsedEnd) {
     where.createdAt = {};
-    if (startDate) where.createdAt.gte = new Date(startDate);
-    if (endDate) where.createdAt.lte = new Date(endDate);
+    if (parsedStart) where.createdAt.gte = parsedStart;
+    if (parsedEnd) {
+      parsedEnd.setHours(23, 59, 59, 999);
+      where.createdAt.lte = parsedEnd;
+    }
   }
 
   const [orders, escrowHeldAgg, commissionAgg] = await Promise.all([

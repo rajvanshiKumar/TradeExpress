@@ -6,6 +6,7 @@ import Input, { Textarea } from '../components/common/Input';
 import Button from '../components/common/Button';
 import NotFound from './NotFound';
 import Help from './Help';
+import TermsAndConditions from './TermsAndConditions';
 import infoPages from '../data/infoPages';
 import useLocalStorage from '../hooks/useLocalStorage';
 import useDocumentTitle from '../hooks/useDocumentTitle';
@@ -82,6 +83,9 @@ export default function Info() {
   const { slug } = useParams();
   if (slug === 'help') {
     return <Help />;
+  }
+  if (slug === 'terms' || slug === 'terms-and-conditions' || slug === 'terms-of-use') {
+    return <TermsAndConditions />;
   }
   const page = infoPages[slug];
   useDocumentTitle(page?.title ?? 'Page not found');

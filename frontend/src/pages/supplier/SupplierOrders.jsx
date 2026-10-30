@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Eye, Package, Search, Check, XCircle, Truck, FileText, Upload, Download, ExternalLink } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Button, { IconButton } from '../../components/common/Button';
@@ -10,6 +11,7 @@ import ErrorState from '../../components/common/ErrorState';
 import CustomSelect from '../../components/common/CustomSelect';
 import { TableSkeleton } from '../../components/common/Skeleton';
 import OrderDetails from '../../components/forms/OrderDetails';
+import TaxInvoiceModal from '../../components/common/TaxInvoiceModal';
 import SupplierGuard from './SupplierGuard';
 import useOrders from '../../hooks/useOrders';
 import useCurrency from '../../hooks/useCurrency';
@@ -21,6 +23,7 @@ import { formatDate } from '../../utils/formatDate';
 import { apiPost, apiPut } from '../../services/apiClient';
 
 function Orders({ company }) {
+  const navigate = useNavigate();
   const { orders, loading, error, reload, updateOrderStatus } = useOrders();
   const { money } = useCurrency();
   const { showToast } = useNotifications();
@@ -41,6 +44,7 @@ function Orders({ company }) {
   const [ewayBillUrl, setEwayBillUrl] = useState('');
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [dispatchLoading, setDispatchLoading] = useState(false);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
 
   const mine = orders.filter((order) => order.items.some((item) => item.companyId === company.id));
   const visible = mine.filter((order) => {
@@ -232,25 +236,35 @@ function Orders({ company }) {
                           </button>
                         </div>
                       ) : order.status === 'Confirmed' ? (
-                        <button
-                          type="button"
-                          onClick={() => changeStatus(order, 'Packed')}
-                          className="inline-flex items-center gap-1 rounded-lg border border-navy-900/10 bg-navy-50 px-2.5 py-1 text-xs font-semibold text-navy-900 hover:bg-navy-100"
-                        >
-                          <Package className="size-3.5" /> Mark Packed
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => changeStatus(order, 'Packed')}
+                            className="inline-flex items-center gap-1 rounded-lg border border-navy-900/10 bg-navy-50 px-2.5 py-1 text-xs font-semibold text-navy-900 hover:bg-navy-100"
+                          >
+                            <Package className="size-3.5" /> Mark Packed
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/supplier/shipping?orderId=${order.id}`)}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                          >
+                            <Truck className="size-3.5" /> Arrange Delivery
+                          </button>
+                        </div>
                       ) : order.status === 'Packed' ? (
                         <button
                           type="button"
                           onClick={() => {
-                            setDispatchingOrder(order);
+                            navigate(`/supplier/shipping?orderId=${order.id}`);
+                            return;
                             setTrackingNumber(order.trackingNumber || '');
                             setInvoiceUrl(order.invoiceUrl || '');
                             setEwayBillUrl(order.ewayBillUrl || '');
                           }}
                           className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-brand-700"
                         >
-                          <Truck className="size-3.5" /> Dispatch Order
+                          <Truck className="size-3.5" /> Arrange Delivery
                         </button>
                       ) : (
                         <span className="text-xs text-muted">None needed</span>
@@ -267,9 +281,21 @@ function Orders({ company }) {
                       </div>
                     </td>
                     <td>
-                      <Button variant="outline" size="sm" icon={Eye} onClick={() => setOpenId(order.id)} aria-label={`View order ${order.id}`}>
-                        View
-                      </Button>
+                      <div className="flex items-center gap-1.5">
+                        <Button variant="outline" size="sm" icon={Eye} onClick={() => setOpenId(order.id)} aria-label={`View order ${order.id}`}>
+                          View
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          icon={FileText}
+                          onClick={() => setInvoiceOrder(order)}
+                          aria-label={`Tax invoice for order ${order.id}`}
+                          title="Generate Tax Invoice PDF"
+                        >
+                          Invoice
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -387,6 +413,13 @@ function Orders({ company }) {
       <Modal open={Boolean(selected)} onClose={() => setOpenId(null)} title="Order details" size="lg">
         {selected ? <OrderDetails order={selected} companyId={company.id} /> : null}
       </Modal>
+
+      <TaxInvoiceModal
+        order={invoiceOrder}
+        isOpen={Boolean(invoiceOrder)}
+        onClose={() => setInvoiceOrder(null)}
+        defaultRole="supplier"
+      />
     </div>
   );
 }

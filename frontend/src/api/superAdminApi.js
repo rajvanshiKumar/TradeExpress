@@ -2,6 +2,17 @@ const API_BASE = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:
 
 let tokenRefreshPromise = null;
 
+function buildQueryString(params = {}) {
+  const cleanParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '' && val !== 'undefined' && val !== 'null') {
+      cleanParams.append(key, val);
+    }
+  });
+  const str = cleanParams.toString();
+  return str ? `?${str}` : '';
+}
+
 async function ensureAdminToken(forceRefresh = false) {
   let token = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token') || '';
   if (token && !forceRefresh) {
@@ -18,7 +29,7 @@ async function ensureAdminToken(forceRefresh = false) {
       const res = await fetch(`${API_BASE}/auth/admin-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ email: 'krajvanshi244@gmail.com', password: 'super-raj@12345' }),
+        body: JSON.stringify({ email: 'krajvanshi244@gmail.com', password: '123456' }),
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && data?.data?.token) {
@@ -55,49 +66,54 @@ async function request(endpoint, options = {}, isRetry = false) {
   const url = `${API_BASE}/super-admin${endpoint}`;
   let token = await ensureAdminToken();
 
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      ...getHeaders(token),
-      ...(options.headers || {}),
-    },
-  });
+  try {
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        ...getHeaders(token),
+        ...(options.headers || {}),
+      },
+    });
 
-  // If 401 Unauthorized (e.g. token missing, expired, or invalid), refresh admin token and retry once
-  if (res.status === 401 && !isRetry) {
-    try {
-      localStorage.removeItem('tradeexpress_auth_token');
-      localStorage.removeItem('tradesphere_auth_token');
-    } catch {
-      // Ignore
+    // If 401 Unauthorized (e.g. token missing, expired, or invalid), refresh admin token and retry once
+    if (res.status === 401 && !isRetry) {
+      try {
+        localStorage.removeItem('tradeexpress_auth_token');
+        localStorage.removeItem('tradesphere_auth_token');
+      } catch {
+        // Ignore
+      }
+      const freshToken = await ensureAdminToken(true);
+      if (freshToken) {
+        return request(endpoint, options, true);
+      }
     }
-    const freshToken = await ensureAdminToken(true);
-    if (freshToken) {
-      return request(endpoint, options, true);
-    }
-  }
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.success === false) {
-    const error = new Error(data.message || `Request failed with status ${res.status}`);
-    error.status = res.status;
-    error.data = data;
-    throw error;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+      const error = new Error(data.message || `Request failed with status ${res.status}`);
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
+    return data.data !== undefined ? data.data : data;
+  } catch (err) {
+    if (err.name === 'TypeError' && err.message?.includes('fetch')) {
+      console.warn(`[superAdminApi] Network issue connecting to ${url}:`, err.message);
+    }
+    throw err;
   }
-  return data.data !== undefined ? data.data : data;
 }
 
 export const superAdminApi = {
   // Dashboard
   getDashboard: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/dashboard${q ? `?${q}` : ''}`);
+    return request(`/dashboard${buildQueryString(params)}`);
   },
 
   // Users
   getUsers: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/users${q ? `?${q}` : ''}`);
+    return request(`/users${buildQueryString(params)}`);
   },
   getUserDetails: (id) => request(`/users/${id}`),
   updateUserStatus: (id, payload) =>
@@ -111,14 +127,12 @@ export const superAdminApi = {
       body: JSON.stringify({ newPassword }),
     }),
   getExportUsersCsvUrl: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return `${API_BASE}/super-admin/users/export/csv${q ? `?${q}` : ''}`;
+    return `${API_BASE}/super-admin/users/export/csv${buildQueryString(params)}`;
   },
 
   // Suppliers & KYC
   getSuppliersKyc: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/suppliers/kyc${q ? `?${q}` : ''}`);
+    return request(`/suppliers/kyc${buildQueryString(params)}`);
   },
   reviewSupplierKyc: (id, payload) =>
     request(`/suppliers/${id}/kyc/review`, {
@@ -128,8 +142,7 @@ export const superAdminApi = {
 
   // Products
   getProducts: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/products${q ? `?${q}` : ''}`);
+    return request(`/products${buildQueryString(params)}`);
   },
   moderateProduct: (id, payload) =>
     request(`/products/${id}/moderate`, {
@@ -138,7 +151,23 @@ export const superAdminApi = {
     }),
 
   // Categories
-  getCategories: () => request('/categories'),
+  getCategories: async () => {
+    try {
+      return await request('/categories');
+    } catch (err) {
+      console.warn('[superAdminApi] getCategories request failed, falling back to public categories endpoint:', err?.message);
+      try {
+        const pubRes = await fetch(`${API_BASE}/categories`);
+        if (pubRes.ok) {
+          const pubData = await pubRes.json();
+          return pubData.data || pubData;
+        }
+      } catch (fbErr) {
+        console.error('[superAdminApi] Fallback to /categories failed:', fbErr?.message);
+      }
+      throw err;
+    }
+  },
   createCategory: (payload) =>
     request('/categories', {
       method: 'POST',
@@ -156,8 +185,7 @@ export const superAdminApi = {
 
   // RFQs & Quotes
   getRfqs: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/rfqs${q ? `?${q}` : ''}`);
+    return request(`/rfqs${buildQueryString(params)}`);
   },
   getRfqDetails: (id) => request(`/rfqs/${id}`),
   updateRfqStatus: (id, status) =>
@@ -168,8 +196,7 @@ export const superAdminApi = {
 
   // Orders
   getOrders: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/orders${q ? `?${q}` : ''}`);
+    return request(`/orders${buildQueryString(params)}`);
   },
   getOrderDetails: (id) => request(`/orders/${id}`),
   updateOrderAdmin: (id, payload) =>
@@ -180,13 +207,11 @@ export const superAdminApi = {
 
   // Payments & Commissions
   getPayments: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/payments${q ? `?${q}` : ''}`);
+    return request(`/payments${buildQueryString(params)}`);
   },
   getCommissionSettings: () => request('/commission'),
   getCommissionMetrics: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/commission/metrics${q ? `?${q}` : ''}`);
+    return request(`/commission/metrics${buildQueryString(params)}`);
   },
   updateCommissionSetting: (payload) =>
     request('/commission', {
@@ -201,8 +226,7 @@ export const superAdminApi = {
 
   // Disputes & Support
   getDisputes: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/disputes${q ? `?${q}` : ''}`);
+    return request(`/disputes${buildQueryString(params)}`);
   },
   getDisputeDetails: (id) => request(`/disputes/${id}`),
   addDisputeMessage: (id, payload) =>
@@ -218,8 +242,7 @@ export const superAdminApi = {
 
   // Support Tickets
   getSupportTickets: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/tickets${q ? `?${q}` : ''}`);
+    return request(`/tickets${buildQueryString(params)}`);
   },
   getSupportTicketDetails: (id) => request(`/tickets/${id}`),
   replySupportTicket: (id, payload) =>
@@ -256,14 +279,12 @@ export const superAdminApi = {
 
   // Audit Logs
   getAuditLogs: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/audit-logs${q ? `?${q}` : ''}`);
+    return request(`/audit-logs${buildQueryString(params)}`);
   },
 
   // Financial Reports
   getFinancialReport: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/reports/financial${q ? `?${q}` : ''}`);
+    return request(`/reports/financial${buildQueryString(params)}`);
   },
 };
 

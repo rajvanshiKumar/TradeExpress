@@ -12,6 +12,7 @@ enum Role {
   SUPPLIER
   ADMIN
   SUPER_ADMIN
+  TRANSPORT_PARTNER
 }
 
 enum PaymentStatus {
@@ -104,6 +105,15 @@ model User {
   conversationsAsBuyer    Conversation[]   @relation("BuyerConversations")
   conversationsAsSupplier Conversation[]   @relation("SupplierConversations")
   sentMessages            Message[]        @relation("UserSentMessages")
+
+  // Logistics relations
+  transportCompany        TransportCompany?    @relation("TransportCompanyOwner")
+  driverProfile           TransportDriver?     @relation("DriverUser")
+  supplierShipments       Shipment[]           @relation("SupplierShipments")
+  buyerShipments          Shipment[]           @relation("BuyerShipments")
+  transportRequests       TransportRequest[]   @relation("SupplierTransportRequests")
+  submittedQuotes         TransportQuote[]     @relation("PartnerSubmittedQuotes")
+  freightPaymentsMade     FreightPayment[]     @relation("FreightPaymentsPayer")
 
   @@map("users")
 }
@@ -326,6 +336,8 @@ model Order {
   review                Review?
   escrowLedger          EscrowLedger?
   conversations         Conversation[]
+  shipments             Shipment[]
+  transportRequests     TransportRequest[]
 
   @@index([userId])
   @@index([buyerEmail])
@@ -787,3 +799,368 @@ model Message {
   @@map("messages")
 }
 
+
+
+// ==========================================
+// TRANSPORTATION & LOGISTICS MANAGEMENT MODELS
+// ==========================================
+
+model TransportCompany {
+  id                 String             @id @default(uuid())
+  name               String
+  slug               String             @unique
+  companyType        String             @default("THIRD_PARTY") // SUPPLIER_FLEET, THIRD_PARTY, TRADEEXPRESS_PARTNER
+  ownerId            String?            @unique
+  owner              User?              @relation("TransportCompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  contactPerson      String
+  email              String
+  phone              String
+  address            String?            @db.Text
+  city               String?
+  state              String?
+  postalCode         String?
+  country            String             @default("India")
+  gstin              String?
+  pan                String?
+  ibaApproved        Boolean            @default(false)
+  ibaCode            String?
+  status             String             @default("ACTIVE") // PENDING, ACTIVE, SUSPENDED, REJECTED
+  verificationStatus String             @default("PENDING") // PENDING, VERIFIED, REJECTED
+  verifiedAt         DateTime?
+  verifiedBy         String?
+  rejectionReason    String?            @db.Text
+  fleetSize          Int                @default(1)
+  operatingRoutes    Json?              // Array of route strings or objects
+  serviceTypes       Json?              // FTL, PTL, CONTAINER, EXPRESS, COLD_CHAIN
+  rating             Decimal            @default(4.80) @db.Decimal(3, 2)
+  totalShipments     Int                @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  vehicles           TransportVehicle[]
+  drivers            TransportDriver[]
+  shipments          Shipment[]
+  quotes             TransportQuote[]
+  freightPayments    FreightPayment[]
+
+  @@index([status])
+  @@index([verificationStatus])
+  @@map("transport_companies")
+}
+
+model TransportVehicle {
+  id                  String             @id @default(uuid())
+  companyId           String
+  company             TransportCompany   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  vehicleNumber       String             // e.g. "MH-12-AB-1234"
+  vehicleType         String             // Open Truck, Container 20ft, Container 32ft, Trailer, Mini Truck, Flatbed, Reefer
+  capacityTons        Decimal            @db.Decimal(8, 2)
+  make                String?            // Tata Motors, Ashok Leyland, BharatBenz, Eicher
+  model               String?
+  yearOfManufacture   Int?
+  rcNumber            String?
+  rcDocumentUrl       String?            @db.Text
+  rcExpiryDate        DateTime?
+  insuranceNumber     String?
+  insuranceDocumentUrl String?           @db.Text
+  insuranceExpiryDate DateTime?
+  fitnessExpiryDate   DateTime?
+  permitNumber        String?
+  permitType          String?            @default("NATIONAL") // NATIONAL, STATE
+  permitDocumentUrl   String?            @db.Text
+  permitExpiryDate    DateTime?
+  pucExpiryDate       DateTime?
+  gpsImei             String?
+  gpsProvider         String?
+  isVerified          Boolean            @default(false)
+  verifiedAt          DateTime?
+  verificationNotes   String?            @db.Text
+  status              String             @default("AVAILABLE") // AVAILABLE, ASSIGNED, IN_TRANSIT, MAINTENANCE, INACTIVE
+  currentLocation     Json?              // { lat, lng, address, speed, timestamp }
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  shipments           Shipment[]
+  locations           ShipmentLocation[]
+
+  @@index([companyId])
+  @@index([vehicleNumber])
+  @@index([status])
+  @@map("transport_vehicles")
+}
+
+model TransportDriver {
+  id                   String             @id @default(uuid())
+  companyId            String
+  company              TransportCompany   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId               String?            @unique
+  user                 User?              @relation("DriverUser", fields: [userId], references: [id], onDelete: SetNull)
+  name                 String
+  phone                String
+  alternatePhone       String?
+  licenseNumber        String             // Commercial Driving License
+  licenseType          String             @default("COMMERCIAL_HEAVY") // LMV, COMMERCIAL_HEAVY, HAZARDOUS, ODC
+  licenseExpiryDate    DateTime?
+  licenseDocumentUrl   String?            @db.Text
+  aadhaarNumber        String?            // Masked Aadhaar
+  aadhaarDocumentUrl   String?            @db.Text
+  panNumber            String?
+  experienceYears      Int                @default(5)
+  isVerified           Boolean            @default(false)
+  verifiedAt           DateTime?
+  verificationNotes    String?            @db.Text
+  emergencyContactName String?
+  emergencyContactPhone String?
+  status               String             @default("AVAILABLE") // AVAILABLE, ASSIGNED, ON_DUTY, ON_LEAVE, INACTIVE
+  currentLocation      Json?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  shipments            Shipment[]
+
+  @@index([companyId])
+  @@index([phone])
+  @@index([licenseNumber])
+  @@map("transport_drivers")
+}
+
+model TransportRequest {
+  id                  String             @id @default(uuid())
+  requestNumber       String             @unique
+  orderId             String?
+  order               Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  supplierId          String
+  supplier            User               @relation("SupplierTransportRequests", fields: [supplierId], references: [id], onDelete: Cascade)
+  pickupAddress       Json
+  deliveryAddress     Json
+  cargoDetails        Json               // Goods description, total weight, packaging type, etc.
+  pickupDate          DateTime
+  expectedDeliveryDate DateTime?
+  targetFreight       Decimal?           @db.Decimal(12, 2)
+  loadingRequirements String?            @db.Text
+  status              String             @default("OPEN") // OPEN, QUOTED, ASSIGNED, COMPLETED, CANCELLED
+  assignedQuoteId     String?            @unique
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  quotes              TransportQuote[]
+  shipment            Shipment?
+
+  @@index([supplierId])
+  @@index([orderId])
+  @@index([status])
+  @@map("transport_requests")
+}
+
+model TransportQuote {
+  id                 String             @id @default(uuid())
+  quoteNumber        String             @unique
+  requestId          String
+  request            TransportRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  transporterId      String
+  transporter        TransportCompany   @relation(fields: [transporterId], references: [id], onDelete: Cascade)
+  partnerUserId      String
+  partnerUser        User               @relation("PartnerSubmittedQuotes", fields: [partnerUserId], references: [id], onDelete: Cascade)
+  baseFreight        Decimal            @db.Decimal(12, 2)
+  loadingCharges     Decimal            @default(0) @db.Decimal(12, 2)
+  unloadingCharges   Decimal            @default(0) @db.Decimal(12, 2)
+  fuelSurcharge      Decimal            @default(0) @db.Decimal(12, 2)
+  tollTaxes          Decimal            @default(0) @db.Decimal(12, 2)
+  gstRate            Decimal            @default(5.00) @db.Decimal(5, 2)
+  gstAmount          Decimal            @default(0) @db.Decimal(12, 2)
+  totalFreight       Decimal            @db.Decimal(12, 2)
+  transitDays        Int                @default(3)
+  vehicleTypeOffered String
+  validUntil         DateTime
+  terms              String?            @db.Text
+  status             String             @default("PENDING") // PENDING, ACCEPTED, REJECTED, WITHDRAWN, EXPIRED
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  shipment           Shipment?
+
+  @@index([requestId])
+  @@index([transporterId])
+  @@index([partnerUserId])
+  @@index([status])
+  @@map("transport_quotes")
+}
+
+model Shipment {
+  id                  String             @id @default(uuid())
+  shipmentNumber      String             @unique
+  trackingNumber      String             @unique
+  orderId             String?
+  order               Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  transportMethod     String             // SUPPLIER_MANAGED, TRADEEXPRESS_MANAGED
+  requestId           String?            @unique
+  request             TransportRequest?  @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  acceptedQuoteId     String?            @unique
+  acceptedQuote       TransportQuote?    @relation(fields: [acceptedQuoteId], references: [id], onDelete: SetNull)
+  supplierId          String
+  supplier            User               @relation("SupplierShipments", fields: [supplierId], references: [id], onDelete: Cascade)
+  buyerId             String?
+  buyer               User?              @relation("BuyerShipments", fields: [buyerId], references: [id], onDelete: SetNull)
+  transporterId       String?
+  transporter         TransportCompany?  @relation(fields: [transporterId], references: [id], onDelete: SetNull)
+  vehicleId           String?
+  vehicle             TransportVehicle?  @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  driverId            String?
+  driver              TransportDriver?   @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicleNumber       String?
+  driverName          String?
+  driverPhone         String?
+  lrNumber            String?            // Lorry Receipt / Bilty Number
+  ewayBillNumber      String?
+  ewayBillExpiry      DateTime?
+  pickupAddress       Json
+  deliveryAddress     Json
+  cargoDetails        Json
+  totalWeightKg       Decimal?           @db.Decimal(10, 2)
+  totalPackages       Int?
+  freightCharges      Decimal            @default(0) @db.Decimal(12, 2)
+  freightPayer        String             @default("SUPPLIER") // SUPPLIER, BUYER, PLATFORM
+  status              String             @default("TRANSPORT_PENDING")
+  pickupScheduledAt   DateTime?
+  pickedUpAt          DateTime?
+  dispatchedAt        DateTime?
+  estimatedDeliveryAt DateTime?
+  deliveredAt         DateTime?
+  cancelledAt         DateTime?
+  disputedAt          DateTime?
+  disputeReason       String?            @db.Text
+  disputeStatus       String?            // PENDING, INVESTIGATING, RESOLVED
+  deliveryOtp         String?            // 6-digit confirmation PIN
+  currentLocation     Json?              // { lat, lng, speed, heading, address, timestamp }
+  notes               String?            @db.Text
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  documents           ShipmentDocument[]
+  events              ShipmentEvent[]
+  locations           ShipmentLocation[]
+  deliveryProof       DeliveryProof?
+  freightPayment      FreightPayment?
+
+  @@index([supplierId])
+  @@index([buyerId])
+  @@index([transporterId])
+  @@index([vehicleId])
+  @@index([driverId])
+  @@index([orderId])
+  @@index([status])
+  @@index([trackingNumber])
+  @@map("shipments")
+}
+
+model ShipmentDocument {
+  id               String             @id @default(uuid())
+  shipmentId       String
+  shipment         Shipment           @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  docType          String             // LR_BILTY, EWAY_BILL, COMMERCIAL_INVOICE, PACKING_LIST, VEHICLE_RC, DRIVER_DL, TOLL_RECEIPT, WEIGHT_SLIP, POD, OTHER
+  docNumber        String?
+  title            String
+  fileUrl          String             @db.Text
+  fileName         String
+  fileSize         Int?
+  mimeType         String?
+  isVerified       Boolean            @default(false)
+  verifiedBy       String?
+  verifiedAt       DateTime?
+  uploadedByUserId String
+  uploadedByRole   String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([shipmentId])
+  @@index([docType])
+  @@map("shipment_documents")
+}
+
+model ShipmentEvent {
+  id          String             @id @default(uuid())
+  shipmentId  String
+  shipment    Shipment           @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  status      String
+  title       String
+  description String?            @db.Text
+  location    String?
+  latitude    Decimal?           @db.Decimal(10, 7)
+  longitude   Decimal?           @db.Decimal(10, 7)
+  actorId     String?
+  actorRole   String?
+  actorName   String?
+  timestamp   DateTime           @default(now())
+
+  @@index([shipmentId])
+  @@index([timestamp])
+  @@map("shipment_events")
+}
+
+model ShipmentLocation {
+  id          String             @id @default(uuid())
+  shipmentId  String
+  shipment    Shipment           @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  vehicleId   String?
+  vehicle     TransportVehicle?  @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  latitude    Decimal            @db.Decimal(10, 7)
+  longitude   Decimal            @db.Decimal(10, 7)
+  altitude    Decimal?           @db.Decimal(8, 2)
+  speed       Decimal?           @db.Decimal(6, 2) // km/h
+  heading     Decimal?           @db.Decimal(5, 2) // degrees
+  accuracy    Decimal?           @db.Decimal(6, 2) // meters
+  address     String?            @db.Text
+  batteryLevel Int?
+  source      String             @default("DRIVER_APP") // DRIVER_APP, GPS_DEVICE, TELEMATICS_API
+  recordedAt  DateTime           @default(now())
+  createdAt   DateTime           @default(now())
+
+  @@index([shipmentId, recordedAt])
+  @@map("shipment_locations")
+}
+
+model DeliveryProof {
+  id               String             @id @default(uuid())
+  shipmentId       String             @unique
+  shipment         Shipment           @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  recipientName    String
+  recipientPhone   String?
+  recipientIdProof String?
+  otpVerified      Boolean            @default(false)
+  signatureUrl     String?            @db.Text
+  photoProofUrls   Json?              // Array of proof URLs
+  condition        String             @default("GOOD") // GOOD, DAMAGED, PARTIAL, TAMPERED
+  receiverNotes    String?            @db.Text
+  driverNotes      String?            @db.Text
+  receivedAt       DateTime           @default(now())
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@map("delivery_proofs")
+}
+
+model FreightPayment {
+  id            String             @id @default(uuid())
+  shipmentId    String             @unique
+  shipment      Shipment           @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderId       String?
+  payerId       String
+  payer         User               @relation("FreightPaymentsPayer", fields: [payerId], references: [id], onDelete: Cascade)
+  transporterId String
+  transporter   TransportCompany   @relation(fields: [transporterId], references: [id], onDelete: Cascade)
+  grossAmount   Decimal            @db.Decimal(12, 2)
+  platformFee   Decimal            @default(0) @db.Decimal(12, 2)
+  tdsAmount     Decimal            @default(0) @db.Decimal(12, 2)
+  netPayable    Decimal            @db.Decimal(12, 2)
+  paymentMethod String             @default("ESCROW") // ESCROW, DIRECT_BANK, UPI, NEFT
+  escrowStatus  String             @default("HELD") // HELD, RELEASED, REFUNDED, DISPUTED
+  transactionRef String?
+  releasedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([payerId])
+  @@index([transporterId])
+  @@index([escrowStatus])
+  @@map("freight_payments")
+}

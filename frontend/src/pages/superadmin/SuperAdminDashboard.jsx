@@ -5,6 +5,7 @@ import {
   ShieldCheck,
   Package,
   ShoppingBag,
+  Truck,
   IndianRupee,
   Layers,
   FileText,
@@ -208,6 +209,22 @@ export default function SuperAdminDashboard() {
           </div>
           <p className="text-lg font-black text-slate-900 mt-2">{kpis.totalRfqs || 0}</p>
           <p className="text-[11px] text-slate-500">{kpis.totalQuotes || 0} Quotes Received</p>
+        </Link>
+
+                <Link to="/super-admin/logistics" className="bg-white p-4 rounded-xl border border-slate-200 hover:border-emerald-500 transition-colors shadow-xs group">
+          <div className="flex items-center justify-between text-slate-400 group-hover:text-emerald-700">
+            <Truck className="size-4" />
+            <ArrowUpRight className="size-3.5" />
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <p className="text-lg font-black text-slate-900">{kpis.pendingTruckApprovals || 0}</p>
+            {kpis.pendingTruckApprovals > 0 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 animate-pulse">
+                Action Required
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-500">Trucks Awaiting Approval</p>
         </Link>
 
         <Link to="/super-admin/disputes" className="bg-white p-4 rounded-xl border border-slate-200 hover:border-rose-500 transition-colors shadow-xs group">

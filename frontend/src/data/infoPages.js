@@ -37,12 +37,10 @@ const infoPages = {
     contactForm: true,
   },
   terms: {
-    title: 'Terms of use',
-    intro: 'Plain-language terms for using TradeExpress.',
+    title: 'Terms and Conditions of Use',
+    intro: 'Official Terms and Conditions governing access to and transactions on the TradeExpress B2B Marketplace (Effective: 29/10/2026).',
     sections: [
-      { heading: 'Marketplace listings', body: ['Suppliers are responsible for the accuracy of their company profiles, product details, prices and stock. TradeExpress does not independently verify them.'] },
-      { heading: 'Orders and payment', body: ['Orders record a buyer’s intent to purchase from a supplier. Online payment processing is not currently available; payment terms are agreed between buyer and supplier.'] },
-      { heading: 'Accounts', body: ['Keep your password private. In the current version accounts are stored in your browser, which is not a secure store for sensitive business information.'] },
+      { heading: '26 Controlled Operating Sections', body: ['Comprehensive legal terms encompassing marketplace facilitator role, seller product listings, buyer obligations, order formation, pricing & GST, escrow settlements, open-box inspection & logistics, 7-day returns, 5-day refunds, intellectual property, DPDP data protection, limitation of liability, and designated grievance redressal.'] },
     ],
   },
   privacy: {

@@ -7,6 +7,7 @@ import {
   RefreshCw,
   FolderTree,
   Tag,
+  AlertTriangle,
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
@@ -28,12 +29,37 @@ export default function SuperAdminCategories() {
   });
   const [submitting, setSubmitting] = useState(false);
 
+  // Delete Confirmation Modal
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
   const fetchCategories = async () => {
     try {
       setLoading(true);
       const data = await superAdminApi.getCategories();
-      setCategories(data);
+      if (Array.isArray(data)) {
+        setCategories(data);
+      } else if (data?.data && Array.isArray(data.data)) {
+        setCategories(data.data);
+      } else {
+        setCategories([]);
+      }
     } catch (err) {
+      console.warn('SuperAdminCategories fetch error, trying fallback:', err);
+      try {
+        const apiBase = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:5000/api').replace(/\/+$/, '');
+        const fallbackRes = await fetch(`${apiBase}/categories`);
+        if (fallbackRes.ok) {
+          const fallbackData = await fallbackRes.json();
+          const list = fallbackData?.data || fallbackData || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setCategories(list);
+            return;
+          }
+        }
+      } catch {
+        // Fallback error ignored
+      }
       showToast(err.message || 'Failed to fetch categories.', 'error');
     } finally {
       setLoading(false);
@@ -100,19 +126,26 @@ export default function SuperAdminCategories() {
     }
   };
 
-  const handleDelete = async (cat) => {
+  const handleDeleteClick = (cat) => {
     if (cat._count?.products > 0) {
       showToast(`Cannot delete category with ${cat._count.products} existing products. Reassign them first.`, 'error');
       return;
     }
-    if (!window.confirm(`Are you sure you want to delete category "${cat.name}"?`)) return;
+    setDeleteTarget(cat);
+  };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await superAdminApi.deleteCategory(cat.id);
+      setDeleting(true);
+      await superAdminApi.deleteCategory(deleteTarget.id);
       showToast('Category deleted.', 'success');
+      setDeleteTarget(null);
       fetchCategories();
     } catch (err) {
       showToast(err.message || 'Failed to delete category.', 'error');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -214,7 +247,7 @@ export default function SuperAdminCategories() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(c)}
+                  onClick={() => handleDeleteClick(c)}
                   className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors"
                   title="Delete Category"
                 >
@@ -225,6 +258,56 @@ export default function SuperAdminCategories() {
           );
         })}
       </div>
+
+      {/* Delete Confirmation Modal - Asks "Do you want to delete?" */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="size-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                <AlertTriangle className="size-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Do you want to delete?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Confirm permanent removal from catalog taxonomy.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1.5">
+              <p>
+                Are you sure you want to delete category <strong className="text-slate-900">"{deleteTarget.name}"</strong>?
+              </p>
+              <p className="text-slate-500 text-[11px]">
+                Slug: <span className="font-mono text-emerald-800">/{deleteTarget.slug}</span>
+              </p>
+              <p className="text-rose-600 font-medium text-[11px]">
+                This action is irreversible and will permanently delete this category taxonomy.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors shadow-xs"
+              >
+                {deleting ? 'Deleting...' : 'Do you want to delete? Yes, Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit Category Modal */}
       {modalOpen && (

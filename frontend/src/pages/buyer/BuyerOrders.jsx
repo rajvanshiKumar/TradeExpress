@@ -11,6 +11,8 @@ import ErrorState from '../../components/common/ErrorState';
 import { TableSkeleton } from '../../components/common/Skeleton';
 import CustomSelect from '../../components/common/CustomSelect';
 import OrderDetails from '../../components/forms/OrderDetails';
+import TaxInvoiceModal from '../../components/common/TaxInvoiceModal';
+import { printTaxInvoice } from '../../utils/taxInvoiceGenerator';
 import useAuth from '../../hooks/useAuth';
 import useOrders from '../../hooks/useOrders';
 import useCart from '../../hooks/useCart';
@@ -34,6 +36,7 @@ export default function BuyerOrders() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [cancelId, setCancelId] = useState(null);
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState(null);
   useDocumentTitle('My orders');
 
   // Mark all orders as seen when viewing the My Orders page
@@ -84,93 +87,7 @@ export default function BuyerOrders() {
   };
 
   const handlePrintOrderInvoice = (order) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const buyer = order.address || {};
-    const invoiceNum = order.invoiceNumber || `TS-INV-${order.orderNumber || order.id}`;
-    const invoiceDate = new Date(order.createdAt || Date.now()).toLocaleDateString('en-IN');
-    const items = order.items || [];
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>GST Tax Invoice & Purchase Order - ${order.orderNumber || order.id}</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; color: #1e293b; font-size: 13px; line-height: 1.5; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 25px; }
-            .logo { font-size: 24px; font-weight: 800; color: #047857; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 25px; }
-            .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
-            th { background: #f1f5f9; text-align: left; padding: 10px; font-size: 12px; border: 1px solid #cbd5e1; }
-            td { padding: 10px; border: 1px solid #e2e8f0; }
-            .totals { margin-left: auto; width: 320px; }
-            .totals-row { display: flex; justify-content: space-between; padding: 5px 0; }
-            .totals-row.grand { font-size: 16px; font-weight: bold; border-top: 2px solid #0f172a; color: #047857; margin-top: 5px; padding-top: 8px; }
-            .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 11px; color: #64748b; text-align: center; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <img src="/logos/tradeexpress-logo.png" alt="TradeExpress" style="height: 36px; width: auto; max-width: 220px; object-fit: contain; margin-bottom: 4px; display: block;" onerror="this.style.display='none'" />
-              <p style="margin: 5px 0 0 0; font-size: 11px; color: #475569;">B2B Wholesale Fulfillment · GSTIN: 27AABCT9999F1Z0</p>
-            </div>
-            <div style="text-align: right;">
-              <h2 style="margin: 0; font-size: 18px;">GST TAX INVOICE & PO</h2>
-              <p style="margin: 3px 0; font-weight: bold;">${invoiceNum}</p>
-              <p style="margin: 3px 0; color: #64748b;">Date: ${invoiceDate}</p>
-            </div>
-          </div>
-          <div class="grid">
-            <div class="box">
-              <h4 style="margin: 0 0 8px 0; text-transform: uppercase;">Consignor / Supplier</h4>
-              <p style="margin: 0; font-weight: bold;">TradeExpress Verified Wholesale Merchant</p>
-              <p style="margin: 2px 0;">GSTIN: 27AABCT1234F1Z1</p>
-            </div>
-            <div class="box">
-              <h4 style="margin: 0 0 8px 0; text-transform: uppercase;">Consignee / Buyer</h4>
-              <p style="margin: 0; font-weight: bold;">${order.contact?.name || buyer.name || user.name}</p>
-              <p style="margin: 2px 0;">${order.contact?.company || user.company || ''}</p>
-              <p style="margin: 2px 0;">${buyer.street || ''}, ${buyer.city || ''}, ${buyer.state || ''} - ${buyer.postalCode || ''}</p>
-            </div>
-          </div>
-          <table>
-            <thead>
-              <tr><th>#</th><th>Description</th><th>HSN</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
-            </thead>
-            <tbody>
-              ${items.map((item, idx) => `
-                <tr>
-                  <td>${idx + 1}</td>
-                  <td><strong>${item.name}</strong></td>
-                  <td>${item.hsnCode || '8471'}</td>
-                  <td>${item.quantity} ${item.unit || 'pcs'}</td>
-                  <td>₹${Number(item.unitPrice).toLocaleString('en-IN')}</td>
-                  <td>₹${Number(item.unitPrice * item.quantity).toLocaleString('en-IN')}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <div class="totals">
-            <div class="totals-row"><span>Subtotal:</span><span>₹${Number(order.totals?.subtotal || 0).toLocaleString('en-IN')}</span></div>
-            <div class="totals-row"><span>Logistics & Freight:</span><span>₹${Number(order.totals?.shipping || 0).toLocaleString('en-IN')}</span></div>
-            <div class="totals-row"><span>GST (18%):</span><span>₹${Number(order.totals?.tax || 0).toLocaleString('en-IN')}</span></div>
-            <div class="totals-row grand"><span>Total Value:</span><span>₹${Number(order.totals?.total || 0).toLocaleString('en-IN')}</span></div>
-          </div>
-          <div class="footer">
-            <p>Computer generated GST invoice and purchase order. E.&O.E.</p>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-    }, 250);
+    setSelectedInvoiceOrder(order);
   };
 
   return (
@@ -238,6 +155,12 @@ export default function BuyerOrders() {
         {selected ? <OrderDetails order={selected} /> : null}
       </Modal>
       <ConfirmDialog open={Boolean(cancelId)} onCancel={() => setCancelId(null)} onConfirm={cancel} title="Cancel this order?" text={`Order ${cancelId} will be marked as cancelled.`} confirmLabel="Cancel order" cancelLabel="Keep order" />
+      <TaxInvoiceModal
+        order={selectedInvoiceOrder}
+        isOpen={Boolean(selectedInvoiceOrder)}
+        onClose={() => setSelectedInvoiceOrder(null)}
+        defaultRole="buyer"
+      />
     </div>
   );
 }

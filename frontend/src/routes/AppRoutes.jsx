@@ -24,6 +24,7 @@ import Info from '../pages/Info';
 import NotFound from '../pages/NotFound';
 import BuyerWishlist from '../pages/buyer/BuyerWishlist';
 import CountryRegion from '../pages/CountryRegion';
+import TermsAndConditions from '../pages/TermsAndConditions';
 
 const Messages = lazy(() => import('../pages/Messages'));
 const Checkout = lazy(() => import('../pages/Checkout'));
@@ -39,6 +40,8 @@ const BuyerPayments = lazy(() => import('../pages/buyer/BuyerPayments'));
 const BuyerNotifications = lazy(() => import('../pages/buyer/BuyerNotifications'));
 const BuyerDisputes = lazy(() => import('../pages/buyer/BuyerDisputes'));
 const BuyerSettings = lazy(() => import('../pages/buyer/BuyerSettings'));
+const BuyerShipments = lazy(() => import('../pages/buyer/BuyerShipments'));
+const TransporterDashboard = lazy(() => import('../pages/transporter/TransporterDashboard'));
 const SupplierDashboard = lazy(() => import('../pages/supplier/SupplierDashboard'));
 const SupplierProducts = lazy(() => import('../pages/supplier/SupplierProducts'));
 const SupplierProductForm = lazy(() => import('../pages/supplier/SupplierProductForm'));
@@ -76,6 +79,7 @@ const SuperAdminAdmins = lazy(() => import('../pages/superadmin/SuperAdminAdmins
 const SuperAdminSettings = lazy(() => import('../pages/superadmin/SuperAdminSettings'));
 const SuperAdminReports = lazy(() => import('../pages/superadmin/SuperAdminReports'));
 const SuperAdminAuditLogs = lazy(() => import('../pages/superadmin/SuperAdminAuditLogs'));
+const SuperAdminLogistics = lazy(() => import('../pages/superadmin/SuperAdminLogistics'));
 
 // Dashboards, messaging and checkout load on demand to keep the first page light.
 export default function AppRoutes() {
@@ -107,6 +111,8 @@ export default function AppRoutes() {
         <Route path="/superadmin/login" element={<Navigate to="/super-admin/login" replace />} />
         <Route path="/superadmin" element={<Navigate to="/super-admin" replace />} />
         <Route path="/info/:slug" element={<Info />} />
+        <Route path="/terms" element={<TermsAndConditions />} />
+        <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
         <Route path="/track" element={<OrderTracking />} />
         <Route path="/track/:orderNumber" element={<OrderTracking />} />
         <Route path="/country-region" element={<CountryRegion />} />
@@ -146,6 +152,7 @@ export default function AppRoutes() {
             <Route path="/buyer/payments" element={<BuyerPayments />} />
             <Route path="/buyer/notifications" element={<BuyerNotifications />} />
             <Route path="/buyer/disputes" element={<BuyerDisputes />} />
+            <Route path="/buyer/shipments" element={<BuyerShipments />} />
             <Route path="/buyer/settings" element={<BuyerSettings />} />
           </Route>
         </Route>
@@ -163,12 +170,14 @@ export default function AppRoutes() {
             <Route path="/supplier/dashboard" element={<SupplierDashboard />} />
             <Route path="/supplier/quotations" element={<SupplierQuotations />} />
             <Route path="/supplier/shipping" element={<SupplierShipping />} />
+            <Route path="/supplier/logistics" element={<SupplierShipping />} />
             <Route path="/supplier/payments" element={<SupplierPayments />} />
             <Route path="/supplier/profile" element={<SupplierProfile />} />
             <Route path="/supplier/notifications" element={<SupplierNotifications />} />
             <Route path="/supplier/dashboard" element={<SupplierDashboard />} />
             <Route path="/supplier/quotations" element={<SupplierQuotations />} />
             <Route path="/supplier/shipping" element={<SupplierShipping />} />
+            <Route path="/supplier/logistics" element={<SupplierShipping />} />
             <Route path="/supplier/payments" element={<SupplierPayments />} />
             <Route path="/supplier/profile" element={<SupplierProfile />} />
             <Route path="/supplier/notifications" element={<SupplierNotifications />} />
@@ -202,6 +211,17 @@ export default function AppRoutes() {
             <Route path="/super-admin/settings" element={<SuperAdminSettings />} />
             <Route path="/super-admin/reports" element={<SuperAdminReports />} />
             <Route path="/super-admin/audit" element={<SuperAdminAuditLogs />} />
+            <Route path="/super-admin/logistics" element={<SuperAdminLogistics />} />
+          </Route>
+        </Route>
+        <Route element={<RoleRoute roles={['transport_partner']} />}>
+          <Route element={<DashboardLayout role="transport_partner" />}>
+            <Route path="/transporter" element={<Navigate to="/transporter/dashboard" replace />} />
+            <Route path="/transporter/dashboard" element={<TransporterDashboard />} />
+            <Route path="/transporter/requests" element={<TransporterDashboard />} />
+            <Route path="/transporter/shipments" element={<TransporterDashboard />} />
+            <Route path="/transporter/fleet" element={<TransporterDashboard />} />
+            <Route path="/transporter/earnings" element={<TransporterDashboard />} />
           </Route>
         </Route>
       </Route>

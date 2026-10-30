@@ -17,7 +17,6 @@ import { IconButton } from "../common/Button";
 import SearchForm from "../forms/SearchForm";
 import MegaMenu from "./MegaMenu";
 import MobileMenu from "./MobileMenu";
-import PreferencesMenu from "./PreferencesMenu";
 import LanguageSelector from "./LanguageSelector";
 import NotificationsMenu, { CountDot } from "./NotificationsMenu";
 import UserMenu from "./UserMenu";
@@ -335,9 +334,6 @@ export default function Header() {
               className={`!size-7.5 sm:!size-8 xl:!size-8.5 shrink-0 ${scrolled ? "" : "max-lg:hidden"}`}
             />
             <LanguageSelector />
-            <div className="hidden md:block">
-              <PreferencesMenu />
-            </div>
             {user?.role !== "super_admin" && (
               <NotificationsMenu className="hidden sm:inline-flex" />
             )}

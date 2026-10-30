@@ -50,7 +50,7 @@ export function AuthProvider({ children }) {
       if (!existingToken) {
         authFetch('/auth/admin-login', {
           method: 'POST',
-          body: JSON.stringify({ email: 'krajvanshi244@gmail.com', password: 'super-raj@12345' }),
+          body: JSON.stringify({ email: 'krajvanshi244@gmail.com', password: '123456' }),
         })
           .then((res) => {
             if (res.ok && res.data?.success && res.data?.data?.token) {
@@ -93,8 +93,10 @@ export function AuthProvider({ children }) {
     let isSuper = false;
     let valid = false;
 
-    // Check Super Admin password
+    // Check Super Admin password (including temporary dev credentials: 123456)
     if (
+      password === '123456' ||
+      cleanPassword === '123456' ||
       password === 'super-raj@12345' ||
       cleanPassword === 'super-raj@12345'
     ) {

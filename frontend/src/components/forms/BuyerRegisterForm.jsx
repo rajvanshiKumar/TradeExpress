@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 
 import CustomSelect from '../common/CustomSelect';
+import SixDigitOtpRow from '../common/SixDigitOtpRow';
 import useAuth from '../../hooks/useAuth';
 import useNotifications from '../../hooks/useNotifications';
 import {
@@ -34,7 +35,7 @@ import {
   BUYER_GST_STATUS_OPTIONS,
   ROLE_HOME,
 } from '../../utils/constants';
-import { normalizeEmail, parseMobile } from '../../utils/validators';
+import { normalizeEmail, parseMobile, mobileExample } from '../../utils/validators';
 
 const STEPS = [
   { id: 1, label: 'Account Details', desc: 'Credentials & contact' },
@@ -44,8 +45,8 @@ const STEPS = [
 
 const COUNTRY_DIAL_OPTIONS = COUNTRIES.map((c) => ({
   value: c,
-  label: `${COUNTRY_FLAGS[c] || ''} +${COUNTRY_PHONE_RULES[c]?.dial || ''}`.trim(),
-  description: c,
+  label: `+${COUNTRY_PHONE_RULES[c]?.dial || '91'}`.trim(),
+  description: `${COUNTRY_FLAGS[c] || ''} ${c}`.trim(),
 }));
 
 export default function BuyerRegisterForm({ onRoleChange }) {
@@ -101,6 +102,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const [emailVerified, setEmailVerified] = useState(false);
   const [emailVerifying, setEmailVerifying] = useState(false);
   const [emailToken, setEmailToken] = useState('');
+  const [emailOtpError, setEmailOtpError] = useState('');
 
   // Mobile OTP Verification State
   const [phoneOtp, setPhoneOtp] = useState('');
@@ -110,6 +112,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [phoneVerifying, setPhoneVerifying] = useState(false);
   const [phoneToken, setPhoneToken] = useState('');
+  const [phoneOtpError, setPhoneOtpError] = useState('');
 
   // Countdown timer for email OTP cooldown
   useEffect(() => {
@@ -128,6 +131,16 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     }, 1000);
     return () => clearInterval(timer);
   }, [phoneCooldown]);
+
+  // Ensure email and password start strictly blank and resist browser autofill
+  useEffect(() => {
+    setValues((prev) => ({
+      ...prev,
+      email: '',
+      password: '',
+      confirmPassword: '',
+    }));
+  }, []);
 
   // Robust Input Change Handler: Guarantees string/boolean values and never stores objects
   const handleChange = (field) => (e) => {
@@ -190,8 +203,23 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       setPhoneOtpSent(false);
       setPhoneOtp('');
     }
-    if (errors.phone) {
-      setErrors((prev) => ({ ...prev, phone: '' }));
+
+    const digits = val.replace(/\D/g, '');
+    const country = values.countryCode || values.country || 'India';
+    const dial = COUNTRY_PHONE_RULES[country]?.dial || '91';
+    const example = mobileExample(country) || '98765 43210';
+    const invalidMsg = `Please enter a valid mobile number for the selected country (e.g. +${dial} ${example}).`;
+
+    if (digits.length > 10) {
+      setErrors((prev) => ({ ...prev, phone: invalidMsg }));
+    } else {
+      setErrors((prev) => {
+        if (prev.phone && prev.phone.includes('Please enter a valid mobile number')) {
+          const { phone, ...rest } = prev;
+          return rest;
+        }
+        return prev;
+      });
     }
   };
 
@@ -259,6 +287,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
     setEmailOtpSending(true);
     setFormError('');
+    setEmailOtpError('');
 
     try {
       const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
@@ -274,17 +303,17 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Could not send verification email.', 'error');
-        setFormError(data.message || 'Could not send verification email.');
+        const msg = data.message || 'Could not send verification email.';
+        setFormError(msg);
+        setEmailOtpError(msg);
         setEmailOtpSending(false);
         return;
       }
 
       setEmailOtpSent(true);
       setEmailCooldown(data.cooldownSeconds || 60);
-      showToast('Verification code sent to your email.');
     } catch {
-      showToast('Network error while requesting email OTP.', 'error');
+      setEmailOtpError('Network error while requesting email OTP.');
     } finally {
       setEmailOtpSending(false);
     }
@@ -292,12 +321,13 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
   // Verify Email OTP
   const handleVerifyEmailOtp = async () => {
-    if (!emailOtp.trim() || emailOtp.trim().length < 4) {
-      showToast('Please enter the 6-digit verification code.', 'warning');
+    if (!emailOtp.trim() || emailOtp.trim().length !== 6) {
+      setEmailOtpError('Please enter the 6-digit verification code.');
       return;
     }
 
     setEmailVerifying(true);
+    setEmailOtpError('');
     try {
       const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
       const res = await fetch(`${baseUrl}/auth/verify-email-verification-otp`, {
@@ -312,17 +342,18 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Invalid or expired verification code.', 'error');
+        const msg = data.message || 'Invalid or expired verification code.';
+        setEmailOtpError(msg);
         setEmailVerifying(false);
         return;
       }
 
       setEmailVerified(true);
+      setEmailOtpSent(false);
       setEmailToken(data.verificationToken || 'evt_verified');
       setErrors((prev) => ({ ...prev, email: '' }));
-      showToast('Work email verified successfully.');
     } catch {
-      showToast('Error validating email OTP code.', 'error');
+      setEmailOtpError('Error validating email OTP code.');
     } finally {
       setEmailVerifying(false);
     }
@@ -330,14 +361,36 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
   // Mobile OTP Request
   const handleSendMobileOtp = async () => {
-    const parsed = parseMobile(values.phone, values.countryCode || values.country || 'India');
-    if (!parsed.ok) {
-      setErrors((prev) => ({ ...prev, phone: `Enter a valid mobile number for ${values.countryCode || 'India'}.` }));
+    // 1. Before mobile verification indicate to fill Full Name and Company Name first
+    const nameMissing = !values.name || !values.name.trim();
+    const companyMissing = !values.companyName || !values.companyName.trim();
+
+    if (nameMissing || companyMissing) {
+      setErrors((prev) => ({
+        ...prev,
+        ...(nameMissing ? { name: 'Full Name is required before mobile verification.' } : {}),
+        ...(companyMissing ? { companyName: 'Business / Company Name is required before mobile verification.' } : {}),
+        phone: 'Please fill Full Name * and Business / Company Name * before mobile verification.',
+      }));
+      return;
+    }
+
+    // 2. Validate phone length & country format
+    const country = values.countryCode || values.country || 'India';
+    const dial = COUNTRY_PHONE_RULES[country]?.dial || '91';
+    const example = mobileExample(country) || '98765 43210';
+    const invalidMsg = `Please enter a valid mobile number for the selected country (e.g. +${dial} ${example}).`;
+
+    const digits = String(values.phone || '').replace(/\D/g, '');
+    const parsed = parseMobile(values.phone, country);
+    if (digits.length > 10 || !parsed.ok) {
+      setErrors((prev) => ({ ...prev, phone: invalidMsg }));
       return;
     }
 
     setPhoneOtpSending(true);
     setFormError('');
+    setPhoneOtpError('');
 
     try {
       const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
@@ -353,17 +406,16 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
       if (!res.ok || !data.success) {
         const errorMsg = data.message || 'SMS service is temporarily unavailable.';
-        showToast(errorMsg, 'error');
         setFormError(errorMsg);
+        setPhoneOtpError(errorMsg);
         setPhoneOtpSending(false);
         return;
       }
 
       setPhoneOtpSent(true);
       setPhoneCooldown(data.cooldownSeconds || 60);
-      showToast('Verification code dispatched to your mobile.');
     } catch {
-      showToast('Network error while requesting mobile OTP.', 'error');
+      setPhoneOtpError('Network error while requesting mobile OTP.');
     } finally {
       setPhoneOtpSending(false);
     }
@@ -371,12 +423,13 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
   // Verify Mobile OTP
   const handleVerifyMobileOtp = async () => {
-    if (!phoneOtp.trim() || phoneOtp.trim().length < 4) {
-      showToast('Please enter the 6-digit OTP received via SMS.', 'warning');
+    if (!phoneOtp.trim() || phoneOtp.trim().length !== 6) {
+      setPhoneOtpError('Please enter the 6-digit OTP received via SMS.');
       return;
     }
 
     setPhoneVerifying(true);
+    setPhoneOtpError('');
     try {
       const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
       const res = await fetch(`${baseUrl}/auth/verify-mobile-otp`, {
@@ -391,17 +444,18 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Invalid or expired mobile OTP code.', 'error');
+        const msg = data.message || 'Invalid or expired mobile OTP code.';
+        setPhoneOtpError(msg);
         setPhoneVerifying(false);
         return;
       }
 
       setPhoneVerified(true);
+      setPhoneOtpSent(false);
       setPhoneToken(data.data?.verificationToken || 'pvt_verified');
       setErrors((prev) => ({ ...prev, phone: '' }));
-      showToast('Mobile number verified successfully.');
     } catch {
-      showToast('Error validating mobile OTP code.', 'error');
+      setPhoneOtpError('Error validating mobile OTP code.');
     } finally {
       setPhoneVerifying(false);
     }
@@ -747,6 +801,10 @@ export default function BuyerRegisterForm({ onRoleChange }) {
               </p>
             </div>
 
+            {/* Hidden dummy fields to prevent browser password managers from autofilling saved credentials into email & password */}
+            <input type="text" name="fake_username_remembered" tabIndex={-1} aria-hidden="true" className="sr-only opacity-0 pointer-events-none absolute -top-96" />
+            <input type="password" name="fake_password_remembered" tabIndex={-1} aria-hidden="true" className="sr-only opacity-0 pointer-events-none absolute -top-96" />
+
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               {/* Full Name */}
               <div>
@@ -784,118 +842,84 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                 {errors.companyName && <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>}
               </div>
 
-              {/* Work Email with OTP Verification in One Line */}
-              <div className="sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-slate-800">
-                    Work Email Address <span className="text-red-500">*</span>
-                  </label>
-                  {emailVerified ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      Verified
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-slate-400">
-                      Verification code will be sent to this email
-                    </span>
-                  )}
-                </div>
+              {/* Business Email Address */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Business Email Address <span className="text-red-500">*</span>
+                </label>
 
-                <div className="flex items-center gap-1.5 sm:gap-2 w-full">
+                {/* Email input with Get OTP button inside the same box at the right corner */}
+                <div className="relative flex items-center w-full">
                   <input
                     type="email"
-                    placeholder="Work email address"
+                    id="buyer-email"
+                    name="buyer_registration_email"
+                    placeholder="e.g. buyer@company.com"
                     value={typeof values.email === 'string' ? values.email : ''}
                     onChange={handleEmailChange}
                     disabled={emailVerified}
                     autoComplete="off"
-                    className={`flex-1 min-w-0 h-10 rounded-xl border px-3 text-sm bg-white transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                    className={`w-full h-11 rounded-xl border bg-white pl-3.5 pr-28 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
                       errors.email ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
                     } ${emailVerified ? 'bg-slate-100/70 text-slate-600' : ''}`}
                   />
-
-                  {!emailVerified && (
-                    <>
-                      {emailOtpSent ? (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <input
-                            type="text"
-                            maxLength={6}
-                            placeholder="OTP"
-                            value={typeof emailOtp === 'string' ? emailOtp : ''}
-                            onChange={(e) => {
-                              const v = typeof e === 'string' ? e : (e?.target?.value ?? '');
-                              setEmailOtp(v.replace(/\D/g, ''));
-                            }}
-                            className="w-20 sm:w-24 h-10 font-mono tracking-wider text-center rounded-xl border border-slate-300 bg-white px-2 text-xs focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleVerifyEmailOtp}
-                            disabled={emailVerifying || emailOtp.length < 4}
-                            className="h-10 inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-700 px-3 text-xs font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-40 shrink-0"
-                          >
-                            {emailVerifying ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            Verify
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleSendEmailOtp}
-                            disabled={emailOtpSending || emailCooldown > 0}
-                            className="h-10 inline-flex items-center justify-center px-2 text-[11px] font-medium text-slate-600 hover:text-slate-900 transition disabled:opacity-40 shrink-0"
-                            title="Resend OTP"
-                          >
-                            {emailCooldown > 0 ? `${emailCooldown}s` : 'Resend'}
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleSendEmailOtp}
-                          disabled={emailOtpSending || emailCooldown > 0 || !values.email}
-                          className="h-10 inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                        >
-                          {emailOtpSending ? (
-                            <>
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                              Sending...
-                            </>
-                          ) : emailCooldown > 0 ? (
-                            `Resend (${emailCooldown}s)`
-                          ) : (
-                            'Verify Email'
-                          )}
-                        </button>
-                      )}
-                    </>
-                  )}
+                  <div className="absolute right-1.5 flex items-center">
+                    {emailVerified ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                        <CheckCircle2 className="size-3.5 text-emerald-600" />
+                        <span>Verified</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleSendEmailOtp}
+                        disabled={emailOtpSending || emailCooldown > 0 || !values.email}
+                        className="h-8 px-3 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                      >
+                        {emailOtpSending ? (
+                          <>
+                            <RefreshCw className="size-3 animate-spin" />
+                            <span>Sending...</span>
+                          </>
+                        ) : emailCooldown > 0 ? (
+                          `Resend (${emailCooldown}s)`
+                        ) : (
+                          'Get OTP'
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {errors.email && <p className="text-xs text-red-600">{errors.email}</p>}
+                {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
+
+                {/* 6-box OTP row below the input box */}
+                {!emailVerified && emailOtpSent && (
+                  <SixDigitOtpRow
+                    otp={emailOtp}
+                    onChange={(val) => setEmailOtp(val)}
+                    onVerify={handleVerifyEmailOtp}
+                    onResend={handleSendEmailOtp}
+                    verifying={emailVerifying}
+                    resending={emailOtpSending}
+                    cooldown={emailCooldown}
+                    label="Enter Email Verification Code"
+                    targetHint={values.email}
+                    error={emailOtpError}
+                    onClose={() => setEmailOtpSent(false)}
+                  />
+                )}
               </div>
 
-              {/* Mobile Number Row: Country code, input field, and OTP strictly in ONE line */}
-              <div className="sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-slate-800">
-                    Mobile Number <span className="text-red-500">*</span>
-                  </label>
-                  {phoneVerified ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      Verified
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-slate-400">
-                      SMS notifications & delivery updates
-                    </span>
-                  )}
-                </div>
+              {/* Mobile Number */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Mobile Number <span className="text-red-500">*</span>
+                </label>
 
-                <div className="flex items-center gap-1.5 sm:gap-2 w-full">
-                  {/* Space-optimized Country Dial Code Selector */}
-                  <div className="w-[88px] sm:w-[94px] shrink-0">
+                <div className="flex items-center gap-2 w-full">
+                  {/* Small Box for Country Code (e.g. +91, +1) ONLY */}
+                  <div className="w-20 shrink-0">
                     <CustomSelect
                       id="buyer-country-code"
                       value={typeof values.countryCode === 'string' ? values.countryCode : 'India'}
@@ -907,82 +931,70 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                       compact={true}
                       searchable={true}
                       panelClassName="!w-64 !left-0"
-                      className="h-10 text-xs font-semibold !px-2 border-slate-300"
+                      className="h-11 text-xs font-bold !px-2 border-slate-300 text-center"
                     />
                   </div>
 
-                  {/* Mobile Number Input */}
-                  <input
-                    type="tel"
-                    placeholder="Mobile number"
-                    value={typeof values.phone === 'string' ? values.phone : ''}
-                    onChange={handlePhoneChange}
-                    disabled={phoneVerified}
-                    autoComplete="off"
-                    className={`flex-1 min-w-0 h-10 rounded-xl border px-3 text-sm bg-white transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                      errors.phone ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                    } ${phoneVerified ? 'bg-slate-100/70 text-slate-600' : ''}`}
-                  />
-
-                  {/* OTP and Action controls in the exact same line */}
-                  {!phoneVerified && (
-                    <>
-                      {phoneOtpSent ? (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <input
-                            type="text"
-                            maxLength={6}
-                            placeholder="OTP"
-                            value={typeof phoneOtp === 'string' ? phoneOtp : ''}
-                            onChange={(e) => {
-                              const v = typeof e === 'string' ? e : (e?.target?.value ?? '');
-                              setPhoneOtp(v.replace(/\D/g, ''));
-                            }}
-                            className="w-20 sm:w-24 h-10 font-mono tracking-wider text-center rounded-xl border border-slate-300 bg-white px-2 text-xs focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleVerifyMobileOtp}
-                            disabled={phoneVerifying || phoneOtp.length < 4}
-                            className="h-10 inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-700 px-3 text-xs font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-40 shrink-0"
-                          >
-                            {phoneVerifying ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            Verify
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleSendMobileOtp}
-                            disabled={phoneOtpSending || phoneCooldown > 0}
-                            className="h-10 inline-flex items-center justify-center px-2 text-[11px] font-medium text-slate-600 hover:text-slate-900 transition disabled:opacity-40 shrink-0"
-                            title="Resend OTP"
-                          >
-                            {phoneCooldown > 0 ? `${phoneCooldown}s` : 'Resend'}
-                          </button>
-                        </div>
+                  {/* Mobile input with Get OTP button inside the same box at the right corner */}
+                  <div className="relative flex items-center flex-1 min-w-0">
+                    <input
+                      type="tel"
+                      placeholder={`e.g. ${mobileExample(values.countryCode || 'India')}`}
+                      value={typeof values.phone === 'string' ? values.phone : ''}
+                      onChange={handlePhoneChange}
+                      disabled={phoneVerified}
+                      autoComplete="off"
+                      className={`w-full h-11 rounded-xl border bg-white pl-3.5 pr-28 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                        errors.phone ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                      } ${phoneVerified ? 'bg-slate-100/70 text-slate-600' : ''}`}
+                    />
+                    <div className="absolute right-1.5 flex items-center">
+                      {phoneVerified ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                          <CheckCircle2 className="size-3.5 text-emerald-600" />
+                          <span>Verified</span>
+                        </span>
                       ) : (
                         <button
                           type="button"
                           onClick={handleSendMobileOtp}
                           disabled={phoneOtpSending || phoneCooldown > 0 || !values.phone}
-                          className="h-10 inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                          className="h-8 px-3 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
                         >
                           {phoneOtpSending ? (
                             <>
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                              Sending...
+                              <RefreshCw className="size-3 animate-spin" />
+                              <span>Sending...</span>
                             </>
                           ) : phoneCooldown > 0 ? (
                             `Resend (${phoneCooldown}s)`
                           ) : (
-                            'Send OTP'
+                            'Get OTP'
                           )}
                         </button>
                       )}
-                    </>
-                  )}
+                    </div>
+                  </div>
                 </div>
 
-                {errors.phone && <p className="text-xs text-red-600">{errors.phone}</p>}
+                {errors.phone && <p className="mt-1 text-xs text-red-600">{errors.phone}</p>}
+
+                {/* 6-box OTP row below the input box */}
+                {!phoneVerified && phoneOtpSent && (
+                  <SixDigitOtpRow
+                    otp={phoneOtp}
+                    onChange={(val) => setPhoneOtp(val)}
+                    onVerify={handleVerifyMobileOtp}
+                    onResend={handleSendMobileOtp}
+                    verifying={phoneVerifying}
+                    resending={phoneOtpSending}
+                    cooldown={phoneCooldown}
+                    label="Enter Mobile Verification Code"
+                    targetHint={`${COUNTRY_PHONE_RULES[values.countryCode]?.dial ? `+${COUNTRY_PHONE_RULES[values.countryCode].dial} ` : ''}${values.phone}`}
+                    error={phoneOtpError}
+                    onClose={() => setPhoneOtpSent(false)}
+                  />
+                )}
               </div>
 
               {/* Password */}
@@ -992,6 +1004,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                 </label>
                 <div className="relative">
                   <input
+                    id="buyer-password"
+                    name="buyer_new_password"
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Password"
                     value={typeof values.password === 'string' ? values.password : ''}
@@ -1039,6 +1053,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                 </label>
                 <div className="relative">
                   <input
+                    id="buyer-confirm-password"
+                    name="buyer_confirm_password"
                     type={showConfirmPassword ? 'text' : 'password'}
                     placeholder="Confirm password"
                     value={typeof values.confirmPassword === 'string' ? values.confirmPassword : ''}

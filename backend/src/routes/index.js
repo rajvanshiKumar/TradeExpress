@@ -21,6 +21,7 @@ import messageRoutes from './messageRoutes.js';
 import verificationRoutes from './verificationRoutes.js';
 import supplierRoutes from './supplierRoutes.js';
 import supplierInventoryRoutes from './supplierInventoryRoutes.js';
+import logisticsRoutes from './logisticsRoutes.js';
 
 const router = Router();
 
@@ -33,6 +34,7 @@ router.use('/payments', paymentRoutes);
 router.use('/tracking', trackingRoutes);
 router.use('/cart', cartRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/logistics', logisticsRoutes);
 router.use('/supplier', supplierRoutes);
 router.use('/supplier/products', supplierProductRoutes);
 router.use('/supplier/orders', supplierOrderRoutes);
@@ -56,6 +58,5 @@ router.get('/health', (req, res) => {
     database: 'MySQL connected',
   });
 });
-
 
 export default router;

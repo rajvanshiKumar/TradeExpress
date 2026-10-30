@@ -16,11 +16,12 @@ import { dashboardNav } from '../../data/navigation';
 
 const ICONS = { LayoutDashboard, Package, FileText, Scale, MessageSquare, Heart, MapPin, Settings, Boxes, ChartColumn, Building2, Users, LayoutGrid, ShieldCheck, Truck, CircleDollarSign, Bell, User, ClipboardList, Warehouse };
 
-const TITLES = { buyer: 'Buyer Workspace', supplier: 'Supplier Enterprise Portal', admin: 'Admin Console' };
+const TITLES = { buyer: 'Buyer Workspace', supplier: 'Supplier Enterprise Portal', admin: 'Admin Console', transport_partner: 'Transport Partner Portal' };
 const NOTES = {
   buyer: 'Your orders, quotes and saved items are securely tracked in TradeExpress.',
   supplier: 'Catalogue changes go live in the marketplace immediately, in this browser.',
   admin: 'Prototype admin area: data and role checks live in this browser and are not a secure administration system.',
+  transport_partner: 'B2B commercial freight network and fleet management.',
 };
 
 /** Shell for the buyer, supplier and admin areas: site header, side navigation and content. */

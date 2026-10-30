@@ -83,10 +83,20 @@ export async function getAuditLogs({
       { targetId: { contains: search } },
     ];
   }
-  if (startDate || endDate) {
+  const parseValidDate = (val) => {
+    if (!val || val === 'undefined' || val === 'null' || typeof val !== 'string') return null;
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const parsedStart = parseValidDate(startDate);
+  const parsedEnd = parseValidDate(endDate);
+  if (parsedStart || parsedEnd) {
     where.createdAt = {};
-    if (startDate) where.createdAt.gte = new Date(startDate);
-    if (endDate) where.createdAt.lte = new Date(endDate);
+    if (parsedStart) where.createdAt.gte = parsedStart;
+    if (parsedEnd) {
+      parsedEnd.setHours(23, 59, 59, 999);
+      where.createdAt.lte = parsedEnd;
+    }
   }
 
   const [total, logs] = await Promise.all([

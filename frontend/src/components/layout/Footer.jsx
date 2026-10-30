@@ -38,6 +38,7 @@ const QUICK_LINKS = [
   { label: 'Indian Exporters', to: '/exporters' },
   { label: 'Ready to Ship', to: '/products?ready=true' },
   { label: 'Help Center & FAQs', to: '/help' },
+  { label: 'Terms & Conditions', to: '/terms' },
 ];
 
 const BUYER_RESOURCES = [
@@ -369,8 +370,8 @@ export default function Footer() {
           </p>
 
           <div className="flex flex-wrap items-center gap-4 text-xs font-medium">
-            <Link to="/info/terms" className="hover:text-emerald-950 hover:underline">
-              {t('footer.terms', {}, 'Terms of Use')}
+            <Link to="/terms" className="hover:text-emerald-950 hover:underline font-semibold text-slate-800">
+              Terms & Conditions
             </Link>
             <span className="text-slate-400">|</span>
             <Link to="/info/privacy" className="hover:text-emerald-950 hover:underline">

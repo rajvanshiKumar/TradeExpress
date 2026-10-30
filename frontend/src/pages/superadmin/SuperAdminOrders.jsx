@@ -16,6 +16,7 @@ import {
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
 import CustomSelect from '../../components/common/CustomSelect';
+import TaxInvoiceModal from '../../components/common/TaxInvoiceModal';
 
 export default function SuperAdminOrders() {
   const { showToast } = useNotifications();
@@ -39,6 +40,7 @@ export default function SuperAdminOrders() {
   const [newCarrier, setNewCarrier] = useState('');
   const [overrideNotes, setOverrideNotes] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [invoiceModalOrder, setInvoiceModalOrder] = useState(null);
 
   const fetchOrders = async (page = 1) => {
     try {
@@ -253,14 +255,25 @@ export default function SuperAdminOrders() {
                     </td>
 
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => openOrderDetails(o.id)}
-                        className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors inline-flex items-center gap-1.5"
-                      >
-                        <Eye className="size-3.5" />
-                        <span>Inspect</span>
-                      </button>
+                      <div className="inline-flex items-center gap-1.5 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setInvoiceModalOrder(o)}
+                          className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-colors inline-flex items-center gap-1 border border-emerald-200"
+                          title="View / Download Tax Invoice (PDF)"
+                        >
+                          <FileText className="size-3.5" />
+                          <span>Invoice</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openOrderDetails(o.id)}
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors inline-flex items-center gap-1"
+                        >
+                          <Eye className="size-3.5" />
+                          <span>Inspect</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -309,13 +322,24 @@ export default function SuperAdminOrders() {
                 <span className="font-mono text-xs font-bold text-slate-400">Order Inspection Console</span>
                 <h3 className="text-base font-bold text-slate-900 font-mono">{selectedOrder?.orderNumber}</h3>
               </div>
-              <button
-                type="button"
-                onClick={() => setDetailModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInvoiceModalOrder(selectedOrder)}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-colors inline-flex items-center gap-1.5 border border-emerald-200"
+                  title="Generate GST Tax Invoice PDF"
+                >
+                  <FileText className="size-3.5" />
+                  <span>Tax Invoice (PDF)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {loadingDetails ? (
@@ -481,6 +505,14 @@ export default function SuperAdminOrders() {
           </div>
         </div>
       )}
+
+      {/* Tax Invoice Modal */}
+      <TaxInvoiceModal
+        order={invoiceModalOrder}
+        isOpen={Boolean(invoiceModalOrder)}
+        onClose={() => setInvoiceModalOrder(null)}
+        defaultRole="buyer"
+      />
     </div>
   );
 }

@@ -484,7 +484,19 @@ export async function getOrderByIdOrNumber(identifier, userId = null) {
       },
       review: true,
       supplier: {
-        select: { id: true, name: true, company: true, email: true },
+        select: {
+          id: true,
+          name: true,
+          company: true,
+          email: true,
+          phone: true,
+          city: true,
+          state: true,
+          postalCode: true,
+          country: true,
+          gstin: true,
+          pan: true,
+        },
       },
     },
   });

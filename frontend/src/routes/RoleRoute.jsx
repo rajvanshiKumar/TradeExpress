@@ -4,7 +4,7 @@ import useAuth from '../hooks/useAuth';
 import useNotifications from '../hooks/useNotifications';
 import { ROLE_HOME } from '../utils/constants';
 
-const NAMES = { buyer: 'Buyer', supplier: 'Supplier', admin: 'Admin', super_admin: 'Super Admin' };
+const NAMES = { buyer: 'Buyer', supplier: 'Supplier', admin: 'Admin', super_admin: 'Super Admin', transport_partner: 'Transport Partner' };
 
 /**
  * Limits a group of routes to certain roles (use inside <ProtectedRoute>). Users with a
@@ -30,5 +30,5 @@ export default function RoleRoute({ roles }) {
   }, [allowed, user, roles, showToast]);
 
   if (allowed) return <Outlet />;
-  return <Navigate to={user ? (ROLE_HOME[userRole] || '/') : '/login'} replace />;
+  return <Navigate to={user ? (ROLE_HOME[userRole] || '/') : (roles?.includes('super_admin') ? '/super-admin/login' : '/login')} replace />;
 }

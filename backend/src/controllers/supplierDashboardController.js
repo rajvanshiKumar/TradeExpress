@@ -118,3 +118,42 @@ export async function updateProfile(req, res, next) {
     next(error);
   }
 }
+
+export async function acceptOrder(req, res, next) {
+  try {
+    const order = await supplierDashboardService.acceptSupplierOrder(req.user, req.params.orderId);
+    res.json({
+      success: true,
+      message: 'Order accepted and confirmed.',
+      data: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function rejectOrder(req, res, next) {
+  try {
+    const order = await supplierDashboardService.rejectSupplierOrder(req.user, req.params.orderId, req.body);
+    res.json({
+      success: true,
+      message: 'Order rejected.',
+      data: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateOrderStatus(req, res, next) {
+  try {
+    const order = await supplierDashboardService.updateSupplierOrderStatus(req.user, req.params.orderId, req.body);
+    res.json({
+      success: true,
+      message: 'Order status updated.',
+      data: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+}

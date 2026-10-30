@@ -107,4 +107,7 @@ export const dashboardNav = {
     { label: 'Categories', to: '/admin/categories', icon: 'LayoutGrid' },
     { label: 'Reports', to: '/admin/reports', icon: 'ChartColumn' },
   ],
+  transport_partner: [
+    { label: 'Transport Portal', to: '/transporter/dashboard', icon: 'Truck' },
+  ],
 };

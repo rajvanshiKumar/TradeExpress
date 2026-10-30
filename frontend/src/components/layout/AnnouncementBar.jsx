@@ -13,7 +13,7 @@ export default function AnnouncementBar() {
         <p className="min-w-0 flex-1 truncate">
           <span className="font-semibold tracking-wide">International B2B Marketplace</span>
           <span className="mx-2 text-white/30" aria-hidden="true">|</span>
-          <span className="text-white/70">Wholesale sourcing from manufacturers and exporters · Prices in INR</span>
+          <span className="text-white/70">Wholesale sourcing from manufacturers and exporters</span>
         </p>
         <Link to="/rfq" className="hidden shrink-0 items-center gap-1.5 font-semibold text-brand-500 hover:text-brand-400 md:inline-flex">
           Post a buying request <ArrowRight className="size-3.5" aria-hidden="true" />

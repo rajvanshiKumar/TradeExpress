@@ -223,10 +223,20 @@ export async function updateCommissionPolicy({
  */
 export async function getCommissionMetrics({ startDate = null, endDate = null } = {}) {
   const whereOrder = {};
-  if (startDate || endDate) {
+  const parseValidDate = (val) => {
+    if (!val || val === 'undefined' || val === 'null' || typeof val !== 'string') return null;
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const parsedStart = parseValidDate(startDate);
+  const parsedEnd = parseValidDate(endDate);
+  if (parsedStart || parsedEnd) {
     whereOrder.createdAt = {};
-    if (startDate) whereOrder.createdAt.gte = new Date(startDate);
-    if (endDate) whereOrder.createdAt.lte = new Date(endDate);
+    if (parsedStart) whereOrder.createdAt.gte = parsedStart;
+    if (parsedEnd) {
+      parsedEnd.setHours(23, 59, 59, 999);
+      whereOrder.createdAt.lte = parsedEnd;
+    }
   }
 
   const [orders, escrowLedgers] = await Promise.all([

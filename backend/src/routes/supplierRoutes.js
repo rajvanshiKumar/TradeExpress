@@ -43,7 +43,12 @@ router.post(
   supplierDashboardController.dispatchOrder
 );
 
-// 6. Profile
+// 6. Orders Workflow (Step 2: Supplier confirms or rejects)
+router.post('/orders/:orderId/accept', supplierDashboardController.acceptOrder);
+router.post('/orders/:orderId/reject', supplierDashboardController.rejectOrder);
+router.put('/orders/:orderId/status', supplierDashboardController.updateOrderStatus);
+
+// 7. Profile
 router.get('/profile', supplierDashboardController.getProfile);
 router.put('/profile', supplierDashboardController.updateProfile);
 
