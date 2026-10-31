@@ -429,63 +429,6 @@ export async function registerBuyer({
     token,
   };
 }
-        label: 'Registered Office',
-        name: name.trim(),
-        company: legalCompany,
-        gstin: cleanGstin,
-        phone: storedPhone,
-        street: businessAddress.trim(),
-        city: city.trim(),
-        state: state.trim(),
-        postalCode: postalCode.trim(),
-        country: country.trim(),
-        isDefault: true,
-      },
-    });
-  } catch (addrErr) {
-    // Non-blocking fallback
-  }
-
-  // Record audit log
-  try {
-    await prisma.auditLog.create({
-      data: {
-        actorId: user.id,
-        actorEmail: user.email,
-        actorRole: 'BUYER',
-        action: 'BUYER_REGISTERED',
-        resource: 'USERS',
-        targetId: user.id,
-        details: {
-          email: user.email,
-          company: legalCompany,
-          country: country.trim(),
-          buyerType: rawBuyerType,
-          isPhoneVerified: Boolean(verificationToken),
-          isEmailVerified: Boolean(emailVerificationToken),
-        },
-        result: 'SUCCESS',
-      },
-    });
-  } catch (auditErr) {
-    // Non-blocking audit record
-  }
-
-  // Generate JWT token
-  const token = signJwt({ userId: user.id, email: user.email, role: 'BUYER' });
-
-  // Safe user output (redact passwordHash, mask sensitive PAN)
-  const { passwordHash: _, ...safeUser } = user;
-  if (safeUser.pan) {
-    safeUser.pan = `${safeUser.pan.slice(0, 5)}****${safeUser.pan.slice(-1)}`;
-  }
-
-  return {
-    user: safeUser,
-    buyerCode,
-    token,
-  };
-}
 
 /**
  * Production-ready Enterprise Supplier Registration

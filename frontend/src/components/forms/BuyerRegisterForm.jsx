@@ -105,17 +105,16 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const [phoneToken, setPhoneToken] = useState('');
   const [phoneOtpError, setPhoneOtpError] = useState('');
 
-  // Step 3: Aadhaar & PAN Verification States
-  const [aadhaarVerifying, setAadhaarVerifying] = useState(false);
-  const [aadhaarVerified, setAadhaarVerified] = useState(false);
+  // Step 3: PAN-Aadhaar Link Verification States
+  const [panAadhaarVerifying, setPanAadhaarVerifying] = useState(false);
+  const [panAadhaarLinked, setPanAadhaarLinked] = useState(false);
   const [maskedAadhaar, setMaskedAadhaar] = useState('');
-  const [aadhaarError, setAadhaarError] = useState('');
-
-  const [panVerifying, setPanVerifying] = useState(false);
-  const [panVerified, setPanVerified] = useState(false);
   const [maskedPan, setMaskedPan] = useState('');
-  const [panEntityType, setPanEntityType] = useState('');
-  const [panError, setPanError] = useState('');
+  const [linkError, setLinkError] = useState('');
+
+  // Compatibility aliases
+  const aadhaarVerified = panAadhaarLinked;
+  const panVerified = panAadhaarLinked;
 
   // Google OAuth Modal / State
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -175,8 +174,12 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       }
     } else if (field === 'aadhaarNumber') {
       val = String(val || '').replace(/\D/g, '').slice(0, 12);
+      setPanAadhaarLinked(false);
+      setLinkError('');
     } else if (field === 'panNumber') {
       val = String(val || '').toUpperCase().slice(0, 10);
+      setPanAadhaarLinked(false);
+      setLinkError('');
     }
 
     setValues((prev) => ({ ...prev, [field]: val }));
@@ -532,85 +535,90 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   };
 
   // ============================================================
-  // STEP 3: AADHAAR & PAN STATUTORY VERIFICATION
+  // STEP 3: AADHAAR & PAN LINK VERIFICATION (SINGLE VERIFY ACTION)
   // ============================================================
-  const handleVerifyAadhaar = async () => {
+  const handleVerifyPanAadhaarLink = async () => {
     const rawAadhaar = (values.aadhaarNumber || '').replace(/\D/g, '');
     if (rawAadhaar.length !== 12) {
-      setAadhaarError('Aadhaar number must be exactly 12 numeric digits.');
+      setLinkError('Aadhaar number must be exactly 12 numeric digits.');
+      return;
+    }
+
+    const rawPan = (values.panNumber || '').trim().toUpperCase();
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    if (!panRegex.test(rawPan)) {
+      setLinkError('PAN must be a valid 10-character alphanumeric tax ID (e.g. ABCDE1234F).');
       return;
     }
 
     if (!values.aadhaarConsent) {
-      setAadhaarError('Explicit statutory consent is required for Aadhaar verification.');
+      setLinkError('Explicit statutory consent is required to verify PAN–Aadhaar link status.');
       return;
     }
 
-    setAadhaarVerifying(true);
-    setAadhaarError('');
+    setPanAadhaarVerifying(true);
+    setLinkError('');
 
     try {
-      const res = await fetch(getApiUrl('/verification/aadhaar/verify'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          aadhaarNumber: rawAadhaar,
-          userConsent: true,
-        }),
-        signal: AbortSignal.timeout(3500),
-      });
+      let res;
+      try {
+        res = await fetch(getApiUrl('/verification/pan-aadhaar/link-status'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            aadhaarNumber: rawAadhaar,
+            pan: rawPan,
+            userConsent: true,
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+      } catch {
+        // Fallback to relative proxy route
+        res = await fetch('/api/verification/pan-aadhaar/link-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            aadhaarNumber: rawAadhaar,
+            pan: rawPan,
+            userConsent: true,
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+      }
 
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success && data.data?.verified) {
-        setAadhaarVerified(true);
-        setMaskedAadhaar(data.data.formattedAadhaar || `•••• •••• ${rawAadhaar.slice(-4)}`);
+      const linkData = data.data || data;
+
+      if (res.ok && data.success && linkData?.linked === true) {
+        setPanAadhaarLinked(true);
+        setMaskedAadhaar(`•••• •••• ${rawAadhaar.slice(-4)}`);
+        setMaskedPan(linkData.maskedPan || `${rawPan.slice(0, 2)}XXXXXX${rawPan.slice(-2)}`);
+        setLinkError('');
+        setErrors((prev) => {
+          const next = { ...prev };
+          delete next.panAadhaar;
+          delete next.aadhaarNumber;
+          delete next.panNumber;
+          return next;
+        });
       } else {
-        setAadhaarError(data.message || 'Unable to verify Aadhaar with statutory records.');
+        setPanAadhaarLinked(false);
+        const errorMsg =
+          linkData?.message ||
+          data.message ||
+          'Aadhaar is not linked with the entered PAN in Income Tax statutory records.';
+        setLinkError(errorMsg);
       }
-    } catch {
-      // Statutory client-side resolution fallback
-      const last4 = rawAadhaar.slice(-4);
-      setAadhaarVerified(true);
-      setMaskedAadhaar(`•••• •••• ${last4}`);
+    } catch (err) {
+      setPanAadhaarLinked(false);
+      const isTimeout = err?.name === 'TimeoutError' || String(err?.message || '').toLowerCase().includes('timeout');
+      setLinkError(
+        isTimeout
+          ? 'Income Tax verification server timed out. Please verify your internet connection and try again.'
+          : 'Unable to connect to Income Tax verification service. Please try again.'
+      );
     } finally {
-      setAadhaarVerifying(false);
-    }
-  };
-
-  const handleVerifyPan = async () => {
-    const rawPan = (values.panNumber || '').trim().toUpperCase();
-    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-    if (!panRegex.test(rawPan)) {
-      setPanError('Enter a valid 10-character PAN format (e.g. ABCDE1234F).');
-      return;
-    }
-
-    setPanVerifying(true);
-    setPanError('');
-
-    try {
-      const res = await fetch(getApiUrl('/verification/pan/verify'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ pan: rawPan }),
-        signal: AbortSignal.timeout(3500),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success && data.data?.verified) {
-        setPanVerified(true);
-        setMaskedPan(data.data.maskedPan || `${rawPan.slice(0, 2)}XXXXXX${rawPan.slice(-2)}`);
-        setPanEntityType(data.data.entityType || 'Verified Taxpayer');
-      } else {
-        setPanError(data.message || 'Unable to verify PAN with Income Tax records.');
-      }
-    } catch {
-      // Statutory client-side resolution fallback
-      setPanVerified(true);
-      setMaskedPan(`${rawPan.slice(0, 2)}XXXXXX${rawPan.slice(-2)}`);
-      setPanEntityType('Verified Taxpayer');
-    } finally {
-      setPanVerifying(false);
+      setPanAadhaarVerifying(false);
     }
   };
 
@@ -663,11 +671,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
   const validateStep3 = () => {
     const stepErrors = {};
-    if (!aadhaarVerified) {
-      stepErrors.aadhaarNumber = 'Please verify your Aadhaar number.';
-    }
-    if (!panVerified) {
-      stepErrors.panNumber = 'Please verify your PAN number.';
+    if (!panAadhaarLinked) {
+      stepErrors.panAadhaar = 'Please verify that your Aadhaar is linked with your PAN card to proceed.';
     }
     if (!values.agreeTerms) {
       stepErrors.agreeTerms = 'You must accept the Buyer Terms of Service and Privacy Policy.';
@@ -907,7 +912,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   }
 
   return (
-    <div className="w-full max-w-xl mx-auto">
+    <div className="w-full max-w-xl sm:max-w-2xl mx-auto">
       {/* Hidden Decoy Fields to Prevent Password Managers from Pre-filling */}
       <input type="text" name="fake_username_remembered" className="hidden" tabIndex="-1" autoComplete="off" />
       <input type="password" name="fake_password_remembered" className="hidden" tabIndex="-1" autoComplete="off" />
@@ -1154,74 +1159,81 @@ export default function BuyerRegisterForm({ onRoleChange }) {
             )}
           </div>
 
-          {/* Password Field */}
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
-              Password <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                placeholder="Create strong password"
-                value={values.password}
-                onChange={handleChange('password')}
-                className={`w-full rounded-xl border pl-10 pr-10 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                  errors.password ? 'border-red-500 bg-red-50/20' : 'border-slate-300 focus:border-emerald-700'
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+          {/* Password & Confirm Password (Side by Side 50% / 50%) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Password Field */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                Password <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  placeholder="Create strong password"
+                  value={values.password}
+                  onChange={handleChange('password')}
+                  className={`w-full rounded-xl border pl-10 pr-10 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                    errors.password ? 'border-red-500 bg-red-50/20' : 'border-slate-300 focus:border-emerald-700'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {errors.password && <p className="mt-1 text-xs text-red-600 font-medium">{errors.password}</p>}
             </div>
-            <PasswordValidationIndicator password={values.password} />
-            {errors.password && <p className="mt-1 text-xs text-red-600 font-medium">{errors.password}</p>}
-          </div>
 
-          {/* Confirm Password Field */}
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
-              Confirm Password <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                placeholder="Confirm your password"
-                value={values.confirmPassword}
-                onChange={handleChange('confirmPassword')}
-                className={`w-full rounded-xl border pl-10 pr-10 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                  errors.confirmPassword ? 'border-red-500 bg-red-50/20' : 'border-slate-300 focus:border-emerald-700'
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword((prev) => !prev)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-              >
-                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+            {/* Confirm Password Field */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                Confirm Password <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  placeholder="Confirm your password"
+                  value={values.confirmPassword}
+                  onChange={handleChange('confirmPassword')}
+                  className={`w-full rounded-xl border pl-10 pr-10 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                    errors.confirmPassword ? 'border-red-500 bg-red-50/20' : 'border-slate-300 focus:border-emerald-700'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {values.confirmPassword && (
+                <p
+                  className={`mt-1 text-xs font-medium ${
+                    values.password === values.confirmPassword ? 'text-emerald-700' : 'text-red-600'
+                  }`}
+                >
+                  {values.password === values.confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
+                </p>
+              )}
+              {errors.confirmPassword && (
+                <p className="mt-1 text-xs text-red-600 font-medium">{errors.confirmPassword}</p>
+              )}
             </div>
-            {values.confirmPassword && (
-              <p
-                className={`mt-1 text-xs font-medium ${
-                  values.password === values.confirmPassword ? 'text-emerald-700' : 'text-red-600'
-                }`}
-              >
-                {values.password === values.confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
-              </p>
-            )}
-            {errors.confirmPassword && (
-              <p className="mt-1 text-xs text-red-600 font-medium">{errors.confirmPassword}</p>
-            )}
+
+            {/* Password Validation Indicator below both inputs */}
+            <div className="sm:col-span-2">
+              <PasswordValidationIndicator password={values.password} />
+            </div>
           </div>
 
           {/* OR Divider */}
@@ -1466,7 +1478,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       {/* STEP 3: AADHAAR & PAN PROFILE VERIFICATION */}
       {/* ============================================================ */}
       {currentStep === 3 && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Optional Business / Company Name */}
           <div>
             <label className="block text-xs font-bold text-slate-800 mb-1.5">
@@ -1479,61 +1491,81 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                 placeholder="e.g. Apex Global Trade Pvt Ltd"
                 value={values.companyName}
                 onChange={handleChange('companyName')}
-                className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-700"
+                className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-700"
               />
             </div>
           </div>
 
-          {/* AADHAAR CARD VERIFICATION BOX */}
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs space-y-4">
+          {/* Unified PAN-Aadhaar Link Verification Box (Single Verify Action) */}
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Shield className="h-4 w-4 text-emerald-700" />
+                <ShieldCheck className="h-4 w-4 text-emerald-700" />
                 <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                  Aadhaar Card Verification <span className="text-red-500">*</span>
+                  PAN & Aadhaar Link Verification <span className="text-red-500">*</span>
                 </span>
               </div>
-              {aadhaarVerified && (
+              {panAadhaarLinked && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-xs font-bold">
-                  <CheckCircle2 className="h-3 w-3 text-emerald-700" />
-                  Verified
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
+                  Linked & Verified
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="12-digit Aadhaar Number"
-                  disabled={aadhaarVerified}
-                  value={aadhaarVerified ? maskedAadhaar : values.aadhaarNumber}
-                  onChange={handleChange('aadhaarNumber')}
-                  maxLength={12}
-                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-mono transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-50 disabled:text-slate-600 ${
-                    errors.aadhaarNumber ? 'border-red-500 bg-red-50/20' : 'border-slate-300 focus:border-emerald-700'
-                  }`}
-                />
+            {/* Inputs: Aadhaar and PAN Side by Side (50% / 50%) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Aadhaar Number Input */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Aadhaar Card Number <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="12-digit Aadhaar Number"
+                    disabled={panAadhaarLinked}
+                    value={panAadhaarLinked ? maskedAadhaar : values.aadhaarNumber}
+                    onChange={handleChange('aadhaarNumber')}
+                    maxLength={12}
+                    className={`w-full rounded-xl border pl-10 pr-3.5 py-2.5 text-sm font-mono transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-50 disabled:text-slate-600 ${
+                      errors.aadhaarNumber ? 'border-red-500 bg-red-50/20' : 'border-slate-300 focus:border-emerald-700'
+                    }`}
+                  />
+                </div>
+                {errors.aadhaarNumber && (
+                  <p className="mt-1 text-xs text-red-600 font-medium">{errors.aadhaarNumber}</p>
+                )}
               </div>
 
-              {!aadhaarVerified && (
-                <button
-                  type="button"
-                  onClick={handleVerifyAadhaar}
-                  disabled={aadhaarVerifying || values.aadhaarNumber.length !== 12 || !values.aadhaarConsent}
-                  className="rounded-xl bg-emerald-800 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40 transition shrink-0"
-                >
-                  {aadhaarVerifying ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : 'Verify Aadhaar'}
-                </button>
-              )}
+              {/* PAN Number Input */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  PAN Card Number <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <FileCheck2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="10-digit PAN (e.g. ABCDE1234F)"
+                    disabled={panAadhaarLinked}
+                    value={panAadhaarLinked ? maskedPan : values.panNumber}
+                    onChange={handleChange('panNumber')}
+                    maxLength={10}
+                    className={`w-full rounded-xl border pl-10 pr-3.5 py-2.5 text-sm font-mono uppercase transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-50 disabled:text-slate-600 ${
+                      errors.panNumber ? 'border-red-500 bg-red-50/20' : 'border-slate-300 focus:border-emerald-700'
+                    }`}
+                  />
+                </div>
+                {errors.panNumber && (
+                  <p className="mt-1 text-xs text-red-600 font-medium">{errors.panNumber}</p>
+                )}
+              </div>
             </div>
-            {errors.aadhaarNumber && (
-              <p className="text-xs text-red-600 font-medium">{errors.aadhaarNumber}</p>
-            )}
-            {aadhaarError && <p className="text-xs text-rose-600 font-medium">{aadhaarError}</p>}
 
             {/* Statutory Consent Checkbox */}
-            {!aadhaarVerified && (
+            {!panAadhaarLinked && (
               <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
                 <input
                   type="checkbox"
@@ -1542,74 +1574,59 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                   className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
                 />
                 <span className="text-[11px] leading-relaxed text-slate-500">
-                  I hereby provide voluntary statutory consent to verify my Aadhaar credentials for B2B buyer verification pursuant to the Aadhaar Act, 2016 and DPDP Act, 2023.
+                  I hereby provide voluntary statutory consent to verify my Aadhaar credentials and link status with PAN pursuant to the Aadhaar Act, 2016 and DPDP Act, 2023.
                 </span>
               </label>
             )}
-          </div>
 
-          {/* PAN CARD VERIFICATION BOX */}
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileCheck2 className="h-4 w-4 text-emerald-700" />
-                <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                  Permanent Account Number (PAN) <span className="text-red-500">*</span>
-                </span>
-              </div>
-              {panVerified && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-xs font-bold">
-                  <CheckCircle2 className="h-3 w-3 text-emerald-700" />
-                  Verified
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="10-character PAN (e.g. ABCDE1234F)"
-                  disabled={panVerified}
-                  value={panVerified ? maskedPan : values.panNumber}
-                  onChange={handleChange('panNumber')}
-                  maxLength={10}
-                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-mono uppercase transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-50 disabled:text-slate-600 ${
-                    errors.panNumber ? 'border-red-500 bg-red-50/20' : 'border-slate-300 focus:border-emerald-700'
-                  }`}
-                />
-              </div>
-
-              {!panVerified && (
+            {/* Single Verify Action Button */}
+            <div className="pt-1">
+              {!panAadhaarLinked ? (
                 <button
                   type="button"
-                  onClick={handleVerifyPan}
-                  disabled={panVerifying || values.panNumber.length !== 10}
-                  className="rounded-xl bg-emerald-800 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40 transition shrink-0"
+                  onClick={handleVerifyPanAadhaarLink}
+                  disabled={
+                    panAadhaarVerifying ||
+                    values.aadhaarNumber.length !== 12 ||
+                    values.panNumber.length !== 10 ||
+                    !values.aadhaarConsent
+                  }
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-800 px-6 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40 transition"
                 >
-                  {panVerifying ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : 'Verify PAN'}
+                  {panAadhaarVerifying ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Verifying PAN–Aadhaar Link with Income Tax Dept...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="h-4 w-4" />
+                      <span>Verify Aadhaar & PAN Link</span>
+                    </>
+                  )}
                 </button>
+              ) : (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-700 shrink-0" />
+                  <span>Aadhaar ({maskedAadhaar}) and PAN ({maskedPan}) are officially linked in Income Tax statutory records.</span>
+                </div>
               )}
             </div>
-            {errors.panNumber && <p className="text-xs text-red-600 font-medium">{errors.panNumber}</p>}
-            {panError && <p className="text-xs text-rose-600 font-medium">{panError}</p>}
-            {panVerified && panEntityType && (
-              <p className="text-xs text-slate-500">
-                Entity Category: <span className="font-semibold text-slate-800">{panEntityType}</span>
-              </p>
+
+            {/* Error Message Alert */}
+            {linkError && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium animate-in fade-in">
+                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{linkError}</span>
+              </div>
+            )}
+            {errors.panAadhaar && (
+              <p className="text-xs text-red-600 font-medium">{errors.panAadhaar}</p>
             )}
           </div>
 
-          {/* Statutory Linkage Indicator when both are verified */}
-          {aadhaarVerified && panVerified && (
-            <div className="flex items-center gap-2 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200/90 text-emerald-900 text-xs font-semibold animate-in fade-in">
-              <ShieldCheck className="h-4 w-4 text-emerald-700 shrink-0" />
-              <span>Aadhaar and PAN successfully verified against Income Tax & UIDAI statutory records.</span>
-            </div>
-          )}
-
           {/* Terms Agreement Checkbox */}
-          <div>
+          <div className="pt-1">
             <label className="flex items-start gap-2.5 cursor-pointer select-none">
               <input
                 type="checkbox"
