@@ -81,7 +81,7 @@ export default function ForgotPassword() {
       title={step === 'success' ? 'Password Reset Complete' : step === 'reset' ? 'Enter Reset Code' : 'Reset your password'}
       subtitle={
         step === 'success'
-          ? 'You can now sign in with your new password.'
+          ? 'You can now login with your new password.'
           : step === 'reset'
           ? `Enter the 6-digit OTP sent to ${email}`
           : 'Enter the email you use for TradeExpress.'
@@ -92,11 +92,11 @@ export default function ForgotPassword() {
           <CheckCircle2 className="mx-auto size-12 text-emerald-600" aria-hidden="true" />
           <h2 className="mt-3 text-lg font-bold text-ink">Password updated successfully!</h2>
           <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
-            Your TradeExpress account password has been reset. You can now sign in to your dashboard.
+            Your TradeExpress account password has been reset. You can now login to your dashboard.
           </p>
           <div className="mt-6 flex justify-center">
             <Button to="/login" variant="primary" size="lg">
-              Sign in now
+              Login now
             </Button>
           </div>
         </div>
@@ -199,7 +199,7 @@ export default function ForgotPassword() {
               ← Back to enter email
             </button>
             <Link to="/login" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-              Back to sign in
+              Back to login
             </Link>
           </div>
         </form>
@@ -227,7 +227,7 @@ export default function ForgotPassword() {
           <p className="text-center text-sm text-muted">
             Remembered it?{' '}
             <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">
-              Back to sign in
+              Back to login
             </Link>
           </p>
         </form>

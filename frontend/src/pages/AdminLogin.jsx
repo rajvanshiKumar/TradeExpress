@@ -10,7 +10,7 @@ import { ROLE_HOME } from '../utils/constants';
 export default function AdminLogin() {
   const { user } = useAuth();
 
-  useDocumentTitle('Super Admin Sign In');
+  useDocumentTitle('Super Admin Login');
 
   if (user) return <Navigate to={ROLE_HOME[user.role] || '/'} replace />;
 
@@ -44,7 +44,7 @@ export default function AdminLogin() {
       <div className="mt-4 text-center">
         <Link to="/login" className="inline-flex items-center gap-1 text-xs font-medium text-navy-600 hover:text-navy-950 hover:underline">
           <ArrowLeft className="size-3" />
-          <span>Back to Buyer & Supplier sign in</span>
+          <span>Back to Buyer & Supplier Login</span>
         </Link>
       </div>
     </AuthShell>

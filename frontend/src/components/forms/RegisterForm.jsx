@@ -861,7 +861,7 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
       </div>
 
       <Button type="submit" full size="lg" icon={UserPlus} loading={busy}>{busy ? 'Creating account…' : 'Create account'}</Button>
-      <p className="text-center text-sm text-muted">Already have an account? <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">Sign in</Link></p>
+      <p className="text-center text-sm text-muted">Already have an account? <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">Login</Link></p>
 
       {/* Universal OTP Verification Popup Modal for Registration */}
       <OtpModal

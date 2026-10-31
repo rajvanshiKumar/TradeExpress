@@ -17,7 +17,7 @@ export default function Login({ defaultRole = null }) {
   const [searchParams] = useSearchParams();
   const initialRole = searchParams.get('role') === 'supplier' || defaultRole === 'supplier' ? 'supplier' : 'buyer';
   const [role, setRole] = useState(initialRole);
-  useDocumentTitle('Sign In');
+  useDocumentTitle('Login');
   // Already signed in: go to the right dashboard instead of showing the form again.
   if (user) return <Navigate to={ROLE_HOME[user.role]} replace />;
 
@@ -46,8 +46,8 @@ export default function Login({ defaultRole = null }) {
     <AuthShell
       above={switcher}
       role={role}
-      title={role === 'supplier' ? 'Supplier sign in' : 'Buyer sign in'}
-      subtitle={location.state?.from ? 'Please sign in to continue.' : role === 'supplier' ? 'Manage your catalogue and orders.' : 'Sign in to source products and manage orders.'}
+      title={role === 'supplier' ? 'Supplier Login' : 'Buyer Login'}
+      subtitle={location.state?.from ? 'Please login to continue.' : role === 'supplier' ? 'Manage your catalogue and orders.' : 'Login to source products and manage orders.'}
     >
       <LoginForm key={role} role={role} />
     </AuthShell>

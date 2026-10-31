@@ -71,8 +71,8 @@ export default function MobileMenu({ open, onClose }) {
         ) : (
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-              <Button to="/login" variant="outline" size="sm" onClick={onClose} className="flex-1">{t('common.signIn', {}, 'Sign In')}</Button>
-              <Button to="/register" variant="navy" size="sm" onClick={onClose} className="flex-1">{t('common.register', {}, 'Get Started')}</Button>
+              <Button to="/login" variant="outline" size="sm" onClick={onClose} className="flex-1">{t('common.signIn', {}, 'Login')}</Button>
+              <Button to="/register" variant="navy" size="sm" onClick={onClose} className="flex-1">{t('common.register', {}, 'Sign up')}</Button>
             </div>
             <Link
               to="/super-admin/login"

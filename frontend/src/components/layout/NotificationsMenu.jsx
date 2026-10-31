@@ -142,13 +142,13 @@ export default function NotificationsMenu({ className = "" }) {
           {/* Body Content */}
           {!isAuthenticated ? (
             <div className="px-4 py-8 text-center text-xs text-slate-500 space-y-2">
-              <p>Sign in to view real-time orders, quotes and message notifications.</p>
+              <p>Login to view real-time orders, quotes and message notifications.</p>
               <Link
                 to="/login"
                 onClick={close}
                 className="inline-block rounded-full bg-slate-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition-colors"
               >
-                Sign In
+                Login
               </Link>
             </div>
           ) : filteredNotifications.length === 0 ? (

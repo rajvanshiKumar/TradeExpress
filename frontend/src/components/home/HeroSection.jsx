@@ -134,7 +134,7 @@ export default function HeroSection() {
               className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
             >
               <UserCheck className="size-3.5 text-brand-300" />
-              <span>{user ? "Dashboard" : "Sign In"}</span>
+              <span>{user ? "Dashboard" : "Login"}</span>
               <ArrowRight className="size-3 text-white/70" />
             </Link>
           </div>

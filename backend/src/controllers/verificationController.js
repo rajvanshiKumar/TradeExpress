@@ -7,7 +7,7 @@ import prisma from '../config/db.js';
  */
 export async function getPanAadhaarLinkStatus(req, res, next) {
   try {
-    const { aadhaarNumber, aadhaar, pan, panNumber, userConsent, consent } = req.body;
+    const { aadhaarNumber, aadhaar, pan, panNumber, userConsent, consent, bypassCache } = req.body;
     const finalAadhaar = aadhaarNumber || aadhaar;
     const finalPan = pan || panNumber || null;
     const finalConsent = userConsent !== undefined ? userConsent : consent;
@@ -19,6 +19,7 @@ export async function getPanAadhaarLinkStatus(req, res, next) {
       pan: finalPan,
       userConsent: finalConsent,
       userId,
+      bypassCache: bypassCache === true || bypassCache === 'true',
     });
 
     return res.json({

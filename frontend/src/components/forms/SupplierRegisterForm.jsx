@@ -56,7 +56,6 @@ const STEPS = [
 const COUNTRY_DIAL_OPTIONS = COUNTRIES.map((c) => ({
   value: c,
   label: `+${COUNTRY_PHONE_RULES[c]?.dial || '91'}`.trim(),
-  description: `${COUNTRY_FLAGS[c] || ''} ${c}`.trim(),
 }));
 
 const getCertificateFieldLabel = (businessType, businessTypeOther) => {
@@ -747,8 +746,9 @@ export default function SupplierRegisterForm() {
           aadhaarNumber: rawAadhaar,
           pan: rawPan,
           userConsent: true,
+          bypassCache: true,
         }),
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(10000),
       });
 
       const data = await res.json();
@@ -1250,7 +1250,7 @@ export default function SupplierRegisterForm() {
             to="/login"
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
           >
-            Sign In to Account
+            Login to Account
           </Link>
         </div>
       </div>

@@ -235,16 +235,10 @@ export async function registerBuyer({
     throw error;
   }
 
-  // Password validation (or secure generated password for Google OAuth verified users)
+  // Password validation (or secure generated password for verified OTP / OAuth users)
   let effectivePassword = password;
   if (!effectivePassword) {
-    if (isGoogleVerified) {
-      effectivePassword = `GoogleAuth_${crypto.randomBytes(16).toString('hex')}!Aa1`;
-    } else {
-      const error = new Error('Password is required.');
-      error.statusCode = 400;
-      throw error;
-    }
+    effectivePassword = `TradeExp_${crypto.randomBytes(16).toString('hex')}!Aa1`;
   } else {
     const passCheck = validatePassword(effectivePassword);
     if (!passCheck.isValid) {

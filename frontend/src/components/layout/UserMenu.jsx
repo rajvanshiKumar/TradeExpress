@@ -53,13 +53,13 @@ export default function UserMenu() {
           to="/login"
           className="hidden xs:inline-flex items-center justify-center whitespace-nowrap rounded-full px-2.5 sm:px-3 py-1 text-xs xl:text-[13px] font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
         >
-          {t('common.signIn', {}, 'Sign In')}
+          {t('common.signIn', {}, 'Login')}
         </Link>
         <Link
           to="/register"
           className="inline-flex items-center justify-center whitespace-nowrap rounded-full bg-slate-900 text-white hover:bg-emerald-700 px-3 sm:px-4 py-1.5 text-xs xl:text-[13px] font-bold shadow-xs hover:shadow-md transition-all duration-200 active:scale-95 shrink-0"
         >
-          {t('common.register', {}, 'Get Started')}
+          {t('common.register', {}, 'Sign up')}
         </Link>
       </div>
     );

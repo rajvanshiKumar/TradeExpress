@@ -343,6 +343,15 @@ export function AuthProvider({ children }) {
     return { ok: true, user: activeAccount };
   }, [accounts, setAccounts, setSession, lockMessage, recordFailure]);
 
+  /** Buyer or supplier sign-in via Email and OTP */
+  const loginEmailOtp = useCallback(async ({ email, otp, role = null }) => {
+    const cleanEmail = normalizeEmail(email).toLowerCase();
+    const cleanOtp = String(otp || '').trim();
+    if (!cleanEmail) return { ok: false, error: 'Email address is required.' };
+    if (!cleanOtp) return { ok: false, error: 'Please enter the verification OTP.' };
+    return login(cleanEmail, null, role, { otp: cleanOtp });
+  }, [login]);
+
   /** Registers a Buyer or Supplier. Only a password hash is saved. Admin can never be chosen here. */
   const register = useCallback(async ({ name, email, password, company, country, city, phone, role, verificationToken, emailVerificationToken }) => {
     if (!PUBLIC_ROLES.includes(role)) return { ok: false, error: 'Please choose Buyer or Supplier.' };
@@ -481,9 +490,9 @@ export function AuthProvider({ children }) {
   }, [user, setAddressBook]);
 
   const value = useMemo(() => ({
-    user, accounts: publicAccounts, isAuthenticated: Boolean(user), login, loginMobile, loginAdmin, register, setAuthUser, logout, updateProfile, updateAccount,
+    user, accounts: publicAccounts, isAuthenticated: Boolean(user), login, loginMobile, loginEmailOtp, loginAdmin, register, setAuthUser, logout, updateProfile, updateAccount,
     preferences, setPreferences, addresses, saveAddress, deleteAddress, isAdminConfigured,
-  }), [user, publicAccounts, login, loginMobile, loginAdmin, register, setAuthUser, logout, updateProfile, updateAccount, preferences, setPreferences, addresses, saveAddress, deleteAddress]);
+  }), [user, publicAccounts, login, loginMobile, loginEmailOtp, loginAdmin, register, setAuthUser, logout, updateProfile, updateAccount, preferences, setPreferences, addresses, saveAddress, deleteAddress]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

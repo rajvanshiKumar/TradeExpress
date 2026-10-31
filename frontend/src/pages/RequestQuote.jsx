@@ -59,8 +59,8 @@ export default function RequestQuote() {
                 </section>
                 <section className="rounded-2xl bg-navy-50 p-5 text-sm text-navy-800">
                   <h2 className="text-base font-bold">See the supplier side</h2>
-                  <p className="mt-1.5">Suppliers answer quotation requests from their dashboard. Register as a supplier to list products and send quotes.</p>
-                  <Button to="/login" variant="white" size="sm" className="mt-3">Open sign in</Button>
+                  <p className="mt-1.5">Suppliers answer quotation requests from their dashboard. Sign up as a supplier to list products and send quotes.</p>
+                  <Button to="/login" variant="white" size="sm" className="mt-3">Open login</Button>
                 </section>
               </aside>
             </div>
@@ -68,7 +68,7 @@ export default function RequestQuote() {
             <InquiryList inquiries={mine} />
           ) : (
             <div className="ts-card">
-              <EmptyState icon={FileText} title="No quote requests yet" text={user ? 'Requests you submit will be listed here with their status.' : 'Requests you submit in this browser will be listed here. Sign in to see the requests linked to your account.'} action={<Button variant="navy" onClick={() => setTab('new')}>Create a request</Button>} />
+              <EmptyState icon={FileText} title="No quote requests yet" text={user ? 'Requests you submit will be listed here with their status.' : 'Requests you submit in this browser will be listed here. Login to see the requests linked to your account.'} action={<Button variant="navy" onClick={() => setTab('new')}>Create a request</Button>} />
             </div>
           )}
         </TabPanel>

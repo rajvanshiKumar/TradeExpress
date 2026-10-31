@@ -131,9 +131,9 @@ export default function SupportTicketsSection() {
       <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
         <LifeBuoy className="mx-auto size-8 text-brand-600 mb-2" />
         <h3 className="text-base font-bold text-navy-900">Need Help or Have a Trade Query?</h3>
-        <p className="mt-1 text-sm text-muted">Sign in to your TradeExpress account to raise support tickets and receive official responses.</p>
+        <p className="mt-1 text-sm text-muted">Login to your TradeExpress account to raise support tickets and receive official responses.</p>
         <div className="mt-4 flex justify-center gap-3">
-          <Button to="/login" variant="navy" size="sm">Sign In</Button>
+          <Button to="/login" variant="navy" size="sm">Login</Button>
           <Button to="/info/contact" variant="outline" size="sm">Contact Public Desk</Button>
         </div>
       </div>

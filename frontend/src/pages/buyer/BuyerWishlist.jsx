@@ -33,17 +33,17 @@ export default function BuyerWishlist({ standalone = false }) {
           <Heart className="size-7" />
         </div>
         <h1 className="text-xl sm:text-2xl font-bold text-navy-950 mb-2">
-          Sign In to Access Your Wishlist
+          Login to Access Your Wishlist
         </h1>
         <p className="text-sm text-navy-600 mb-6">
-          Wishlist is available for registered TradeExpress buyers and suppliers. Please log in or create an account to view and save products.
+          Wishlist is available for registered TradeExpress buyers and suppliers. Please login or create an account to view and save products.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Button variant="brand" to="/login" state={{ from: '/wishlist' }}>
-            Log In
+            Login
           </Button>
           <Button variant="outline" to="/register">
-            Register Account
+            Sign up
           </Button>
         </div>
       </div>

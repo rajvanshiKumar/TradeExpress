@@ -17,8 +17,8 @@ export default function Register({ defaultRole }) {
 
   useDocumentTitle(
     role === 'supplier'
-      ? 'Supplier Registration — TradeExpress'
-      : 'Create Your Buyer Account — TradeExpress'
+      ? 'Supplier Sign Up — TradeExpress'
+      : 'Buyer Sign Up — TradeExpress'
   );
   if (user) return <Navigate to={ROLE_HOME[user.role]} replace />;
 
@@ -45,7 +45,7 @@ export default function Register({ defaultRole }) {
             }`}
           >
             <ShoppingBag className="h-4 w-4" />
-            Join as Buyer
+            Sign up as Buyer
           </button>
           <button
             type="button"
@@ -57,15 +57,15 @@ export default function Register({ defaultRole }) {
             }`}
           >
             <Building2 className="h-4 w-4" />
-            Join as Supplier
+            Sign up as Supplier
           </button>
         </div>
       }
-      title={isSupplier ? 'Create Your Supplier Account' : null}
+      title={isSupplier ? 'Supplier Sign Up' : 'Buyer Sign Up'}
       subtitle={
         isSupplier
-          ? 'Join TradeExpress to showcase your business and connect with B2B buyers.'
-          : null
+          ? 'Sign up on TradeExpress to showcase your business and connect with B2B buyers.'
+          : 'Sign up to source quality products from verified manufacturers.'
       }
     >
       {isSupplier ? (
