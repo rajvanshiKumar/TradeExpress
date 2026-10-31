@@ -41,10 +41,12 @@ export default function AuthShell({
               <Logo />
             </div>
             {above}
-            <h1 className="text-[1.9rem] font-extrabold tracking-[-0.03em] sm:text-[2.2rem]">
-              {title}
-            </h1>
-            {subtitle ? <p className="mb-7 mt-2 text-muted">{subtitle}</p> : <div className="mb-7" />}
+            {title ? (
+              <h1 className="text-[1.9rem] font-extrabold tracking-[-0.03em] sm:text-[2.2rem]">
+                {title}
+              </h1>
+            ) : null}
+            {subtitle ? <p className="mb-7 mt-2 text-muted">{subtitle}</p> : (title ? <div className="mb-7" /> : null)}
             {children}
           </div>
         </div>

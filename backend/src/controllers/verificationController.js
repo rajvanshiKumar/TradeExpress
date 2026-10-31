@@ -185,3 +185,73 @@ export async function getMyGstStatus(req, res, next) {
     next(error);
   }
 }
+
+/**
+ * Controller to verify 12-digit Aadhaar number with statutory consent.
+ * POST /api/verification/aadhaar/verify
+ */
+export async function verifyAadhaar(req, res, next) {
+  try {
+    const { aadhaarNumber, aadhaar, userConsent, consent } = req.body;
+    const finalAadhaar = aadhaarNumber || aadhaar;
+    const finalConsent = userConsent !== undefined ? userConsent : consent;
+
+    const result = await verificationService.verifyAadhaar({
+      aadhaarNumber: finalAadhaar,
+      userConsent: finalConsent,
+      userId: req.user ? req.user.id : null,
+    });
+
+    return res.json({
+      success: true,
+      data: result,
+      message: result.message,
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        error: {
+          code: error.code || 'VERIFICATION_ERROR',
+          message: error.message,
+        },
+        message: error.message,
+      });
+    }
+    next(error);
+  }
+}
+
+/**
+ * Controller to verify 10-character PAN number and taxpayer status.
+ * POST /api/verification/pan/verify
+ */
+export async function verifyPan(req, res, next) {
+  try {
+    const { pan, panNumber } = req.body;
+    const finalPan = pan || panNumber;
+
+    const result = await verificationService.verifyPan({
+      pan: finalPan,
+      userId: req.user ? req.user.id : null,
+    });
+
+    return res.json({
+      success: true,
+      data: result,
+      message: result.message,
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        error: {
+          code: error.code || 'VERIFICATION_ERROR',
+          message: error.message,
+        },
+        message: error.message,
+      });
+    }
+    next(error);
+  }
+}

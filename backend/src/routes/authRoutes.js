@@ -160,19 +160,27 @@ router.post(
 );
 
 router.post(
+  '/google',
+  authRateLimiter,
+  validate([
+    body('email').isEmail().withMessage('Valid email address is required.'),
+  ]),
+  authController.googleAuth
+);
+
+router.post(
   '/register-buyer',
   authRateLimiter,
   validate([
-    body('email').isEmail().withMessage('Valid work email is required.'),
-    passwordValidationRule,
+    body('email').isEmail().withMessage('Valid email is required.'),
     body('name').trim().notEmpty().withMessage('Full name is required.'),
-    body('company').trim().notEmpty().withMessage('Business / Company name is required.'),
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
-    body('country').trim().notEmpty().withMessage('Country is required.'),
-    body('city').trim().notEmpty().withMessage('City is required.'),
-    body('state').trim().notEmpty().withMessage('State / Province is required.'),
-    body('postalCode').trim().notEmpty().withMessage('Postal code is required.'),
-    body('businessAddress').trim().notEmpty().withMessage('Business address is required.'),
+    body('password').optional().custom((value) => {
+      if (!value) return true;
+      const result = validatePassword(value);
+      if (!result.isValid) throw new Error(result.message);
+      return true;
+    }),
   ]),
   authController.registerBuyer
 );

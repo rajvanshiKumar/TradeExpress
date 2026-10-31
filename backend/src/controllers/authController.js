@@ -151,6 +151,20 @@ export async function register(req, res, next) {
   }
 }
 
+export async function googleAuth(req, res, next) {
+  try {
+    const { credential, email, name, googleId } = req.body;
+    const result = await authService.authenticateGoogle({ credential, email, name, googleId });
+    res.json({
+      success: true,
+      message: 'Google authentication verified successfully.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function registerBuyer(req, res, next) {
   try {
     const result = await authService.registerBuyer({

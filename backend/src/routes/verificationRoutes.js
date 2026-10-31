@@ -107,4 +107,68 @@ router.get(
   verificationController.getMyGstStatus
 );
 
+/**
+ * POST /api/verification/aadhaar/verify
+ * Validates 12-digit Aadhaar number with statutory consent.
+ */
+router.post(
+  '/aadhaar/verify',
+  verificationLimiter,
+  optionalAuth,
+  validate([
+    body('aadhaarNumber')
+      .optional()
+      .trim()
+      .custom((val, { req }) => {
+        const valToTest = val || req.body.aadhaar;
+        if (!valToTest) {
+          throw new Error('Aadhaar number is required.');
+        }
+        const digits = String(valToTest).replace(/\D/g, '');
+        if (digits.length !== 12) {
+          throw new Error('Aadhaar number must be exactly 12 digits.');
+        }
+        return true;
+      }),
+    body('userConsent')
+      .optional()
+      .custom((val, { req }) => {
+        const consentVal = val !== undefined ? val : req.body.consent;
+        if (consentVal !== true && consentVal !== 'true') {
+          throw new Error('Explicit statutory consent is required for Aadhaar verification.');
+        }
+        return true;
+      }),
+  ]),
+  verificationController.verifyAadhaar
+);
+
+/**
+ * POST /api/verification/pan/verify
+ * Validates standard 10-character PAN format and active status.
+ */
+router.post(
+  '/pan/verify',
+  verificationLimiter,
+  optionalAuth,
+  validate([
+    body('pan')
+      .optional()
+      .trim()
+      .custom((val, { req }) => {
+        const valToTest = val || req.body.panNumber;
+        if (!valToTest) {
+          throw new Error('PAN is required.');
+        }
+        const clean = String(valToTest).trim().toUpperCase();
+        const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+        if (!panRegex.test(clean)) {
+          throw new Error('Enter a valid 10-character PAN format (e.g. ABCDE1234F).');
+        }
+        return true;
+      }),
+  ]),
+  verificationController.verifyPan
+);
+
 export default router;

@@ -242,6 +242,29 @@ describe('Signup Page: Country Dial Code and 6-Digit OTP Verification Suite', ()
       assert.ok(gstinBlockMatch, 'handleVerifyGstin function must exist');
       const gstinBody = gstinBlockMatch[1];
       assert.doesNotMatch(gstinBody, /showToast/);
+
+      // SupplierRegisterForm PAN-Aadhaar verification does not dispatch toast
+      const panAadhaarBlockMatch = supplierRegisterSrc.match(/const handleCheckLinkStatus = async \(\) => \{([\s\S]*?)\n  \};/);
+      assert.ok(panAadhaarBlockMatch, 'handleCheckLinkStatus function must exist');
+      const panAadhaarBody = panAadhaarBlockMatch[1];
+      assert.doesNotMatch(panAadhaarBody, /showToast/);
+    });
+
+    it('ensures supplier submission is protected against hanging with timeouts and resilient payload scope', () => {
+      const supplierRegisterSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/forms/SupplierRegisterForm.jsx'), 'utf8');
+
+      // handleSubmit must have timeout to prevent hanging
+      assert.match(supplierRegisterSrc, /AbortSignal\.timeout/);
+
+      // payload must be defined prior to try block so catch block has safe access
+      const handleSubmitMatch = supplierRegisterSrc.match(/const handleSubmit = async \([\s\S]*?\n  \};/);
+      assert.ok(handleSubmitMatch, 'handleSubmit must exist');
+      const submitBody = handleSubmitMatch[0];
+      const payloadPos = submitBody.indexOf('const payload =');
+      const tryPos = submitBody.indexOf('try {');
+      assert.ok(payloadPos > -1, 'payload must be defined');
+      assert.ok(tryPos > -1, 'try block must exist');
+      assert.ok(payloadPos < tryPos, 'payload must be declared before try block to prevent ReferenceError in catch');
     });
   });
 });

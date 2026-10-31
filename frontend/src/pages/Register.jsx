@@ -61,11 +61,11 @@ export default function Register({ defaultRole }) {
           </button>
         </div>
       }
-      title={isSupplier ? 'Create Your Supplier Account' : 'Create Your Buyer Account'}
+      title={isSupplier ? 'Create Your Supplier Account' : null}
       subtitle={
         isSupplier
           ? 'Join TradeExpress to showcase your business and connect with B2B buyers.'
-          : 'Join TradeExpress to discover suppliers, compare products and purchase confidently from businesses worldwide.'
+          : null
       }
     >
       {isSupplier ? (
