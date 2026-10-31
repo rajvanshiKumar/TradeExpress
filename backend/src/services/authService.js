@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { signJwt } from '../utils/jwt.js';
 import { normalizeMobile, validateVerifiedMobile, validateVerifiedEmail, validateEmailLoginOtp } from './otpService.js';
+import { validatePassword } from '../utils/passwordValidator.js';
 
 export async function registerUser({ email, password, name, role = 'BUYER', company, companyName, phone, city, country, verificationToken, emailVerificationToken }) {
   const upperRole = (role || 'BUYER').toUpperCase();
@@ -55,6 +56,13 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
   if (existingPhone) {
     const error = new Error('An account with this mobile number already exists.');
     error.statusCode = 409;
+    throw error;
+  }
+
+  const passCheck = validatePassword(password);
+  if (!passCheck.isValid) {
+    const error = new Error(passCheck.message);
+    error.statusCode = 400;
     throw error;
   }
 
@@ -179,13 +187,9 @@ export async function registerBuyer({
   }
 
   // Password validation
-  if (!password || password.length < 8) {
-    const error = new Error('Password must be at least 8 characters.');
-    error.statusCode = 400;
-    throw error;
-  }
-  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
-    const error = new Error('Password must contain at least one letter and one number.');
+  const passCheck = validatePassword(password);
+  if (!passCheck.isValid) {
+    const error = new Error(passCheck.message);
     error.statusCode = 400;
     throw error;
   }
@@ -279,7 +283,7 @@ export async function registerBuyer({
   const rawPan = pan || panNumber || '';
 
   if (isIndia) {
-    const requiresGstin = gstStatus === 'Regular GST Registration' || gstStatus === 'Composition Scheme';
+    const requiresGstin = gstStatus === 'Regular GST Registration' || gstStatus === 'Composition Scheme' || gstStatus === 'GST Certificate';
     if (requiresGstin) {
       if (!rawGstin || !rawGstin.trim()) {
         const error = new Error(`GSTIN is required when GST status is '${gstStatus}'.`);
@@ -340,16 +344,16 @@ export async function registerBuyer({
       role: 'BUYER',
       company: legalCompany,
       phone: storedPhone,
-      city: city.trim(),
-      state: state.trim(),
-      postalCode: postalCode.trim(),
+      city: city ? city.trim() : null,
+      state: state ? state.trim() : null,
+      postalCode: postalCode ? postalCode.trim() : null,
       country: country.trim(),
       businessType: rawBuyerType,
       businessTypeOther: isOther ? (buyerTypeOther || '').trim() : null,
       gstStatus: isIndia ? (gstStatus || 'Not Registered / Not Applicable') : null,
       gstin: cleanGstin,
       pan: cleanPan,
-      taxId: !isIndia ? (taxId || '').trim() : null,
+      taxId: (taxId || cleanGstin || '').trim() || null,
       companyDescription: (businessDescription || '').trim() || null,
       businessAddress: businessAddress.trim(),
       status: 'ACTIVE',
@@ -520,13 +524,9 @@ export async function registerSupplier({
   }
 
   // Password validation
-  if (!password || password.length < 8) {
-    const error = new Error('Password must be at least 8 characters.');
-    error.statusCode = 400;
-    throw error;
-  }
-  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
-    const error = new Error('Password must contain at least one letter and one number.');
+  const passCheck = validatePassword(password);
+  if (!passCheck.isValid) {
+    const error = new Error(passCheck.message);
     error.statusCode = 400;
     throw error;
   }
@@ -552,7 +552,8 @@ export async function registerSupplier({
   const isIndia = (country || 'India').trim().toLowerCase() === 'india';
   let cleanGstin = null;
   let cleanPan = null;
-  const rawGstin = gstin || (isIndia ? taxId : '');
+  const isGstDoc = businessType === 'GST Certificate' || gstStatus === 'GST Certificate';
+  const rawGstin = gstin || (isIndia && isGstDoc ? taxId : '');
   const rawPan = pan || panNumber;
 
   if (isIndia) {
@@ -567,6 +568,7 @@ export async function registerSupplier({
       'SEZ Developer',
       'TDS Deductor',
       'TCS Collector',
+      'GST Certificate',
     ];
 
     if (taxableGstStatuses.includes(gstStatus)) {
@@ -652,35 +654,48 @@ export async function registerSupplier({
     error.statusCode = 400;
     throw error;
   }
-  if (!state || !state.trim()) {
-    const error = new Error('State / Province / Region is required.');
-    error.statusCode = 400;
-    throw error;
+
+  if (isIndia) {
+    if (!state || !state.trim()) {
+      const error = new Error('State / Union Territory is required.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!city || !city.trim()) {
+      const error = new Error('City is required.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!postalCode || !postalCode.trim()) {
+      const error = new Error('PIN Code is required.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!/^[1-9][0-9]{5}$/.test(postalCode.trim())) {
+      const error = new Error('Please enter a valid 6-digit Indian PIN Code.');
+      error.statusCode = 400;
+      throw error;
+    }
+  } else {
+    // Non-India supplier only provides Registered Business Address (no state, pin, city)
+    if (!businessAddress || !businessAddress.trim()) {
+      const error = new Error('Registered Business Address is required.');
+      error.statusCode = 400;
+      throw error;
+    }
   }
-  if (!city || !city.trim()) {
-    const error = new Error('City is required.');
-    error.statusCode = 400;
-    throw error;
-  }
-  if (!postalCode || !postalCode.trim()) {
-    const error = new Error(isIndia ? 'PIN Code is required.' : 'Postal Code is required.');
-    error.statusCode = 400;
-    throw error;
-  }
-  if (isIndia && !/^[1-9][0-9]{5}$/.test(postalCode.trim())) {
-    const error = new Error('Please enter a valid 6-digit Indian PIN Code.');
+
+  const effectiveBusinessAddress = (businessAddress && businessAddress.trim())
+    || (isIndia ? `${city.trim()}, ${state.trim()} - ${postalCode.trim()}` : '');
+
+  if (!effectiveBusinessAddress) {
+    const error = new Error(isIndia ? 'Address details are required.' : 'Full Business Address is required.');
     error.statusCode = 400;
     throw error;
   }
 
-  if (!businessAddress || !businessAddress.trim()) {
-    const error = new Error('Full Business Address is required.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const sameFactory = factoryAddressSame === true || factoryAddressSame === 'true';
-  const cleanFactory = sameFactory ? businessAddress.trim() : (factoryAddress || '').trim();
+  const sameFactory = factoryAddressSame !== false && factoryAddressSame !== 'false';
+  const cleanFactory = sameFactory ? effectiveBusinessAddress : (factoryAddress || '').trim() || effectiveBusinessAddress;
   if (!sameFactory && !cleanFactory) {
     const error = new Error('Factory Address is required when factory address is different from business address.');
     error.statusCode = 400;
@@ -728,18 +743,18 @@ export async function registerSupplier({
       gstStatus: isIndia ? gstStatus : null,
       gstin: cleanGstin,
       pan: cleanPan,
-      taxId: !isIndia ? (taxId || '').trim() : null,
+      taxId: (taxId || cleanGstin || '').trim() || null,
       businessPhone: businessPhone ? businessPhone.trim() : null,
       yearEstablished: parsedYear,
       companyDescription: cleanDesc,
       logoUrl: logoUrl || null,
       businessImages: Array.isArray(businessImages) ? businessImages : [],
-      businessAddress: businessAddress.trim(),
+      businessAddress: effectiveBusinessAddress,
       factoryAddress: cleanFactory,
       factoryAddressSame: sameFactory,
       warehouseAddress: cleanFactory,
-      warehouseState: state.trim(),
-      warehousePincode: postalCode.trim(),
+      warehouseState: state ? state.trim() : null,
+      warehousePincode: postalCode ? postalCode.trim() : null,
       kycStatus: 'PENDING',
       isVerified: false,
       isPhoneVerified: Boolean(verificationToken),
@@ -1091,8 +1106,9 @@ export async function forgotPassword(email) {
 }
 
 export async function resetPassword({ token, otp, newPassword }) {
-  if (!newPassword || newPassword.length < 6) {
-    const error = new Error('Password must be at least 6 characters.');
+  const passCheck = validatePassword(newPassword);
+  if (!passCheck.isValid) {
+    const error = new Error(passCheck.message);
     error.statusCode = 400;
     throw error;
   }
@@ -1158,8 +1174,9 @@ export async function changePassword({ userId, currentPassword, newPassword }) {
     throw error;
   }
 
-  if (!newPassword || newPassword.length < 6) {
-    const error = new Error('New password must be at least 6 characters.');
+  const passCheck = validatePassword(newPassword);
+  if (!passCheck.isValid) {
+    const error = new Error(passCheck.message);
     error.statusCode = 400;
     throw error;
   }

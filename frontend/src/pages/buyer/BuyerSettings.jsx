@@ -9,14 +9,18 @@ import {
   Save,
   ShieldCheck,
   User,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Button from '../../components/common/Button';
 import BuyerAddresses from './BuyerAddresses';
+import PasswordValidationIndicator from '../../components/common/PasswordValidationIndicator';
 import useAuth from '../../hooks/useAuth';
 import useNotifications from '../../hooks/useNotifications';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { apiPost } from '../../services/apiClient';
+import { validatePassword } from '../../utils/passwordRules';
 
 export default function BuyerSettings() {
   const { user, updateProfile } = useAuth();
@@ -31,6 +35,9 @@ export default function BuyerSettings() {
     newPassword: '',
     confirmPassword: '',
   });
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [passErrors, setPassErrors] = useState({});
   const [passSaving, setPassSaving] = useState(false);
 
@@ -49,12 +56,19 @@ export default function BuyerSettings() {
     if (!passValues.currentPassword) {
       errors.currentPassword = 'Current password is required.';
     }
-    if (!passValues.newPassword || passValues.newPassword.length < 8) {
-      errors.newPassword = 'New password must be at least 8 characters.';
-    } else if (!/[A-Za-z]/.test(passValues.newPassword) || !/[0-9]/.test(passValues.newPassword)) {
-      errors.newPassword = 'Password must contain at least one letter and one number.';
+
+    if (!passValues.newPassword) {
+      errors.newPassword = 'New password is required.';
+    } else {
+      const passEval = validatePassword(passValues.newPassword);
+      if (!passEval.isValid) {
+        errors.newPassword = passEval.message;
+      }
     }
-    if (passValues.newPassword !== passValues.confirmPassword) {
+
+    if (!passValues.confirmPassword) {
+      errors.confirmPassword = 'Confirm your new password.';
+    } else if (passValues.newPassword !== passValues.confirmPassword) {
       errors.confirmPassword = 'Passwords do not match.';
     }
 
@@ -139,13 +153,23 @@ export default function BuyerSettings() {
                 <label className="block font-bold text-slate-800 mb-1">
                   Current Password <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={passValues.currentPassword}
-                  onChange={(e) => setPassValues({ ...passValues, currentPassword: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
-                />
+                <div className="relative">
+                  <input
+                    type={showCurrentPass ? 'text' : 'password'}
+                    required
+                    value={passValues.currentPassword}
+                    onChange={(e) => setPassValues({ ...passValues, currentPassword: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 pr-10 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPass((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    aria-label={showCurrentPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showCurrentPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
                 {passErrors.currentPassword && (
                   <p className="mt-1 text-[11px] text-rose-600">{passErrors.currentPassword}</p>
                 )}
@@ -155,14 +179,25 @@ export default function BuyerSettings() {
                 <label className="block font-bold text-slate-800 mb-1">
                   New Password <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Min. 8 characters with letter & number"
-                  value={passValues.newPassword}
-                  onChange={(e) => setPassValues({ ...passValues, newPassword: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    required
+                    autoComplete="new-password"
+                    placeholder="Min. 8 characters with letter & number"
+                    value={passValues.newPassword}
+                    onChange={(e) => setPassValues({ ...passValues, newPassword: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 pr-10 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPass((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    aria-label={showNewPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showNewPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
                 {passErrors.newPassword && (
                   <p className="mt-1 text-[11px] text-rose-600">{passErrors.newPassword}</p>
                 )}
@@ -172,17 +207,36 @@ export default function BuyerSettings() {
                 <label className="block font-bold text-slate-800 mb-1">
                   Confirm New Password <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={passValues.confirmPassword}
-                  onChange={(e) => setPassValues({ ...passValues, confirmPassword: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPass ? 'text' : 'password'}
+                    required
+                    autoComplete="new-password"
+                    placeholder="Re-enter new password"
+                    value={passValues.confirmPassword}
+                    onChange={(e) => setPassValues({ ...passValues, confirmPassword: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 pr-10 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPass((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    aria-label={showConfirmPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
                 {passErrors.confirmPassword && (
                   <p className="mt-1 text-[11px] text-rose-600">{passErrors.confirmPassword}</p>
                 )}
               </div>
+
+              {/* Real-time Password Requirements Checklist & Confirm Match Status */}
+              <PasswordValidationIndicator
+                password={passValues.newPassword}
+                confirmPassword={passValues.confirmPassword}
+                showConfirmMatch={true}
+              />
 
               <div className="pt-2">
                 <Button type="submit" variant="primary" size="sm" disabled={passSaving}>

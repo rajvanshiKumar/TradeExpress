@@ -10,10 +10,14 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
 import CustomSelect from '../../components/common/CustomSelect';
+import PasswordValidationIndicator from '../../components/common/PasswordValidationIndicator';
+import { validatePassword } from '../../utils/passwordRules';
 
 const PRESET_ROLES = [
   {
@@ -73,6 +77,7 @@ export default function SuperAdminAdmins() {
 
   // Create Sub-Admin Modal
   const [modalOpen, setModalOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -131,8 +136,9 @@ export default function SuperAdminAdmins() {
       showToast('Please fill all required fields.', 'error');
       return;
     }
-    if (formData.password.length < 6) {
-      showToast('Password must be at least 6 characters.', 'error');
+    const passEval = validatePassword(formData.password);
+    if (!passEval.isValid) {
+      showToast(passEval.message, 'error');
       return;
     }
 
@@ -440,14 +446,26 @@ export default function SuperAdminAdmins() {
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Temporary Initial Password *</label>
-                <input
-                  type="password"
-                  required
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="At least 6 characters"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="new-password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="At least 8 characters with letter, number & symbol"
+                    className="w-full p-2.5 pr-10 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <PasswordValidationIndicator password={formData.password} />
               </div>
 
               <div>

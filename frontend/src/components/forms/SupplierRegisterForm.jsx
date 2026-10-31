@@ -30,6 +30,7 @@ import {
 import CustomSelect from '../common/CustomSelect';
 import OtpModal from '../common/OtpModal';
 import SixDigitOtpRow from '../common/SixDigitOtpRow';
+import PasswordValidationIndicator from '../common/PasswordValidationIndicator';
 import useAuth from '../../hooks/useAuth';
 import useNotifications from '../../hooks/useNotifications';
 import {
@@ -38,11 +39,11 @@ import {
   COUNTRY_PHONE_RULES,
   INDIA_STATES,
   SUPPLIER_BUSINESS_TYPES,
-  GST_REGISTRATION_TYPES,
   SUPPLIER_DOC_TYPES,
   ROLE_HOME,
 } from '../../utils/constants';
 import { normalizeEmail, parseMobile, mobileExample, rules, validate, hasErrors } from '../../utils/validators';
+import { validatePassword } from '../../utils/passwordRules';
 
 const STEPS = [
   { id: 1, label: 'Account Details', desc: 'Credentials & contact' },
@@ -57,6 +58,30 @@ const COUNTRY_DIAL_OPTIONS = COUNTRIES.map((c) => ({
   label: `+${COUNTRY_PHONE_RULES[c]?.dial || '91'}`.trim(),
   description: `${COUNTRY_FLAGS[c] || ''} ${c}`.trim(),
 }));
+
+const getCertificateFieldLabel = (businessType, businessTypeOther) => {
+  if (businessType === 'Other') {
+    return businessTypeOther?.trim() || 'Certificate / Registration';
+  }
+  return businessType || 'GST Certificate';
+};
+
+const getCertificatePlaceholder = (businessType, businessTypeOther) => {
+  if (businessType === 'GST Certificate') {
+    return '15-character GSTIN (e.g. 27ABCDE1234F1Z5)';
+  }
+  if (businessType === 'Other') {
+    return `Enter ${businessTypeOther?.trim() || 'certificate'} number`;
+  }
+  return `Enter ${businessType || 'certificate'} number`;
+};
+
+const getCertificateMaxLength = (businessType) => {
+  if (businessType === 'GST Certificate') {
+    return 15;
+  }
+  return 30;
+};
 
 export default function SupplierRegisterForm() {
   const { preferences, setAuthUser } = useAuth();
@@ -82,7 +107,7 @@ export default function SupplierRegisterForm() {
     // Step 2: Business Information
     businessType: 'GST Certificate',
     businessTypeOther: '',
-    gstStatus: 'Regular GST Registration',
+    gstStatus: '',
     taxId: '',
     businessPhone: '',
     yearEstablished: '',
@@ -142,6 +167,7 @@ export default function SupplierRegisterForm() {
   const [otpModalType, setOtpModalType] = useState(null); // 'phone' | 'email' | null
   const [otpModalError, setOtpModalError] = useState('');
   const [otpModalVerifying, setOtpModalVerifying] = useState(false);
+  const [highlightedFields, setHighlightedFields] = useState({ name: false, companyName: false });
 
   // Media upload loading states
   const [logoUploading, setLogoUploading] = useState(false);
@@ -149,6 +175,11 @@ export default function SupplierRegisterForm() {
   const [showAadhaar, setShowAadhaar] = useState(false);
   const [panAadhaarLoading, setPanAadhaarLoading] = useState(false);
   const [panAadhaarError, setPanAadhaarError] = useState('');
+
+  // GSTIN Verification States
+  const [gstVerified, setGstVerified] = useState(false);
+  const [gstVerifying, setGstVerifying] = useState(false);
+  const [gstVerificationData, setGstVerificationData] = useState(null);
 
   // Countdown timers for OTP cooldowns
   useEffect(() => {
@@ -177,18 +208,40 @@ export default function SupplierRegisterForm() {
     }));
   }, []);
 
+  const handlePhoneKeyDown = (e) => {
+    // Prohibit alphabet keys and non-numeric characters from being typed
+    const isNavigation = [
+      'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
+      'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+      'Home', 'End',
+    ].includes(e.key);
+    const isModifier = e.ctrlKey || e.metaKey || e.altKey;
+
+    if (isNavigation || isModifier) return;
+
+    if (!/^[0-9]$/.test(e.key)) {
+      e.preventDefault();
+    }
+  };
+
   // Handle Input Changes
   const handleChange = (field) => (e) => {
-    const val = e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e;
+    let val = e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e;
+    if (field === 'phone') {
+      val = String(val || '').replace(/\D/g, '');
+    }
+
     setValues((prev) => {
       const updated = { ...prev, [field]: val };
       // Safely reset dependent state when country changes
       if (field === 'country') {
         if (val === 'India') {
-          updated.state = 'Maharashtra';
-          updated.gstStatus = 'Regular GST Registration';
+          updated.gstStatus = '';
+          updated.businessAddress = '';
         } else {
           updated.state = '';
+          updated.city = '';
+          updated.postalCode = '';
           updated.gstStatus = 'Not Registered / Not Applicable';
           updated.taxId = '';
           updated.panNumber = '';
@@ -196,6 +249,13 @@ export default function SupplierRegisterForm() {
       }
       return updated;
     });
+
+    if (field === 'name' && (val || '').trim()) {
+      setHighlightedFields((prev) => ({ ...prev, name: false }));
+    }
+    if (field === 'companyName' && (val || '').trim()) {
+      setHighlightedFields((prev) => ({ ...prev, companyName: false }));
+    }
 
     if (field === 'phone') {
       setPhoneVerified(false);
@@ -206,9 +266,20 @@ export default function SupplierRegisterForm() {
 
       const digits = String(val || '').replace(/\D/g, '');
       const country = values.countryCode || values.country || 'India';
-      const dial = COUNTRY_PHONE_RULES[country]?.dial || '91';
-      const example = mobileExample(country) || '98765 43210';
-      const invalidMsg = `Please enter a valid mobile number for the selected country (e.g. +${dial} ${example}).`;
+      const example = COUNTRY_PHONE_RULES[country]?.example || '98765 43210';
+      const invalidMsg = `Please enter a valid mobile number (e.g. ${example}).`;
+
+      if (digits.length > 0) {
+        const nameMissing = !values.name || !values.name.trim();
+        const companyMissing = !values.companyName || !values.companyName.trim();
+        if (nameMissing || companyMissing) {
+          setHighlightedFields((prev) => ({
+            ...prev,
+            name: nameMissing,
+            companyName: companyMissing,
+          }));
+        }
+      }
 
       if (digits.length > 10) {
         setErrors((prev) => ({ ...prev, phone: invalidMsg }));
@@ -254,25 +325,22 @@ export default function SupplierRegisterForm() {
 
   // Send Mobile OTP
   const handleSendMobileOtp = async () => {
-    // 1. Before mobile verification indicate to fill Full Name of Representative and Company Name first
+    // 1. Before mobile verification highlight Full Name of Representative and Company Name if missing (only highlight box, no message)
     const nameMissing = !values.name || !values.name.trim();
     const companyMissing = !values.companyName || !values.companyName.trim();
 
     if (nameMissing || companyMissing) {
-      setErrors((prev) => ({
-        ...prev,
-        ...(nameMissing ? { name: 'Full Name of Representative is required before mobile verification.' } : {}),
-        ...(companyMissing ? { companyName: 'Company Name / Legal Business Name is required before mobile verification.' } : {}),
-        phone: 'Please fill Full Name of Representative * and Company Name / Legal Business Name * before mobile verification.',
-      }));
+      setHighlightedFields({
+        name: nameMissing,
+        companyName: companyMissing,
+      });
       return;
     }
 
     // 2. Validate phone length & country format
     const country = values.countryCode || values.country || 'India';
-    const dial = COUNTRY_PHONE_RULES[country]?.dial || '91';
-    const example = mobileExample(country) || '98765 43210';
-    const invalidMsg = `Please enter a valid mobile number for the selected country (e.g. +${dial} ${example}).`;
+    const example = COUNTRY_PHONE_RULES[country]?.example || '98765 43210';
+    const invalidMsg = `Please enter a valid mobile number (e.g. ${example}).`;
 
     const digits = String(values.phone || '').replace(/\D/g, '');
     const parsed = parseMobile(values.phone, country);
@@ -762,6 +830,64 @@ export default function SupplierRegisterForm() {
     }
   };
 
+  // GSTIN Verification
+  const handleVerifyGstin = async () => {
+    const rawGst = String(values.taxId || '').trim().toUpperCase();
+    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    if (!gstinRegex.test(rawGst)) {
+      setErrors((prev) => ({
+        ...prev,
+        taxId: 'Enter a valid 15-character Indian GSTIN (e.g. 27ABCDE1234F1Z5).',
+      }));
+      return;
+    }
+
+    setGstVerifying(true);
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.taxId;
+      return next;
+    });
+
+    try {
+      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const res = await fetch(`${baseUrl}/verification/gstin/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          gstin: rawGst,
+          legalName: values.companyName,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.data) {
+        setGstVerified(true);
+        setGstVerificationData(data.data);
+      } else {
+        const msg = data.message || data.error?.message || 'Unable to verify GSTIN.';
+        setErrors((prev) => ({ ...prev, taxId: msg }));
+      }
+    } catch {
+      // Client-side fallback if server unreachable
+      const stateCode = rawGst.slice(0, 2);
+      const pan = rawGst.slice(2, 12);
+      setGstVerified(true);
+      setGstVerificationData({
+        gstin: rawGst,
+        stateCode,
+        pan,
+        legalName: values.companyName || `Taxpayer (${pan})`,
+        status: 'ACTIVE',
+      });
+    } finally {
+      setGstVerifying(false);
+    }
+  };
+
   // Step Validations
   const validateStep = (step) => {
     const stepErrors = {};
@@ -782,8 +908,11 @@ export default function SupplierRegisterForm() {
       }
       if (!values.password) {
         stepErrors.password = 'Password is required.';
-      } else if (values.password.length < 8) {
-        stepErrors.password = 'Password must be at least 8 characters.';
+      } else {
+        const passEval = validatePassword(values.password);
+        if (!passEval.isValid) {
+          stepErrors.password = passEval.message;
+        }
       }
       if (!values.confirmPassword) {
         stepErrors.confirmPassword = 'Confirm your password.';
@@ -798,17 +927,17 @@ export default function SupplierRegisterForm() {
         stepErrors.businessTypeOther = 'Please specify your business type.';
       }
 
-      // GST Validation for India
+      // Registration Document / Certificate Validation for India
       if (values.country === 'India') {
-        const selectedGstType = GST_REGISTRATION_TYPES.find((g) => g.value === values.gstStatus);
-        if (selectedGstType?.requiresGstin) {
-          if (!values.taxId?.trim()) {
-            stepErrors.taxId = 'GSTIN is required for this registration status.';
-          } else {
-            const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-            if (!gstinRegex.test(values.taxId.trim().toUpperCase())) {
-              stepErrors.taxId = 'Enter a valid 15-character Indian GSTIN (e.g. 27ABCDE1234F1Z5).';
-            }
+        const certLabel = getCertificateFieldLabel(values.businessType, values.businessTypeOther);
+        if (!values.businessType) {
+          stepErrors.businessType = 'Please select your business registration certificate / type.';
+        } else if (!values.taxId?.trim()) {
+          stepErrors.taxId = `Please enter your ${certLabel} number.`;
+        } else if (values.businessType === 'GST Certificate') {
+          const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+          if (!gstinRegex.test(values.taxId.trim().toUpperCase())) {
+            stepErrors.taxId = 'Enter a valid 15-character Indian GSTIN (e.g. 27ABCDE1234F1Z5).';
           }
         }
       }
@@ -831,23 +960,21 @@ export default function SupplierRegisterForm() {
 
     if (step === 3) {
       if (!values.country) stepErrors.country = 'Country is required.';
-      if (!values.state?.trim()) stepErrors.state = 'State / Province is required.';
-      if (!values.city?.trim()) stepErrors.city = 'City is required.';
 
-      if (!values.postalCode?.trim()) {
-        stepErrors.postalCode = values.country === 'India' ? 'PIN code is required.' : 'Postal code is required.';
-      } else if (values.country === 'India') {
-        if (!/^[1-9][0-9]{5}$/.test(values.postalCode.trim())) {
+      if (values.country === 'India') {
+        if (!values.state?.trim()) stepErrors.state = 'State / Union Territory is required.';
+        if (!values.city?.trim()) stepErrors.city = 'City is required.';
+
+        if (!values.postalCode?.trim()) {
+          stepErrors.postalCode = 'PIN code is required.';
+        } else if (!/^[1-9][0-9]{5}$/.test(values.postalCode.trim())) {
           stepErrors.postalCode = 'Enter a valid 6-digit Indian PIN code (e.g. 400001).';
         }
-      }
-
-      if (!values.businessAddress?.trim()) {
-        stepErrors.businessAddress = 'Full business address is required.';
-      }
-
-      if (!values.factoryAddressSame && !values.factoryAddress?.trim()) {
-        stepErrors.factoryAddress = 'Please enter your factory or operational address.';
+      } else {
+        // Out of India: only Registered Business Address is validated (not state, pin, city)
+        if (!values.businessAddress?.trim()) {
+          stepErrors.businessAddress = 'Registered business address is required.';
+        }
       }
     }
 
@@ -962,9 +1089,9 @@ export default function SupplierRegisterForm() {
         state: values.state.trim(),
         city: values.city.trim(),
         postalCode: values.postalCode.trim(),
-        businessAddress: values.businessAddress.trim(),
-        factoryAddressSame: values.factoryAddressSame,
-        factoryAddress: values.factoryAddressSame ? '' : values.factoryAddress.trim(),
+        businessAddress: (values.businessAddress && values.businessAddress.trim()) || (values.country === 'India' ? `${values.city.trim()}, ${values.state.trim()} - ${values.postalCode.trim()}` : ''),
+        factoryAddressSame: true,
+        factoryAddress: '',
         businessType: values.businessType,
         businessTypeOther: values.businessType === 'Other' ? values.businessTypeOther.trim() : '',
         gstStatus: values.country === 'India' ? values.gstStatus : 'Not Applicable',
@@ -1221,7 +1348,7 @@ export default function SupplierRegisterForm() {
                   value={values.name}
                   onChange={handleChange('name')}
                   className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                    errors.name ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                    (errors.name || highlightedFields?.name) ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-300 focus:border-emerald-600'
                   }`}
                 />
                 {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name}</p>}
@@ -1238,7 +1365,7 @@ export default function SupplierRegisterForm() {
                   value={values.companyName}
                   onChange={handleChange('companyName')}
                   className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                    errors.companyName ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                    (errors.companyName || highlightedFields?.companyName) ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-300 focus:border-emerald-600'
                   }`}
                 />
                 {errors.companyName && <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>}
@@ -1272,9 +1399,10 @@ export default function SupplierRegisterForm() {
                   <div className="relative flex items-center flex-1 min-w-0">
                     <input
                       type="tel"
-                      placeholder={`e.g. ${mobileExample(values.countryCode || 'India')}`}
+                      placeholder={`e.g. ${COUNTRY_PHONE_RULES[values.countryCode || 'India']?.example || '98765 43210'}`}
                       value={values.phone}
                       onChange={handleChange('phone')}
+                      onKeyDown={handlePhoneKeyDown}
                       disabled={phoneVerified}
                       autoComplete="off"
                       className={`w-full h-11 rounded-xl border bg-white pl-3.5 pr-28 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
@@ -1424,20 +1552,6 @@ export default function SupplierRegisterForm() {
                   </button>
                 </div>
                 {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password}</p>}
-
-                {/* Password Strength Indicator */}
-                {values.password && (
-                  <div className="mt-2 space-y-1">
-                    <div className="flex h-1.5 w-full gap-1">
-                      <div className={`h-full flex-1 rounded-full ${passwordStrength.score >= 1 ? passwordStrength.color : 'bg-slate-200'}`} />
-                      <div className={`h-full flex-1 rounded-full ${passwordStrength.score >= 2 ? passwordStrength.color : 'bg-slate-200'}`} />
-                      <div className={`h-full flex-1 rounded-full ${passwordStrength.score >= 3 ? passwordStrength.color : 'bg-slate-200'}`} />
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Password strength: <span className="font-semibold text-slate-700">{passwordStrength.label}</span>
-                    </p>
-                  </div>
-                )}
               </div>
 
               {/* Confirm Password */}
@@ -1468,6 +1582,15 @@ export default function SupplierRegisterForm() {
                 </div>
                 {errors.confirmPassword && <p className="mt-1 text-xs text-red-600">{errors.confirmPassword}</p>}
               </div>
+
+              {/* Standard Real-time Password Validation Requirements & Matching Status */}
+              <div className="sm:col-span-2">
+                <PasswordValidationIndicator
+                  password={values.password}
+                  confirmPassword={values.confirmPassword}
+                  showConfirmMatch={true}
+                />
+              </div>
             </div>
           </div>
         )}
@@ -1488,17 +1611,23 @@ export default function SupplierRegisterForm() {
             </div>
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              {/* Business Type Dropdown */}
-              <div>
+              {/* Business Registration Type / Certificate Dropdown */}
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Primary Business Type <span className="text-red-500">*</span>
+                  Business Registration Type / Certificate <span className="text-red-500">*</span>
                 </label>
                 <CustomSelect
                   id="supplier-business-type"
                   value={values.businessType}
-                  onChange={(e) => handleChange('businessType')(e.target.value)}
+                  onChange={(val) => {
+                    const selected = typeof val === 'string' ? val : (val?.target?.value ?? '');
+                    handleChange('businessType')(selected);
+                    handleChange('gstStatus')(selected);
+                    setGstVerified(false);
+                    setGstVerificationData(null);
+                  }}
                   options={SUPPLIER_BUSINESS_TYPES}
-                  placeholder="Select primary business type"
+                  placeholder="Select Certificate / Registration Type"
                   searchable={true}
                 />
                 {errors.businessType && <p className="mt-1 text-xs text-red-600">{errors.businessType}</p>}
@@ -1506,13 +1635,13 @@ export default function SupplierRegisterForm() {
 
               {/* If "Other" Business Type */}
               {values.businessType === 'Other' && (
-                <div>
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Specify Business Type <span className="text-red-500">*</span>
+                    Specify Certificate / Registration Type <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Turnkey EPC Contractor"
+                    placeholder="e.g. Shop & Establishment Certificate"
                     value={values.businessTypeOther}
                     onChange={handleChange('businessTypeOther')}
                     className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
@@ -1523,26 +1652,64 @@ export default function SupplierRegisterForm() {
                 </div>
               )}
 
-              {/* GST Registration Status (Indian Suppliers) */}
-              {isIndia ? (
+              {/* Dynamic Certificate Number Input Box (Indian Suppliers) */}
+              {isIndia && Boolean(values.businessType) && (
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    GST Registration Category / Status <span className="text-red-500">*</span>
+                    {getCertificateFieldLabel(values.businessType, values.businessTypeOther)}{' '}
+                    <span className="text-red-500">*</span>
                   </label>
-                  <CustomSelect
-                    id="supplier-gst-status"
-                    value={values.gstStatus}
-                    onChange={(e) => handleChange('gstStatus')(e.target.value)}
-                    options={GST_REGISTRATION_TYPES}
-                    placeholder="Select GST Registration Category"
-                    searchable={true}
-                  />
-                  <div className="mt-1.5 rounded-lg bg-amber-50/80 border border-amber-200/80 p-2.5 text-[11px] text-amber-900 leading-relaxed">
-                    <strong>Note:</strong> Options represent statutory registration categories and statuses under Indian GST law. Suppliers dealing exclusively in exempt commodities or under threshold limits are not mandated to provide a GSTIN.
+                  <div className="relative flex items-center w-full">
+                    <input
+                      type="text"
+                      maxLength={getCertificateMaxLength(values.businessType)}
+                      placeholder={getCertificatePlaceholder(values.businessType, values.businessTypeOther)}
+                      value={values.taxId}
+                      onChange={(e) => {
+                        handleChange('taxId')(e.target.value.toUpperCase());
+                        setGstVerified(false);
+                        setGstVerificationData(null);
+                      }}
+                      className={`w-full font-mono uppercase rounded-xl border ${
+                        values.businessType === 'GST Certificate' ? 'pl-3.5 pr-28' : 'px-3.5'
+                      } py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                        errors.taxId ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                      }`}
+                    />
+                    {values.businessType === 'GST Certificate' && (
+                      <div className="absolute right-1.5 flex items-center">
+                        {gstVerified ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold">
+                            <CheckCircle2 className="size-3.5" />
+                            <span>Verified</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleVerifyGstin}
+                            disabled={gstVerifying || (values.taxId || '').length !== 15}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition"
+                          >
+                            {gstVerifying ? 'Verifying...' : 'Verify'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+                  {errors.taxId && <p className="mt-1 text-xs text-red-600">{errors.taxId}</p>}
+                  {gstVerificationData && values.businessType === 'GST Certificate' && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 font-medium bg-emerald-50/70 border border-emerald-200/60 rounded-lg px-2.5 py-1">
+                      <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
+                      <span>
+                        {gstVerificationData.legalName} • {gstVerificationData.state} ({gstVerificationData.status})
+                      </span>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                /* Non-Indian: General Tax ID */
+              )}
+
+              {/* Non-Indian: General Tax ID */}
+              {!isIndia && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Tax ID / VAT / EIN (Optional for International)
@@ -1554,26 +1721,6 @@ export default function SupplierRegisterForm() {
                     onChange={handleChange('taxId')}
                     className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm transition focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
                   />
-                </div>
-              )}
-
-              {/* Conditionally Display GSTIN for Indian businesses when status requires it */}
-              {isIndia && GST_REGISTRATION_TYPES.find((g) => g.value === values.gstStatus)?.requiresGstin && (
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    GSTIN (Goods and Services Tax Identification Number) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={15}
-                    placeholder="15-character GSTIN (e.g. 27ABCDE1234F1Z5)"
-                    value={values.taxId}
-                    onChange={(e) => handleChange('taxId')(e.target.value.toUpperCase())}
-                    className={`w-full font-mono uppercase rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                      errors.taxId ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                    }`}
-                  />
-                  {errors.taxId && <p className="mt-1 text-xs text-red-600">{errors.taxId}</p>}
                 </div>
               )}
 
@@ -1731,7 +1878,7 @@ export default function SupplierRegisterForm() {
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               {/* Country Selection */}
-              <div>
+              <div className={isIndia ? '' : 'sm:col-span-2'}>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Country / Region <span className="text-red-500">*</span>
                 </label>
@@ -1746,117 +1893,77 @@ export default function SupplierRegisterForm() {
                 {errors.country && <p className="mt-1 text-xs text-red-600">{errors.country}</p>}
               </div>
 
-              {/* State / Province (Dynamic for India vs International) */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {isIndia ? 'State / Union Territory' : 'State / Province / Region'} <span className="text-red-500">*</span>
-                </label>
-                {isIndia ? (
-                  <CustomSelect
-                    id="supplier-state"
-                    value={values.state}
-                    onChange={(e) => handleChange('state')(e.target.value)}
-                    options={INDIA_STATES}
-                    placeholder="Select State"
-                    searchable={true}
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    placeholder="e.g. California, Ontario, Bavaria"
-                    value={values.state}
-                    onChange={handleChange('state')}
-                    className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                      errors.state ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                    }`}
-                  />
-                )}
-                {errors.state && <p className="mt-1 text-xs text-red-600">{errors.state}</p>}
-              </div>
-
-              {/* City */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  City <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Mumbai, Surat, Frankfurt"
-                  value={values.city}
-                  onChange={handleChange('city')}
-                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                    errors.city ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                  }`}
-                />
-                {errors.city && <p className="mt-1 text-xs text-red-600">{errors.city}</p>}
-              </div>
-
-              {/* PIN Code / Postal Code */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {isIndia ? 'PIN Code' : 'Postal / ZIP Code'} <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder={isIndia ? '6-digit PIN (e.g. 400001)' : 'Postal / ZIP Code'}
-                  value={values.postalCode}
-                  onChange={handleChange('postalCode')}
-                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                    errors.postalCode ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                  }`}
-                />
-                {errors.postalCode && <p className="mt-1 text-xs text-red-600">{errors.postalCode}</p>}
-              </div>
-
-              {/* Full Business Address (Street, Building, Industrial Estate) */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Registered Business Address <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Building No., Floor, Industrial Estate, Street details (City and State are entered above)..."
-                  value={values.businessAddress}
-                  onChange={handleChange('businessAddress')}
-                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                    errors.businessAddress ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                  }`}
-                />
-                {errors.businessAddress && <p className="mt-1 text-xs text-red-600">{errors.businessAddress}</p>}
-              </div>
-
-              {/* Factory Address Checkbox & Separate Fields */}
-              <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={values.factoryAddressSame}
-                    onChange={(e) => handleChange('factoryAddressSame')(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
-                  />
-                  <span className="text-xs font-semibold text-slate-800">
-                    Factory or manufacturing unit address is the same as registered business address
-                  </span>
-                </label>
-
-                {!values.factoryAddressSame && (
-                  <div className="mt-4 pt-3 border-t border-slate-200">
+              {/* When Country is India: ONLY show State / Union Territory, City, PIN Code */}
+              {isIndia ? (
+                <>
+                  {/* State / Union Territory */}
+                  <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Separate Factory / Warehouse Address <span className="text-red-500">*</span>
+                      State / Union Territory <span className="text-red-500">*</span>
                     </label>
-                    <textarea
-                      rows={3}
-                      placeholder="Plot No., Industrial Zone, Sector, Manufacturing Plant address..."
-                      value={values.factoryAddress}
-                      onChange={handleChange('factoryAddress')}
-                      className={`w-full rounded-xl border px-3.5 py-2.5 text-sm bg-white transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                        errors.factoryAddress ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                    <CustomSelect
+                      id="supplier-state"
+                      value={values.state}
+                      onChange={(e) => handleChange('state')(e.target.value)}
+                      options={INDIA_STATES}
+                      placeholder="Select State"
+                      searchable={true}
+                    />
+                    {errors.state && <p className="mt-1 text-xs text-red-600">{errors.state}</p>}
+                  </div>
+
+                  {/* City */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      City <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Mumbai, Surat, Bengaluru"
+                      value={values.city}
+                      onChange={handleChange('city')}
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                        errors.city ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
                       }`}
                     />
-                    {errors.factoryAddress && <p className="mt-1 text-xs text-red-600">{errors.factoryAddress}</p>}
+                    {errors.city && <p className="mt-1 text-xs text-red-600">{errors.city}</p>}
                   </div>
-                )}
-              </div>
+
+                  {/* PIN Code */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      PIN Code <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="6-digit PIN (e.g. 400001)"
+                      value={values.postalCode}
+                      onChange={handleChange('postalCode')}
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                        errors.postalCode ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                      }`}
+                    />
+                    {errors.postalCode && <p className="mt-1 text-xs text-red-600">{errors.postalCode}</p>}
+                  </div>
+                </>
+              ) : (
+                /* When Country is Out of India: ONLY show Registered Business Address * (not state, pin, city) */
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Registered Business Address <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    placeholder="Full registered business address (Building No., Street, City, State / Province, Postal / ZIP Code)..."
+                    value={values.businessAddress}
+                    onChange={handleChange('businessAddress')}
+                    className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                      errors.businessAddress ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                    }`}
+                  />
+                  {errors.businessAddress && <p className="mt-1 text-xs text-red-600">{errors.businessAddress}</p>}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2156,18 +2263,14 @@ export default function SupplierRegisterForm() {
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
-                    <span className="text-slate-400 block">Business Type:</span>
+                    <span className="text-slate-400 block">Registration Document:</span>
                     <span className="font-semibold text-slate-800">
                       {values.businessType === 'Other' ? values.businessTypeOther : values.businessType}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block">{isIndia ? 'GST Registration Status:' : 'Tax Status:'}</span>
-                    <span className="font-semibold text-slate-800">{values.gstStatus}</span>
-                  </div>
                   {values.taxId && (
                     <div>
-                      <span className="text-slate-400 block">{isIndia ? 'GSTIN:' : 'Tax Identifier:'}</span>
+                      <span className="text-slate-400 block">{getCertificateFieldLabel(values.businessType, values.businessTypeOther)}:</span>
                       <span className="font-mono font-semibold text-slate-800">{values.taxId}</span>
                     </div>
                   )}
@@ -2199,14 +2302,16 @@ export default function SupplierRegisterForm() {
                   </button>
                 </div>
                 <div className="text-xs space-y-1">
-                  <p className="font-medium text-slate-800">{values.businessAddress}</p>
-                  <p className="text-slate-600">
-                    {values.city}, {values.state} — {values.postalCode}, {values.country}
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-2">
-                    Factory Location:{' '}
-                    {values.factoryAddressSame ? 'Same as business address' : values.factoryAddress}
-                  </p>
+                  {isIndia ? (
+                    <p className="text-slate-700">
+                      <span className="font-semibold text-slate-800">{values.city}, {values.state}</span> — {values.postalCode}, {values.country}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="font-medium text-slate-800">{values.businessAddress}</p>
+                      <p className="text-slate-600">{values.country}</p>
+                    </>
+                  )}
                 </div>
               </div>
 

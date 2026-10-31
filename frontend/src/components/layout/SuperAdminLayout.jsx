@@ -25,7 +25,6 @@ import {
   Truck,
 } from 'lucide-react';
 import useAuth from '../../hooks/useAuth';
-import useNotifications from '../../hooks/useNotifications';
 
 const NAV_ITEMS = [
   { to: '/super-admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -47,13 +46,11 @@ const NAV_ITEMS = [
 
 export default function SuperAdminLayout() {
   const { user, logout } = useAuth();
-  const { showToast } = useNotifications();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSignOut = () => {
     logout();
-    showToast('Signed out of Super Admin enterprise console.', 'info');
     navigate('/');
   };
 

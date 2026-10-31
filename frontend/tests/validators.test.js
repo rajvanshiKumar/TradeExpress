@@ -30,13 +30,16 @@ describe('Frontend Form Validators Test Suite', () => {
   });
 
   describe('Password Security Rule', () => {
-    it('requires minimum 8 characters with at least one letter and one number', () => {
+    it('enforces comprehensive password security rules', () => {
       const pwRule = rules.password();
-      assert.equal(pwRule('StrongPass123'), '');
+      assert.equal(pwRule('StrongPass123@'), '');
       assert.ok(pwRule('weak').includes('at least 8 characters'));
-      assert.ok(pwRule('alllettersonly').includes('at least one letter and one number'));
-      assert.ok(pwRule('1234567890').includes('at least one letter and one number'));
-      assert.ok(pwRule(' spacearound123 ').includes('space'));
+      assert.ok(pwRule('alllowercase123@').includes('uppercase letter'));
+      assert.ok(pwRule('ALLUPPERCASE123@').includes('lowercase letter'));
+      assert.ok(pwRule('NoNumbersHere@!').includes('numeric digit'));
+      assert.ok(pwRule('NoSpecialChars123').includes('special character'));
+      assert.ok(pwRule('ValidPass 123@').includes('spaces'));
+      assert.ok(pwRule('ValidPass<123>@').includes('unsupported characters'));
     });
   });
 

@@ -140,21 +140,23 @@ export const BUSINESS_TYPES = [
 ];
 
 export const SUPPLIER_BUSINESS_TYPES = [
-  'Gumasta Licence',
-  'Udyog Aadhaar',
+  'GST Certificate',
   'BRN Certificate',
   'MSME Certificate',
-  'GST Certificate',
   'Udyam Certificate',
+  'Udyog Aadhaar',
+  'Gumasta Licence',
+  'Other',
 ];
 
 export const BUYER_GST_STATUS_OPTIONS = [
-  'Gumasta Licence',
-  'Udyog Aadhaar',
+  'GST Certificate',
   'BRN Certificate',
   'MSME Certificate',
-  'GST Certificate',
   'Udyam Certificate',
+  'Udyog Aadhaar',
+  'Gumasta Licence',
+  'Other',
 ];
 
 export const BUYER_TYPES = [

@@ -103,11 +103,10 @@ describe('Signup Page: Country Dial Code and 6-Digit OTP Verification Suite', ()
   });
 
   describe('5. Mobile Validation & Pre-Verification Prerequisites', () => {
-    const getMobileError = (phone, country = 'India') => {
+    const getMobileError = (phone) => {
       const digits = String(phone || '').replace(/\D/g, '');
-      const dial = COUNTRY_PHONE_RULES[country]?.dial || '91';
       const example = '98765 43210';
-      const invalidMsg = `Please enter a valid mobile number for the selected country (e.g. +${dial} ${example}).`;
+      const invalidMsg = `Please enter a valid mobile number (e.g. ${example}).`;
 
       if (digits.length > 10) {
         return invalidMsg;
@@ -116,49 +115,57 @@ describe('Signup Page: Country Dial Code and 6-Digit OTP Verification Suite', ()
     };
 
     it('shows exact error message when user inserts more than 10 digits', () => {
-      const msg = getMobileError('98765432101', 'India');
+      const msg = getMobileError('98765432101');
       assert.strictEqual(
         msg,
-        'Please enter a valid mobile number for the selected country (e.g. +91 98765 43210).'
+        'Please enter a valid mobile number (e.g. 98765 43210).'
       );
     });
 
     it('does not show length error for exactly 10 digits', () => {
-      const msg = getMobileError('9876543210', 'India');
+      const msg = getMobileError('9876543210');
       assert.strictEqual(msg, '');
     });
 
-    it('requires Full Name and Company Name before mobile verification proceeds', () => {
-      const checkPreVerification = ({ name, companyName, isSupplier = true }) => {
+    it('highlights name and company boxes without showing text message when mobile is entered or verification attempted', () => {
+      const checkPreVerification = ({ name, companyName }) => {
         const nameMissing = !name || !name.trim();
         const companyMissing = !companyName || !companyName.trim();
         if (nameMissing || companyMissing) {
           return {
             allowed: false,
-            phoneError: isSupplier
-              ? 'Please fill Full Name of Representative * and Company Name / Legal Business Name * before mobile verification.'
-              : 'Please fill Full Name * and Business / Company Name * before mobile verification.',
+            highlightName: nameMissing,
+            highlightCompany: companyMissing,
+            phoneError: '', // Strictly no text error message, only box highlighting
           };
         }
-        return { allowed: true };
+        return { allowed: true, highlightName: false, highlightCompany: false, phoneError: '' };
       };
 
-      const resultSupplier = checkPreVerification({ name: '', companyName: '', isSupplier: true });
+      const resultSupplier = checkPreVerification({ name: '', companyName: '' });
       assert.strictEqual(resultSupplier.allowed, false);
-      assert.strictEqual(
-        resultSupplier.phoneError,
-        'Please fill Full Name of Representative * and Company Name / Legal Business Name * before mobile verification.'
-      );
+      assert.strictEqual(resultSupplier.highlightName, true);
+      assert.strictEqual(resultSupplier.highlightCompany, true);
+      assert.strictEqual(resultSupplier.phoneError, '', 'Must not show text error message');
 
-      const resultBuyer = checkPreVerification({ name: '', companyName: 'Apex', isSupplier: false });
+      const resultBuyer = checkPreVerification({ name: '', companyName: 'Apex' });
       assert.strictEqual(resultBuyer.allowed, false);
-      assert.strictEqual(
-        resultBuyer.phoneError,
-        'Please fill Full Name * and Business / Company Name * before mobile verification.'
-      );
+      assert.strictEqual(resultBuyer.highlightName, true);
+      assert.strictEqual(resultBuyer.highlightCompany, false);
+      assert.strictEqual(resultBuyer.phoneError, '', 'Must not show text error message');
 
-      const resultSuccess = checkPreVerification({ name: 'John Doe', companyName: 'Apex Ltd', isSupplier: true });
+      const resultSuccess = checkPreVerification({ name: 'John Doe', companyName: 'Apex Ltd' });
       assert.strictEqual(resultSuccess.allowed, true);
+      assert.strictEqual(resultSuccess.highlightName, false);
+      assert.strictEqual(resultSuccess.highlightCompany, false);
+
+      // Verify text message is removed from source code
+      const supplierSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/forms/SupplierRegisterForm.jsx'), 'utf8');
+      const buyerSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/forms/BuyerRegisterForm.jsx'), 'utf8');
+      assert.doesNotMatch(supplierSrc, /Please fill Full Name of Representative/);
+      assert.doesNotMatch(buyerSrc, /Please fill Full Name \* and Business/);
+      assert.match(supplierSrc, /highlightedFields/);
+      assert.match(buyerSrc, /highlightedFields/);
     });
 
     it('ensures Business Email Address and Password start strictly blank with anti-autofill measures', () => {
@@ -184,6 +191,57 @@ describe('Signup Page: Country Dial Code and 6-Digit OTP Verification Suite', ()
       // Both forms must label the field Business Email Address
       assert.match(supplierSrc, /Business Email Address/);
       assert.match(buyerSrc, /Business Email Address/);
+    });
+
+    it('removes GST status dropdown completely and ensures certificate field label appears dynamically', () => {
+      const supplierSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/forms/SupplierRegisterForm.jsx'), 'utf8');
+
+      // Statutory Note and GST status dropdown completely removed
+      assert.doesNotMatch(supplierSrc, /Suppliers dealing exclusively in exempt commodities/);
+      assert.doesNotMatch(supplierSrc, /Options represent statutory registration categories/);
+      assert.doesNotMatch(supplierSrc, /Select GST Registration Category/);
+
+      // Dynamic certificate label helper exists and reflects selected certificate (BRN, GST, etc.)
+      assert.match(supplierSrc, /getCertificateFieldLabel/);
+      assert.match(supplierSrc, /Boolean\(values\.businessType/);
+    });
+
+    it('enforces Business Address country visibility rules and removes Separate Factory/Warehouse Address', () => {
+      const supplierSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/forms/SupplierRegisterForm.jsx'), 'utf8');
+
+      // Separate Factory / Warehouse Address section completely removed
+      assert.doesNotMatch(supplierSrc, /Separate Factory \/ Warehouse Address/);
+      assert.doesNotMatch(supplierSrc, /Factory or manufacturing unit address is the same as registered business address/);
+
+      // When India is selected, only State, City, PIN Code are shown
+      assert.match(supplierSrc, /isIndia\s*\?\s*\([\s\S]*?State \/ Union Territory[\s\S]*?City[\s\S]*?PIN Code/);
+
+      // When Out of India is selected, only Registered Business Address is shown (not state, pin, city)
+      assert.match(supplierSrc, /Registered Business Address\s*<span[^>]*>\*<\/span>/);
+
+      // Step 3 validation requires state/city/PIN for India, and only registered business address for out of India
+      assert.match(supplierSrc, /if\s*\(values\.country === 'India'\)[\s\S]*?stepErrors\.state[\s\S]*?stepErrors\.city[\s\S]*?stepErrors\.postalCode/);
+      assert.match(supplierSrc, /stepErrors\.businessAddress = 'Registered business address is required.'/);
+    });
+
+    it('ensures no toast notifications are displayed on Sign Out or GSTIN verification', () => {
+      const userMenuSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/layout/UserMenu.jsx'), 'utf8');
+      const superAdminLayoutSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/layout/SuperAdminLayout.jsx'), 'utf8');
+      const supplierRegisterSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/forms/SupplierRegisterForm.jsx'), 'utf8');
+
+      // UserMenu sign out does not dispatch toast
+      assert.doesNotMatch(userMenuSrc, /showToast\(['"]You have been signed out/);
+      assert.doesNotMatch(userMenuSrc, /useNotifications/);
+
+      // SuperAdminLayout sign out does not dispatch toast
+      assert.doesNotMatch(superAdminLayoutSrc, /showToast\(['"]Signed out of Super Admin/);
+      assert.doesNotMatch(superAdminLayoutSrc, /useNotifications/);
+
+      // SupplierRegisterForm GSTIN verification does not dispatch toast
+      const gstinBlockMatch = supplierRegisterSrc.match(/const handleVerifyGstin = async \(\) => \{([\s\S]*?)\n  \};/);
+      assert.ok(gstinBlockMatch, 'handleVerifyGstin function must exist');
+      const gstinBody = gstinBlockMatch[1];
+      assert.doesNotMatch(gstinBody, /showToast/);
     });
   });
 });

@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import Dropdown from '../common/Dropdown';
 import useAuth from '../../hooks/useAuth';
-import useNotifications from '../../hooks/useNotifications';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { ordersPathFor, ROLE_HOME } from '../../utils/constants';
 
@@ -45,7 +44,6 @@ const ROLE_BADGES = {
 export default function UserMenu() {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
-  const { showToast } = useNotifications();
   const navigate = useNavigate();
 
   if (!user) {
@@ -77,7 +75,6 @@ export default function UserMenu() {
   const signOut = (close) => {
     close();
     logout();
-    showToast('You have been signed out.', 'info');
     navigate('/');
   };
 

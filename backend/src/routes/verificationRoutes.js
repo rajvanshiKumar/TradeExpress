@@ -68,4 +68,43 @@ router.get(
   verificationController.getMyPanAadhaarStatus
 );
 
+/**
+ * POST /api/verification/gstin/verify
+ * POST /api/verification/gst/verify
+ * Validates and verifies standard 15-character Indian GSTIN.
+ */
+router.post(
+  ['/gstin/verify', '/gst/verify'],
+  verificationLimiter,
+  optionalAuth,
+  validate([
+    body('gstin')
+      .optional()
+      .trim()
+      .custom((val, { req }) => {
+        const testVal = val || req.body.gstinNumber;
+        if (!testVal) {
+          throw new Error('GSTIN is required.');
+        }
+        const clean = String(testVal).trim().toUpperCase();
+        const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+        if (!GSTIN_REGEX.test(clean)) {
+          throw new Error('Enter a valid 15-character Indian GSTIN (e.g. 27ABCDE1234F1Z5).');
+        }
+        return true;
+      }),
+  ]),
+  verificationController.verifyGstin
+);
+
+/**
+ * GET /api/verification/gstin/status
+ * Fetches saved GSTIN details for the logged-in user.
+ */
+router.get(
+  '/gstin/status',
+  authenticateJWT,
+  verificationController.getMyGstStatus
+);
+
 export default router;

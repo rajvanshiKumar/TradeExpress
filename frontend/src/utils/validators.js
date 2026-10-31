@@ -1,4 +1,7 @@
 import { COUNTRY_PHONE_RULES } from './constants.js';
+import { evaluatePassword, validatePassword } from './passwordRules.js';
+
+export { evaluatePassword, validatePassword };
 
 const EMAIL = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i;
 const PHONE = /^\+?[0-9][0-9\s()-]{6,17}$/;
@@ -46,14 +49,12 @@ export const rules = {
     if (!COUNTRY_PHONE_RULES[country]) return 'Choose a country first.';
     return parseMobile(value, country).ok ? '' : `Enter a valid ${country} mobile number, e.g. ${mobileExample(country)}.`;
   },
-  /** At least 8 characters with a letter and a number. */
+  /** Standard TradeExpress Password Rule (8-64 chars, upper, lower, number, special @#$!%&*, no spaces, valid symbols) */
   password: () => (value) => {
     const text = String(value ?? '');
     if (!text) return '';
-    if (text.length < 8) return 'Password must be at least 8 characters.';
-    if (!/[a-z]/i.test(text) || !/\d/.test(text)) return 'Password must include at least one letter and one number.';
-    if (/^\s|\s$/.test(text)) return 'Password cannot start or end with a space.';
-    return '';
+    const res = validatePassword(text);
+    return res.isValid ? '' : res.message;
   },
   phone: () => (value) => (!String(value ?? '').trim() || PHONE.test(String(value).trim()) ? '' : 'Enter a valid phone number.'),
   minLength: (label, length) => (value) => (!value || String(value).trim().length >= length ? '' : `${label} must be at least ${length} characters.`),

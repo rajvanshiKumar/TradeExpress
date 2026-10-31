@@ -7,6 +7,7 @@ import {
 } from './commissionTierService.js';
 import bcrypt from 'bcryptjs';
 import { logAuditAction } from './auditService.js';
+import { validatePassword } from '../utils/passwordValidator.js';
 
 // ==========================================
 // 1. DASHBOARD & ANALYTICS
@@ -390,6 +391,13 @@ export async function updateUserStatus({ userId, status, isActive, reason, req }
 }
 
 export async function resetUserPassword({ userId, newPassword, req }) {
+  const passCheck = validatePassword(newPassword);
+  if (!passCheck.isValid) {
+    const error = new Error(passCheck.message);
+    error.statusCode = 400;
+    throw error;
+  }
+
   const targetUser = await prisma.user.findUnique({ where: { id: userId } });
   if (!targetUser) {
     const error = new Error('Target user does not exist.');
@@ -1524,6 +1532,14 @@ export async function getAdminUsers() {
 }
 
 export async function createSubAdmin({ name, email, password, adminRole, adminPermissions, phone, req }) {
+  const passCheck = validatePassword(password);
+  if (!passCheck.isValid) {
+    const error = new Error(passCheck.message || 'Password does not meet security requirements.');
+    error.statusCode = 400;
+    error.details = passCheck.errors;
+    throw error;
+  }
+
   const normalizedEmail = (email || '').toLowerCase().trim();
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) {

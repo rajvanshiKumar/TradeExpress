@@ -1,17 +1,19 @@
 import { useState } from 'react';
-import { Save, Lock, ShieldCheck, KeyRound, LogOut } from 'lucide-react';
+import { Save, Lock, ShieldCheck, KeyRound, LogOut, Eye, EyeOff } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Input, { Textarea } from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import CompanyLogo from '../../components/common/CompanyLogo';
 import SupplierGuard from './SupplierGuard';
+import PasswordValidationIndicator from '../../components/common/PasswordValidationIndicator';
 import useProducts from '../../hooks/useProducts';
 import useNotifications from '../../hooks/useNotifications';
 import useAuth from '../../hooks/useAuth';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { BUSINESS_TYPES, COUNTRIES } from '../../utils/constants';
 import { focusFirstError, hasErrors, rules, validate } from '../../utils/validators';
+import { validatePassword } from '../../utils/passwordRules';
 import { apiPost } from '../../services/apiClient';
 
 const RESPONSE_TIMES = ['Within 6 hours', 'Within 12 hours', 'Within 24 hours', 'Within 48 hours'];
@@ -45,6 +47,9 @@ function Settings({ company }) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
   const set = (field) => (event) => {
@@ -70,12 +75,13 @@ function Settings({ company }) {
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-    if (!currentPassword || !newPassword) {
-      showToast('Please fill in both current and new password.', 'error');
+    if (!currentPassword) {
+      showToast('Please enter your current password.', 'error');
       return;
     }
-    if (newPassword.length < 8) {
-      showToast('New password must be at least 8 characters.', 'error');
+    const passEval = validatePassword(newPassword);
+    if (!passEval.isValid) {
+      showToast(passEval.message, 'error');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -187,39 +193,78 @@ function Settings({ company }) {
         <form onSubmit={handlePasswordChange} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
           <div>
             <label className="font-bold text-xs text-navy-900 block mb-1">Current Password</label>
-            <input
-              type="password"
-              required
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-navy-950 focus:border-emerald-700 focus:outline-none"
-            />
+            <div className="relative">
+              <input
+                type={showCurrentPassword ? 'text' : 'password'}
+                required
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 pr-10 text-xs text-navy-950 focus:border-emerald-700 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label={showCurrentPassword ? 'Hide password' : 'Show password'}
+              >
+                {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           <div>
             <label className="font-bold text-xs text-navy-900 block mb-1">New Password</label>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="At least 8 characters"
-              className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-navy-950 focus:border-emerald-700 focus:outline-none"
-            />
+            <div className="relative">
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                required
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="At least 8 characters"
+                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 pr-10 text-xs text-navy-950 focus:border-emerald-700 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+              >
+                {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           <div>
             <label className="font-bold text-xs text-navy-900 block mb-1">Confirm New Password</label>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Re-enter password"
-              className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-navy-950 focus:border-emerald-700 focus:outline-none"
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter password"
+                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 pr-10 text-xs text-navy-950 focus:border-emerald-700 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Real-time Password Requirements Checklist & Confirm Match Status */}
+          <div className="sm:col-span-3">
+            <PasswordValidationIndicator
+              password={newPassword}
+              confirmPassword={confirmPassword}
+              showConfirmMatch={true}
             />
           </div>
 

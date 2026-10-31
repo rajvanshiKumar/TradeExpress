@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MailCheck, CheckCircle2, KeyRound } from 'lucide-react';
+import { MailCheck, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import AuthShell from './AuthShell';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
+import PasswordValidationIndicator from '../components/common/PasswordValidationIndicator';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { isEmail, normalizeEmail } from '../utils/validators';
+import { validatePassword } from '../utils/passwordRules';
 import { apiPost } from '../services/apiClient';
 
 export default function ForgotPassword() {
@@ -14,6 +16,8 @@ export default function ForgotPassword() {
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -32,7 +36,6 @@ export default function ForgotPassword() {
       setStep('reset');
       setSuccessMsg(response?.message || 'Password reset code sent to your registered email.');
     } catch (err) {
-      // In case user does not exist in DB or offline, allow fallback UI
       if (err.status === 404) {
         setError('No account found with this email address.');
       } else {
@@ -47,8 +50,15 @@ export default function ForgotPassword() {
   const handleResetSubmit = async (event) => {
     event.preventDefault();
     if (!otp.trim()) return setError('Please enter the 6-digit OTP code or reset token.');
-    if (!newPassword || newPassword.length < 6) return setError('Password must be at least 6 characters.');
-    if (newPassword !== confirmPassword) return setError('Passwords do not match.');
+
+    const passEval = validatePassword(newPassword);
+    if (!passEval.isValid) {
+      return setError(passEval.message);
+    }
+    if (newPassword !== confirmPassword) {
+      return setError('Passwords do not match.');
+    }
+
     setError('');
     setLoading(true);
 
@@ -115,24 +125,65 @@ export default function ForgotPassword() {
             onChange={(e) => { setOtp(e.target.value); setError(''); }}
           />
 
-          <Input
-            id="reset-new-password"
-            label="New Password"
-            type="password"
-            required
-            placeholder="At least 6 characters"
-            value={newPassword}
-            onChange={(e) => { setNewPassword(e.target.value); setError(''); }}
-          />
+          {/* New Password with Eye visibility toggle */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              New Password <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                id="reset-new-password"
+                type={showNewPassword ? 'text' : 'password'}
+                required
+                placeholder="At least 8 characters"
+                value={newPassword}
+                onChange={(e) => { setNewPassword(e.target.value); setError(''); }}
+                autoComplete="new-password"
+                className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 pr-10 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+              >
+                {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
 
-          <Input
-            id="reset-confirm-password"
-            label="Confirm New Password"
-            type="password"
-            required
-            placeholder="Re-enter new password"
-            value={confirmPassword}
-            onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+          {/* Confirm New Password with Eye visibility toggle */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Confirm New Password <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                id="reset-confirm-password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                placeholder="Re-enter new password"
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                autoComplete="new-password"
+                className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 pr-10 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Real-time Password Requirements Checklist & Confirm Match Status */}
+          <PasswordValidationIndicator
+            password={newPassword}
+            confirmPassword={confirmPassword}
+            showConfirmMatch={true}
           />
 
           <Button type="submit" full size="lg" disabled={loading}>
@@ -184,4 +235,3 @@ export default function ForgotPassword() {
     </AuthShell>
   );
 }
-

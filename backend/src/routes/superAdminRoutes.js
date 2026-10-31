@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import * as controller from '../controllers/superAdminController.js';
 import { authenticateJWT, requireRole } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
+import { validatePassword } from '../utils/passwordValidator.js';
 
 const router = Router();
 
@@ -17,7 +18,17 @@ router.get('/users', controller.listUsers);
 router.get('/users/export/csv', controller.exportUsersCsv);
 router.get('/users/:id', controller.getUserDetails);
 router.patch('/users/:id/status', controller.updateUserStatus);
-router.post('/users/:id/reset-password', controller.resetUserPassword);
+router.post(
+  '/users/:id/reset-password',
+  validate([
+    body('newPassword').custom((value) => {
+      const res = validatePassword(value);
+      if (!res.isValid) throw new Error(res.message);
+      return true;
+    }),
+  ]),
+  controller.resetUserPassword
+);
 
 // Suppliers & KYC
 router.get('/suppliers/kyc', controller.listSuppliersKyc);
@@ -68,7 +79,11 @@ router.post(
   validate([
     body('name').notEmpty().withMessage('Name is required.'),
     body('email').isEmail().withMessage('Valid email is required.'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters.'),
+    body('password').custom((value) => {
+      const res = validatePassword(value);
+      if (!res.isValid) throw new Error(res.message);
+      return true;
+    }),
   ]),
   controller.createSubAdmin
 );

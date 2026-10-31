@@ -5,6 +5,7 @@ import * as authController from '../controllers/authController.js';
 import { authenticateJWT } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
 import { authRateLimiter } from '../middleware/rateLimiter.js';
+import { validatePassword } from '../utils/passwordValidator.js';
 
 const router = Router();
 
@@ -30,6 +31,23 @@ const otpVerifyLimiter = rateLimit({
     success: false,
     message: 'Too many OTP verification attempts. Please wait 10 minutes before retrying.',
   },
+});
+
+/** Standard Password Validation Middleware Rule */
+const passwordValidationRule = body('password').custom((value) => {
+  const result = validatePassword(value);
+  if (!result.isValid) {
+    throw new Error(result.message);
+  }
+  return true;
+});
+
+const newPasswordValidationRule = body('newPassword').custom((value) => {
+  const result = validatePassword(value);
+  if (!result.isValid) {
+    throw new Error(result.message);
+  }
+  return true;
 });
 
 router.post(
@@ -98,7 +116,6 @@ router.post(
   authController.verifyEmailVerificationOtp
 );
 
-
 router.post(
   '/send-mobile-login-otp',
   otpSendLimiter,
@@ -133,7 +150,7 @@ router.post(
   authRateLimiter,
   validate([
     body('email').isEmail().withMessage('Valid email is required.'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters.'),
+    passwordValidationRule,
     body('name').trim().notEmpty().withMessage('Name is required.'),
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
     body('verificationToken').optional().trim(),
@@ -147,7 +164,7 @@ router.post(
   authRateLimiter,
   validate([
     body('email').isEmail().withMessage('Valid work email is required.'),
-    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters.'),
+    passwordValidationRule,
     body('name').trim().notEmpty().withMessage('Full name is required.'),
     body('company').trim().notEmpty().withMessage('Business / Company name is required.'),
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
@@ -165,7 +182,7 @@ router.post(
   authRateLimiter,
   validate([
     body('email').isEmail().withMessage('Valid email is required.'),
-    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters.'),
+    passwordValidationRule,
     body('name').trim().notEmpty().withMessage('Full name is required.'),
     body('company').trim().notEmpty().withMessage('Company name is required.'),
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
@@ -175,7 +192,6 @@ router.post(
   ]),
   authController.registerSupplier
 );
-
 
 router.post(
   '/login',
@@ -189,12 +205,13 @@ router.post(
 
 router.get('/me', authenticateJWT, authController.me);
 router.put('/profile', authenticateJWT, authController.updateProfile);
+
 router.post(
   '/change-password',
   authenticateJWT,
   validate([
     body('currentPassword').notEmpty().withMessage('Current password is required.'),
-    body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters.'),
+    newPasswordValidationRule,
   ]),
   authController.changePassword
 );
@@ -208,7 +225,7 @@ router.post(
 router.post(
   '/reset-password',
   validate([
-    body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters.'),
+    newPasswordValidationRule,
   ]),
   authController.resetPassword
 );

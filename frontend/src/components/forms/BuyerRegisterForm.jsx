@@ -24,6 +24,7 @@ import {
 
 import CustomSelect from '../common/CustomSelect';
 import SixDigitOtpRow from '../common/SixDigitOtpRow';
+import PasswordValidationIndicator from '../common/PasswordValidationIndicator';
 import useAuth from '../../hooks/useAuth';
 import useNotifications from '../../hooks/useNotifications';
 import {
@@ -36,6 +37,7 @@ import {
   ROLE_HOME,
 } from '../../utils/constants';
 import { normalizeEmail, parseMobile, mobileExample } from '../../utils/validators';
+import { validatePassword } from '../../utils/passwordRules';
 
 const STEPS = [
   { id: 1, label: 'Account Details', desc: 'Credentials & contact' },
@@ -113,6 +115,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const [phoneVerifying, setPhoneVerifying] = useState(false);
   const [phoneToken, setPhoneToken] = useState('');
   const [phoneOtpError, setPhoneOtpError] = useState('');
+  const [highlightedFields, setHighlightedFields] = useState({ name: false, companyName: false });
 
   // Countdown timer for email OTP cooldown
   useEffect(() => {
@@ -160,6 +163,12 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     }
 
     setValues((prev) => ({ ...prev, [field]: val }));
+    if (field === 'name' && (val || '').trim()) {
+      setHighlightedFields((prev) => ({ ...prev, name: false }));
+    }
+    if (field === 'companyName' && (val || '').trim()) {
+      setHighlightedFields((prev) => ({ ...prev, companyName: false }));
+    }
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: '' }));
     }
@@ -187,6 +196,22 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     }
   };
 
+  const handlePhoneKeyDown = (e) => {
+    // Prohibit alphabet keys and non-numeric characters from being entered
+    const isNavigation = [
+      'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
+      'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+      'Home', 'End',
+    ].includes(e.key);
+    const isModifier = e.ctrlKey || e.metaKey || e.altKey;
+
+    if (isNavigation || isModifier) return;
+
+    if (!/^[0-9]$/.test(e.key)) {
+      e.preventDefault();
+    }
+  };
+
   const handlePhoneChange = (e) => {
     let val = '';
     if (e && typeof e === 'object' && 'target' in e && e.target) {
@@ -196,7 +221,10 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     }
     if (typeof val === 'object') val = '';
 
-    setValues((prev) => ({ ...prev, phone: val }));
+    // Strictly enforce numeric digits only - prohibit alphabets & symbols
+    const digits = val.replace(/\D/g, '');
+
+    setValues((prev) => ({ ...prev, phone: digits }));
     if (phoneVerified) {
       setPhoneVerified(false);
       setPhoneToken('');
@@ -204,11 +232,21 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       setPhoneOtp('');
     }
 
-    const digits = val.replace(/\D/g, '');
     const country = values.countryCode || values.country || 'India';
-    const dial = COUNTRY_PHONE_RULES[country]?.dial || '91';
-    const example = mobileExample(country) || '98765 43210';
-    const invalidMsg = `Please enter a valid mobile number for the selected country (e.g. +${dial} ${example}).`;
+    const example = COUNTRY_PHONE_RULES[country]?.example || '98765 43210';
+    const invalidMsg = `Please enter a valid mobile number (e.g. ${example}).`;
+
+    if (digits.length > 0) {
+      const nameMissing = !values.name || !values.name.trim();
+      const companyMissing = !values.companyName || !values.companyName.trim();
+      if (nameMissing || companyMissing) {
+        setHighlightedFields((prev) => ({
+          ...prev,
+          name: nameMissing,
+          companyName: companyMissing,
+        }));
+      }
+    }
 
     if (digits.length > 10) {
       setErrors((prev) => ({ ...prev, phone: invalidMsg }));
@@ -361,25 +399,22 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
   // Mobile OTP Request
   const handleSendMobileOtp = async () => {
-    // 1. Before mobile verification indicate to fill Full Name and Company Name first
+    // 1. Before mobile verification highlight Name and Company Name if missing (only highlight box, no message)
     const nameMissing = !values.name || !values.name.trim();
     const companyMissing = !values.companyName || !values.companyName.trim();
 
     if (nameMissing || companyMissing) {
-      setErrors((prev) => ({
-        ...prev,
-        ...(nameMissing ? { name: 'Full Name is required before mobile verification.' } : {}),
-        ...(companyMissing ? { companyName: 'Business / Company Name is required before mobile verification.' } : {}),
-        phone: 'Please fill Full Name * and Business / Company Name * before mobile verification.',
-      }));
+      setHighlightedFields({
+        name: nameMissing,
+        companyName: companyMissing,
+      });
       return;
     }
 
     // 2. Validate phone length & country format
     const country = values.countryCode || values.country || 'India';
-    const dial = COUNTRY_PHONE_RULES[country]?.dial || '91';
-    const example = mobileExample(country) || '98765 43210';
-    const invalidMsg = `Please enter a valid mobile number for the selected country (e.g. +${dial} ${example}).`;
+    const example = COUNTRY_PHONE_RULES[country]?.example || '98765 43210';
+    const invalidMsg = `Please enter a valid mobile number (e.g. ${example}).`;
 
     const digits = String(values.phone || '').replace(/\D/g, '');
     const parsed = parseMobile(values.phone, country);
@@ -495,10 +530,11 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
       if (!values.password) {
         stepErrors.password = 'Password is required.';
-      } else if (values.password.length < 8) {
-        stepErrors.password = 'Password must be at least 8 characters long.';
-      } else if (!/[A-Za-z]/.test(values.password) || !/[0-9]/.test(values.password)) {
-        stepErrors.password = 'Password must contain at least one letter and one number.';
+      } else {
+        const passEval = validatePassword(values.password);
+        if (!passEval.isValid) {
+          stepErrors.password = passEval.message;
+        }
       }
 
       if (!values.confirmPassword) {
@@ -544,10 +580,10 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       // GST Validation for India
       if (values.country === 'India') {
         if (!values.gstStatus) {
-          stepErrors.gstStatus = 'Please select your GST registration status.';
+          stepErrors.gstStatus = 'Please select your business registration certificate / type.';
         }
         if (!values.gstin?.trim()) {
-          stepErrors.gstin = 'Certificate / registration number is required.';
+          stepErrors.gstin = `Please enter your ${values.gstStatus || 'certificate'} number.`;
         } else if (values.gstStatus === 'GST Certificate') {
           const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
           if (!gstinRegex.test(values.gstin.trim().toUpperCase())) {
@@ -818,7 +854,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                   onChange={handleChange('name')}
                   autoComplete="off"
                   className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                    errors.name ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                    (errors.name || highlightedFields?.name) ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-300 focus:border-emerald-600'
                   }`}
                 />
                 {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name}</p>}
@@ -836,7 +872,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                   onChange={handleChange('companyName')}
                   autoComplete="off"
                   className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                    errors.companyName ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                    (errors.companyName || highlightedFields?.companyName) ? 'border-red-500 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-300 focus:border-emerald-600'
                   }`}
                 />
                 {errors.companyName && <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>}
@@ -939,9 +975,10 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                   <div className="relative flex items-center flex-1 min-w-0">
                     <input
                       type="tel"
-                      placeholder={`e.g. ${mobileExample(values.countryCode || 'India')}`}
+                      placeholder={`e.g. ${COUNTRY_PHONE_RULES[values.countryCode || 'India']?.example || '98765 43210'}`}
                       value={typeof values.phone === 'string' ? values.phone : ''}
                       onChange={handlePhoneChange}
+                      onKeyDown={handlePhoneKeyDown}
                       disabled={phoneVerified}
                       autoComplete="off"
                       className={`w-full h-11 rounded-xl border bg-white pl-3.5 pr-28 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
@@ -1024,26 +1061,6 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                   </button>
                 </div>
                 {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password}</p>}
-
-                {/* Password Strength Meter */}
-                {values.password && (
-                  <div className="mt-2 space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-slate-500">Strength:</span>
-                      <span className={`font-semibold ${strength.text}`}>{strength.label}</span>
-                    </div>
-                    <div className="flex h-1.5 gap-1">
-                      {[1, 2, 3, 4].map((level) => (
-                        <div
-                          key={level}
-                          className={`flex-1 rounded-full transition-all duration-300 ${
-                            strength.score >= level ? strength.color : 'bg-slate-200'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Confirm Password */}
@@ -1073,11 +1090,15 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                   </button>
                 </div>
                 {errors.confirmPassword && <p className="mt-1 text-xs text-red-600">{errors.confirmPassword}</p>}
-                {values.confirmPassword && values.password === values.confirmPassword && (
-                  <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
-                    <Check className="h-3 w-3" /> Passwords match
-                  </p>
-                )}
+              </div>
+
+              {/* Standard Real-time Password Validation Requirements & Matching Status */}
+              <div className="sm:col-span-2">
+                <PasswordValidationIndicator
+                  password={values.password}
+                  confirmPassword={values.confirmPassword}
+                  showConfirmMatch={true}
+                />
               </div>
             </div>
           </div>
@@ -1271,10 +1292,10 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
                 {isIndia ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* GST Registration Status Dropdown */}
+                    {/* Business Registration Type / Certificate Dropdown */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        GST Registration Status <span className="text-red-500">*</span>
+                        Business Registration Type / Certificate <span className="text-red-500">*</span>
                       </label>
                       <CustomSelect
                         id="buyer-gst-status"
@@ -1284,29 +1305,24 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                           handleChange('gstStatus')(g);
                         }}
                         options={BUYER_GST_STATUS_OPTIONS}
-                        placeholder="Select GST Registration Status"
+                        placeholder="Select Certificate / Registration Type"
                         searchable={true}
                       />
                       {errors.gstStatus && <p className="mt-1 text-xs text-red-600">{errors.gstStatus}</p>}
                     </div>
 
-                    {/* Certificate / Registration Number Input Field Box */}
+                    {/* Dynamic Certificate Number Input Field Box */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        {values.gstStatus === 'GST Certificate'
-                          ? 'GSTIN'
-                          : values.gstStatus
-                          ? `${values.gstStatus} Number`
-                          : 'Certificate / Registration Number'}{' '}
-                        <span className="text-red-500">*</span>
+                        {values.gstStatus || 'GST Certificate'} <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         maxLength={values.gstStatus === 'GST Certificate' ? 15 : 30}
                         placeholder={
                           values.gstStatus === 'GST Certificate'
-                            ? '15-character GSTIN'
-                            : 'Certificate number'
+                            ? '15-character GSTIN (e.g. 27ABCDE1234F1Z5)'
+                            : `Enter ${values.gstStatus || 'certificate'} number`
                         }
                         value={typeof values.gstin === 'string' ? values.gstin : ''}
                         onChange={(e) => {

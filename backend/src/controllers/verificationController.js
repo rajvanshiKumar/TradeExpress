@@ -92,3 +92,96 @@ export async function getMyPanAadhaarStatus(req, res, next) {
     next(error);
   }
 }
+
+/**
+ * Controller to verify standard 15-character Indian GSTIN.
+ * POST /api/verification/gstin/verify
+ * POST /api/verification/gst/verify
+ */
+export async function verifyGstin(req, res, next) {
+  try {
+    const { gstin, gstinNumber, legalName } = req.body;
+    const finalGstin = gstin || gstinNumber;
+
+    if (!finalGstin) {
+      return res.status(400).json({
+        success: false,
+        message: 'GSTIN is required for verification.',
+      });
+    }
+
+    const userId = req.user ? req.user.id : null;
+
+    const result = await verificationService.verifyGstin({
+      gstin: finalGstin,
+      legalName,
+      userId,
+    });
+
+    return res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        error: {
+          code: error.code || 'VERIFICATION_ERROR',
+          message: error.message,
+        },
+        message: error.message,
+      });
+    }
+    next(error);
+  }
+}
+
+/**
+ * Controller to fetch saved GSTIN details for the logged-in user.
+ * GET /api/verification/gstin/status
+ */
+export async function getMyGstStatus(req, res, next) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required.',
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        gstin: true,
+        gstStatus: true,
+        pan: true,
+        taxId: true,
+        state: true,
+        isVerified: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        gstin: user.gstin || null,
+        gstStatus: user.gstStatus || null,
+        pan: user.pan || null,
+        taxId: user.taxId || null,
+        state: user.state || null,
+        isVerified: user.isVerified || false,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
