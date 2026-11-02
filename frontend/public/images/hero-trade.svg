@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Illustration of a globe with trade routes, a container ship and a port crane">
+<defs><radialGradient id="glow" cx=".5" cy=".42" r=".6"><stop offset="0" stop-color="#46526D" stop-opacity=".9"/><stop offset="1" stop-color="#101827" stop-opacity="0"/></radialGradient>
+<linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1B2436"/><stop offset="1" stop-color="#0A0F1A"/></linearGradient>
+<clipPath id="c"><circle cx="600" cy="380" r="290"/></clipPath></defs>
+<rect width="1200" height="900" fill="url(#glow)"/>
+<circle cx="600" cy="380" r="290" fill="#1B2436" stroke="#8C97AE" stroke-opacity=".5" stroke-width="2"/>
+<g clip-path="url(#c)" fill="none" stroke="#AEB6C8" stroke-opacity=".35" stroke-width="1.5">
+<ellipse cx="600" cy="380" rx="290" ry="290"/><ellipse cx="600" cy="380" rx="200" ry="290"/><ellipse cx="600" cy="380" rx="100" ry="290"/><line x1="600" y1="90" x2="600" y2="670"/>
+<line x1="310" y1="380" x2="890" y2="380"/><ellipse cx="600" cy="380" rx="290" ry="190"/><ellipse cx="600" cy="380" rx="290" ry="95"/></g>
+<g fill="none" stroke="#C9A66B" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 12"><path d="M400 300 Q600 120 800 290"/><path d="M430 470 Q620 330 790 450"/><path d="M480 240 Q560 420 720 520"/></g>
+<g fill="#C9A66B"><circle cx="400" cy="300" r="9"/><circle cx="800" cy="290" r="9"/><circle cx="430" cy="470" r="9"/><circle cx="790" cy="450" r="9"/><circle cx="480" cy="240" r="9"/><circle cx="720" cy="520" r="9"/></g>
+<g fill="#fff" opacity=".9"><circle cx="400" cy="300" r="3.5"/><circle cx="800" cy="290" r="3.5"/><circle cx="430" cy="470" r="3.5"/><circle cx="790" cy="450" r="3.5"/><circle cx="480" cy="240" r="3.5"/><circle cx="720" cy="520" r="3.5"/></g>
+<rect y="700" width="1200" height="200" fill="url(#sea)"/>
+<g stroke="#AEB6C8" stroke-opacity=".3" stroke-width="2" fill="none"><path d="M0 730 q40 -12 80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0"/><path d="M-40 790 q40 -12 80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0"/></g>
+<g transform="translate(250 560)"><path d="M0 110 h620 l-50 70 h-510 z" fill="#0A0F1A" stroke="#8C97AE" stroke-opacity=".6" stroke-width="2"/>
+<rect x="470" y="40" width="80" height="70" fill="#E5E7ED"/><rect x="485" y="52" width="50" height="12" fill="#101827"/><rect x="500" y="10" width="20" height="30" fill="#C9A66B"/>
+<rect x="40" y="62" width="62" height="46" rx="3" fill="#C9A66B"/><rect x="108" y="62" width="62" height="46" rx="3" fill="#E5E7ED"/><rect x="176" y="62" width="62" height="46" rx="3" fill="#46526D"/><rect x="244" y="62" width="62" height="46" rx="3" fill="#C9A66B"/><rect x="312" y="62" width="62" height="46" rx="3" fill="#E5E7ED"/><rect x="380" y="62" width="62" height="46" rx="3" fill="#46526D"/>
+<rect x="74" y="14" width="62" height="46" rx="3" fill="#E5E7ED"/><rect x="142" y="14" width="62" height="46" rx="3" fill="#46526D"/><rect x="210" y="14" width="62" height="46" rx="3" fill="#C9A66B"/><rect x="278" y="14" width="62" height="46" rx="3" fill="#E5E7ED"/><rect x="346" y="14" width="62" height="46" rx="3" fill="#C9A66B"/></g>
+<g transform="translate(960 380)" fill="none" stroke="#CDD2DC" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"><path d="M40 330 V0 M110 330 V60 M40 60 H110 M-150 60 H40 M40 0 L-150 60 M40 0 L110 60 M40 140 L110 220 M110 140 L40 220 M40 220 L110 300"/><path d="M-90 60 V150" stroke-width="4"/><rect x="-118" y="150" width="56" height="36" rx="3" fill="#C9A66B" stroke="none"/></g>
+</svg>

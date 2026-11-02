@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /products
+Allow: /categories
+Allow: /suppliers
+Allow: /info/
+
+Disallow: /admin
+Disallow: /buyer
+Disallow: /supplier
+Disallow: /checkout
+Disallow: /messages
+
+Sitemap: https://tradesphere.example/sitemap.xml

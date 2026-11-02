@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" role="img" aria-label="Sports and outdoors illustration">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F2F3EE"/><stop offset="1" stop-color="#E1E8E1"/></linearGradient>
+<pattern id="d" width="32" height="32" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.6" fill="#101827" opacity=".07"/></pattern></defs>
+<rect width="800" height="800" fill="url(#g)"/><rect width="800" height="800" fill="url(#d)"/>
+<circle cx="400" cy="400" r="230" fill="#fff" opacity=".7"/><circle cx="400" cy="400" r="230" fill="none" stroke="#C9A66B" stroke-opacity=".35" stroke-width="2"/>
+<circle cx="596" cy="236" r="22" fill="#C9A66B"/>
+<g transform="translate(256 256) scale(12)" fill="none" stroke="#101827" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.4 14.4 9.6 9.6"></path><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"></path><path d="m21.5 21.5-1.4-1.4"></path><path d="M3.9 3.9 2.5 2.5"></path><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"></path></g></svg>
