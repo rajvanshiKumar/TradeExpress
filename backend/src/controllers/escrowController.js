@@ -12,9 +12,11 @@ export async function getSummary(req, res, next) {
 export async function listLedgers(req, res, next) {
   try {
     const { status, supplierId } = req.query;
+    // Suppliers only ever see their own ledgers; staff may filter by supplier
+    const isStaff = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
     const ledgers = await escrowService.listEscrowLedgers({
       status,
-      supplierId: supplierId || (req.user?.role === 'SUPPLIER' ? req.user.id : undefined),
+      supplierId: isStaff ? supplierId : req.user.id,
     });
     res.json({ success: true, count: ledgers.length, data: ledgers });
   } catch (error) {

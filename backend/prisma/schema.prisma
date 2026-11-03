@@ -87,6 +87,7 @@ model User {
   razorpayCustomerId  String?              // Razorpay customer that owns this buyer's saved-card tokens
   googleId            String?              // Google account "sub" claim, set after a verified Google sign-in
   avatarUrl           String?              @db.Text
+  sessionsValidAfter  DateTime?            // login tokens issued before this time are rejected (set on password change)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
@@ -97,6 +98,7 @@ model User {
   carts               Cart[]
   kycDocuments        KycDocument[]
   passwordResetTokens PasswordResetToken[]
+  accountVerifications AccountVerification[]
   rfqs                Rfq[]                @relation("BuyerRfqs")
   quotations          Quotation[]          @relation("SupplierQuotes")
   disputesRaised      Dispute[]            @relation("BuyerDisputes")
@@ -450,6 +452,29 @@ model KycDocument {
 
   @@index([userId])
   @@map("kyc_documents")
+}
+
+// One-time codes for sensitive account changes (password, email). Only a hash of each code is stored.
+model AccountVerification {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose        String    // PASSWORD_CHANGE, EMAIL_CHANGE_CURRENT, EMAIL_CHANGE_NEW
+  target         String    // the email address the code was sent to
+  otpHash        String
+  attempts       Int       @default(0)
+  sendCount      Int       @default(1)
+  lastSentAt     DateTime  @default(now())
+  expiresAt      DateTime
+  verifiedAt     DateTime?
+  grantHash      String?   // hash of the single-use authorization issued after the code is verified
+  grantExpiresAt DateTime?
+  consumedAt     DateTime?
+  relatedId      String?   // EMAIL_CHANGE_NEW: the verified EMAIL_CHANGE_CURRENT record it continues
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, purpose])
+  @@map("account_verifications")
 }
 
 model PasswordResetToken {

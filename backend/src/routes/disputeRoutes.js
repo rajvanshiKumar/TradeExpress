@@ -1,17 +1,20 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import * as disputeController from '../controllers/disputeController.js';
-import { authenticateJWT, optionalAuth } from '../middleware/authMiddleware.js';
+import { authenticateJWT, requireRole } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
 
-router.get('/', optionalAuth, disputeController.listDisputes);
-router.get('/:id', optionalAuth, disputeController.getDispute);
+// Every dispute action requires a signed-in user; access to each dispute is checked in the controller
+router.use(authenticateJWT);
+
+router.get('/', disputeController.listDisputes);
+router.get('/:id', disputeController.getDispute);
 
 router.post(
   '/:orderId',
-  optionalAuth,
+  requireRole('BUYER'),
   validate([
     body('reason').notEmpty().withMessage('Dispute reason is required.'),
     body('description').isLength({ min: 10 }).withMessage('Description must be at least 10 characters.'),
@@ -21,7 +24,6 @@ router.post(
 
 router.post(
   '/:id/messages',
-  optionalAuth,
   validate([
     body('message').notEmpty().withMessage('Message text is required.'),
   ]),
@@ -30,7 +32,7 @@ router.post(
 
 router.post(
   '/:id/resolve',
-  optionalAuth,
+  requireRole('ADMIN'),
   validate([
     body('action').isIn(['APPROVE_FULL_REFUND', 'APPROVE_PARTIAL_REFUND', 'REJECT']).withMessage('Valid resolution action is required.'),
   ]),

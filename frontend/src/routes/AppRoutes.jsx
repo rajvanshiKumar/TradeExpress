@@ -14,6 +14,9 @@ import Suppliers from '../pages/Suppliers';
 import SupplierDetails from '../pages/SupplierDetails';
 import Exporters from '../pages/Exporters';
 import Help from '../pages/Help';
+import HelpArticlePage from '../pages/help/HelpArticlePage';
+import HelpCategoryPage from '../pages/help/HelpCategoryPage';
+import HelpAudiencePage from '../pages/help/HelpAudiencePage';
 import RequestQuote from '../pages/RequestQuote';
 import Cart from '../pages/Cart';
 import Login from '../pages/Login';
@@ -25,6 +28,8 @@ import NotFound from '../pages/NotFound';
 import BuyerWishlist from '../pages/buyer/BuyerWishlist';
 import CountryRegion from '../pages/CountryRegion';
 import TermsAndConditions from '../pages/TermsAndConditions';
+import Policies from '../pages/Policies';
+import AccountSettingsPage from '../pages/account/AccountSettingsPage';
 
 const Messages = lazy(() => import('../pages/Messages'));
 const Checkout = lazy(() => import('../pages/Checkout'));
@@ -97,6 +102,10 @@ export default function AppRoutes() {
         <Route path="/suppliers/:slug" element={<SupplierDetails />} />
         <Route path="/exporters" element={<Exporters />} />
         <Route path="/help" element={<Help />} />
+        <Route path="/help/article/:slug" element={<HelpArticlePage />} />
+        <Route path="/help/category/:categoryId" element={<HelpCategoryPage />} />
+        <Route path="/help/buyers" element={<HelpAudiencePage audience="buyer" />} />
+        <Route path="/help/suppliers" element={<HelpAudiencePage audience="supplier" />} />
         <Route path="/rfq" element={<RequestQuote />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/wishlist" element={<BuyerWishlist standalone />} />
@@ -112,6 +121,7 @@ export default function AppRoutes() {
         <Route path="/superadmin/login" element={<Navigate to="/super-admin/login" replace />} />
         <Route path="/superadmin" element={<Navigate to="/super-admin" replace />} />
         <Route path="/info/:slug" element={<Info />} />
+        <Route path="/policies" element={<Policies />} />
         <Route path="/terms" element={<TermsAndConditions />} />
         <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
         <Route path="/track" element={<OrderTracking />} />
@@ -156,6 +166,8 @@ export default function AppRoutes() {
             <Route path="/buyer/disputes" element={<BuyerDisputes />} />
             <Route path="/buyer/shipments" element={<BuyerShipments />} />
             <Route path="/buyer/settings" element={<BuyerSettings />} />
+            <Route path="/buyer/account-settings" element={<AccountSettingsPage />} />
+            <Route path="/buyer/account-settings/:section" element={<AccountSettingsPage />} />
           </Route>
         </Route>
         <Route element={<RoleRoute roles={['supplier']} />}>
@@ -169,6 +181,8 @@ export default function AppRoutes() {
             <Route path="/supplier/inquiries" element={<SupplierInquiries />} />
             <Route path="/supplier/analytics" element={<SupplierAnalytics />} />
             <Route path="/supplier/settings" element={<SupplierSettings />} />
+            <Route path="/supplier/account-settings" element={<AccountSettingsPage />} />
+            <Route path="/supplier/account-settings/:section" element={<AccountSettingsPage />} />
             <Route path="/supplier/dashboard" element={<SupplierDashboard />} />
             <Route path="/supplier/quotations" element={<SupplierQuotations />} />
             <Route path="/supplier/shipping" element={<SupplierShipping />} />
@@ -211,6 +225,8 @@ export default function AppRoutes() {
             <Route path="/super-admin/tickets" element={<SuperAdminTickets />} />
             <Route path="/super-admin/admins" element={<SuperAdminAdmins />} />
             <Route path="/super-admin/settings" element={<SuperAdminSettings />} />
+            <Route path="/super-admin/account-settings" element={<AccountSettingsPage />} />
+            <Route path="/super-admin/account-settings/:section" element={<AccountSettingsPage />} />
             <Route path="/super-admin/reports" element={<SuperAdminReports />} />
             <Route path="/super-admin/audit" element={<SuperAdminAuditLogs />} />
             <Route path="/super-admin/logistics" element={<SuperAdminLogistics />} />

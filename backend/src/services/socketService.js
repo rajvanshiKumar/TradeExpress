@@ -43,14 +43,20 @@ export function initSocket(httpServer) {
           company: true,
           isActive: true,
           status: true,
+          sessionsValidAfter: true,
         },
       });
 
       if (!user || user.isActive === false || user.status === 'SUSPENDED') {
         return next(new Error('User account is inactive or suspended.'));
       }
+      // Tokens issued before the last password change are no longer valid
+      if (user.sessionsValidAfter && (!decoded.iat || decoded.iat * 1000 < user.sessionsValidAfter.getTime())) {
+        return next(new Error('Session ended. Please sign in again.'));
+      }
 
-      socket.user = user;
+      const { sessionsValidAfter, ...socketUser } = user; // eslint-disable-line no-unused-vars
+      socket.user = socketUser;
       next();
     } catch (err) {
       next(new Error(`Socket authentication error: ${err.message}`));

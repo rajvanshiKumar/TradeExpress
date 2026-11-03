@@ -27,6 +27,11 @@ function secretHash(value) {
   return crypto.createHmac('sha256', ENV.JWT_SECRET).update(String(value)).digest('hex');
 }
 
+/** True when PAN_AADHAAR_API_BASE_URL points at the provider's UAT (test) environment. */
+export function isPanAadhaarUatProvider() {
+  return /\/uat\//i.test(process.env.PAN_AADHAAR_API_BASE_URL || '');
+}
+
 function getProviderConfig() {
   return {
     baseUrl: (process.env.PAN_AADHAAR_API_BASE_URL || '').trim(),
@@ -89,20 +94,20 @@ const PROVIDER_REASONS = {
   invalid_pan: 'The provider rejected this PAN as invalid.',
 };
 
-/** Turns a failed provider call into a specific, user-facing reason. Secrets are never included. */
-function classifyProviderFailure({ httpStatus, body, networkError }) {
+/** Turns a failed provider call into a specific, user-facing reason. Secrets are never included. `service` names the check in messages. */
+function classifyProviderFailure({ httpStatus, body, networkError, service = 'PAN–Aadhaar verification service', inputs = 'Aadhaar or PAN details' }) {
   if (networkError) {
     const timedOut = networkError.code === 'ECONNABORTED' || networkError.code === 'ETIMEDOUT' || /timeout/i.test(networkError.message || '');
     return timedOut
-      ? { reason: 'PROVIDER_TIMEOUT', message: 'The PAN–Aadhaar verification service did not respond in time. Please try again in a few minutes.' }
-      : { reason: 'PROVIDER_UNREACHABLE', message: 'The PAN–Aadhaar verification service could not be reached. Please try again later.' };
+      ? { reason: 'PROVIDER_TIMEOUT', message: `The ${service} did not respond in time. Please try again in a few minutes.` }
+      : { reason: 'PROVIDER_UNREACHABLE', message: `The ${service} could not be reached. Please try again later.` };
   }
 
   const code = String(body?.error?.code || body?.code || '').toUpperCase();
   const providerMessage = String(body?.error?.message || body?.message || '').slice(0, 200);
 
   if (httpStatus === 402 || /CREDIT|BALANCE|QUOTA/.test(code) || /credit|balance|quota/i.test(providerMessage)) {
-    return { reason: 'INSUFFICIENT_CREDITS', message: 'Verification could not be completed: the PAN–Aadhaar verification service has 0 credits remaining. Please contact TradeExpress support.' };
+    return { reason: 'INSUFFICIENT_CREDITS', message: `Verification could not be completed: the ${service} has 0 credits remaining. Please contact TradeExpress support.` };
   }
   if (httpStatus === 401 || httpStatus === 403 || /AUTH|CREDENTIAL|INVALID_KEY|UNAUTHORI[SZ]ED|FORBIDDEN/.test(code)) {
     return { reason: 'PROVIDER_AUTH_FAILED', message: 'Verification could not be completed: the verification service rejected TradeExpress\'s API credentials. Please contact TradeExpress support.' };
@@ -111,17 +116,17 @@ function classifyProviderFailure({ httpStatus, body, networkError }) {
     return { reason: 'PROVIDER_RATE_LIMITED', message: 'Too many verification requests right now. Please wait a minute and try again.' };
   }
   if (httpStatus === 400 || httpStatus === 422) {
-    return { reason: 'PROVIDER_REJECTED_INPUT', message: providerMessage ? `The verification service rejected the request: ${providerMessage}` : 'The verification service rejected the Aadhaar or PAN details.' };
+    return { reason: 'PROVIDER_REJECTED_INPUT', message: providerMessage ? `The verification service rejected the request: ${providerMessage}` : `The verification service rejected the ${inputs}.` };
   }
   if (httpStatus === 404 || httpStatus === 405) {
     // The provider address itself is not answering (e.g. the endpoint moved or its tunnel is offline)
-    return { reason: 'PROVIDER_ENDPOINT_NOT_FOUND', message: 'The PAN–Aadhaar verification service is currently unavailable. Please try again later or contact TradeExpress support.' };
+    return { reason: 'PROVIDER_ENDPOINT_NOT_FOUND', message: `The ${service} is currently unavailable. Please try again later or contact TradeExpress support.` };
   }
   if (httpStatus >= 500) {
-    return { reason: 'PROVIDER_ERROR', message: `The PAN–Aadhaar verification service is having a problem (HTTP ${httpStatus}). Please try again later.` };
+    return { reason: 'PROVIDER_ERROR', message: `The ${service} is having a problem (HTTP ${httpStatus}). Please try again later.` };
   }
   if (httpStatus !== 200) {
-    return { reason: 'PROVIDER_UNEXPECTED_STATUS', message: `The PAN–Aadhaar verification service is currently unavailable (HTTP ${httpStatus}). Please try again later.` };
+    return { reason: 'PROVIDER_UNEXPECTED_STATUS', message: `The ${service} is currently unavailable (HTTP ${httpStatus}). Please try again later.` };
   }
   return { reason: 'PROVIDER_INVALID_RESPONSE', message: 'The verification service returned a response that could not be understood. Please try again later.' };
 }
@@ -249,9 +254,11 @@ export async function checkPanAadhaarLinkStatus({
   if (aadhaar.length !== 12) {
     throw inputError('Invalid Aadhaar format. Aadhaar number must be exactly 12 digits.', 'INVALID_AADHAAR_FORMAT');
   }
-  // Checked locally first, so a mistyped number never spends a paid provider credit
-  if (!isValidAadhaarNumber(aadhaar)) {
-    throw inputError('This is not a valid Aadhaar number. Please check the 12 digits and try again.', 'INVALID_AADHAAR_NUMBER');
+  // Checked locally first, so a mistyped number never spends a paid provider credit. Every real Aadhaar
+  // passes this check digit; the provider's UAT (test) environment may use sample numbers that do not,
+  // so in UAT the provider decides.
+  if (!isPanAadhaarUatProvider() && !isValidAadhaarNumber(aadhaar)) {
+    throw inputError('This Aadhaar number is not valid (its last digit does not match). Please check all 12 digits and try again.', 'INVALID_AADHAAR_NUMBER');
   }
 
   const cleanPan = String(pan || '').trim().toUpperCase();
@@ -403,49 +410,114 @@ export const GST_ENTITY_TYPES = {
   G: 'Government Entity',
 };
 
-/**
- * Returns configuration details for the GSTIN verification provider.
- */
+/** GSTIN verification provider settings. Credentials come only from environment variables. */
 export function getGstProviderConfig() {
-  const baseUrl =
-    process.env.GST_BASE_URL ||
-    process.env.Base_URL ||
-    process.env.GST_API_BASE_URL ||
-    'https://2vjjhgz1-4000.inc1.devtunnels.ms/v1/uat/gst/verify';
-  const apiId = process.env.GST_API_ID || process.env.api_id || 'API838738';
-  const apiKey =
-    process.env.GST_API_KEY ||
-    process.env.api_key ||
-    'vk_live_s6Yk3EspeWx0_CzH_CtAdjmvyqoG-5Zqr70aXT8YRaA';
-  const tokenId =
-    process.env.GST_TOKEN_ID ||
-    process.env.token_id ||
-    'vt_live_NmyHNd4BMOCHPSa0OyZwBaEHdXMSRwXJnZRtxCe8Kcc';
-  const timeoutMs = parseInt(process.env.GST_API_TIMEOUT_MS, 10) || 5000;
-
   return {
-    baseUrl,
-    apiId,
-    apiKey,
-    tokenId,
-    timeoutMs,
+    baseUrl: (process.env.GST_BASE_URL || process.env.Base_URL || process.env.GST_API_BASE_URL || '').trim(),
+    apiId: process.env.GST_API_ID || process.env.api_id,
+    apiKey: process.env.GST_API_KEY || process.env.api_key,
+    tokenId: process.env.GST_TOKEN_ID || process.env.token_id,
+    timeoutMs: Math.min(parseInt(process.env.GST_API_TIMEOUT_MS, 10) || 15000, 30000),
   };
 }
 
-/**
- * Verifies standard 15-character Indian GSTIN.
- * Calls external verification API provider with statutory fallback.
- */
-export async function verifyGstin({
-  gstin,
-  legalName = null,
-  userId = null,
-  bypassCache = false,
-}) {
-  const cleanGstin = String(gstin || '').trim().toUpperCase();
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+const GST_SIGNUP_TOKEN_PURPOSE = 'GSTIN_VERIFIED';
+const GST_SERVICE = { service: 'GST verification service', inputs: 'GSTIN' };
 
-  // 1. Format validation: 15-character alphanumeric GSTIN regex
-  const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+/**
+ * Testing only (GST_TEST_MODE=true, never when NODE_ENV=production): when the GST provider cannot be
+ * reached, the GSTIN is treated as verified so signup can be tested. Real provider answers always win.
+ */
+export function isGstTestMode() {
+  return process.env.GST_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production';
+}
+
+const firstText = (...values) => values.map((v) => (v == null ? '' : String(v).trim())).find(Boolean) || null;
+
+/** Calls the GST provider once and interprets the reply. Never invents taxpayer details. */
+async function queryGstProvider({ gstin, request }) {
+  const config = getGstProviderConfig();
+  if (!config.baseUrl || !config.apiId || !config.apiKey || !config.tokenId) {
+    return { outcome: 'UNABLE_TO_VERIFY', definitive: false, reason: 'PROVIDER_NOT_CONFIGURED', message: 'GST verification is not configured on TradeExpress yet. Please contact TradeExpress support.' };
+  }
+
+  let response;
+  try {
+    response = await request(config.baseUrl, {
+      api_id: config.apiId, api_key: config.apiKey, token_id: config.tokenId, gstin,
+    }, {
+      headers: { 'Content-Type': 'application/json', 'X-Tunnel-Skip-Anti-Phishing-Page': 'true' },
+      timeout: config.timeoutMs,
+      validateStatus: () => true,
+    });
+  } catch (networkError) {
+    console.warn(`[GST Verification] Provider request failed: ${networkError.code || networkError.message}`);
+    return { outcome: 'UNABLE_TO_VERIFY', definitive: false, ...classifyProviderFailure({ networkError, ...GST_SERVICE }) };
+  }
+
+  const body = response?.data;
+  const httpStatus = response?.status;
+  const isObject = body && typeof body === 'object';
+  const data = isObject && body.data && typeof body.data === 'object' ? body.data : null;
+  const requestId = (isObject && (body.requestId || data?.client_id)) || null;
+
+  if (httpStatus === 200 && body?.success === true && data) {
+    const legalName = firstText(data.legal_name, data.legalName, data.lgnm);
+    const tradeName = firstText(data.trade_name, data.tradeName, data.tradeNam, legalName);
+    const gstStatus = firstText(data.status, data.gstin_status, data.sts);
+    if (legalName || tradeName) {
+      const record = {
+        legalName: legalName || tradeName,
+        tradeName,
+        gstStatus: gstStatus ? gstStatus.toUpperCase() : null,
+        state: firstText(data.state, data.state_name),
+        taxpayerType: firstText(data.taxpayer_type, data.taxpayerType, data.dty),
+        constitutionOfBusiness: firstText(data.constitution_of_business, data.ctb),
+        registrationDate: firstText(data.date_of_registration, data.rgdt),
+      };
+      if (record.gstStatus === 'ACTIVE') {
+        return { outcome: 'VERIFIED', definitive: true, requestId, record, reason: 'ACTIVE', message: 'GSTIN verified: active registration found in GST records.' };
+      }
+      return {
+        outcome: 'NOT_VERIFIED', definitive: true, requestId, record, reason: 'GSTIN_NOT_ACTIVE',
+        message: `This GSTIN is not active in GST records${record.gstStatus ? ` (status: ${record.gstStatus})` : ''}. Only an active GSTIN can be used.`,
+      };
+    }
+  }
+
+  // A clear "not found / invalid" answer from the provider is a definitive result
+  const providerText = isObject
+    ? `${body.status || ''} ${body.message || ''} ${data?.reason || ''} ${body.error?.message || ''}`.toLowerCase()
+    : '';
+  if (httpStatus === 200 && isObject && /not.?verified|not.?found|invalid|no record/.test(providerText)) {
+    return { outcome: 'NOT_VERIFIED', definitive: true, requestId, record: null, reason: 'GSTIN_NOT_FOUND', message: 'This GSTIN was not found in GST records. Check the 15 characters and try again.' };
+  }
+
+  const failure = classifyProviderFailure({ httpStatus, body, ...GST_SERVICE });
+  let providerHost = 'unknown host';
+  try { providerHost = new URL(config.baseUrl).host; } catch { /* keep default */ }
+  console.warn(`[GST Verification] Provider could not verify: HTTP ${httpStatus} from ${providerHost}, ${failure.reason}`);
+  return { outcome: 'UNABLE_TO_VERIFY', definitive: false, requestId, ...failure };
+}
+
+/** Short-lived signed proof that this exact GSTIN was verified as active (used by supplier signup). */
+function issueGstSignupToken({ gstin, legalName, testMode }) {
+  return jwt.sign(
+    { purpose: GST_SIGNUP_TOKEN_PURPOSE, g: gstin, legalName: legalName || null, testMode: Boolean(testMode) },
+    ENV.JWT_SECRET,
+    { expiresIn: SIGNUP_TOKEN_TTL },
+  );
+}
+
+/**
+ * Verifies a 15-character Indian GSTIN with the GST provider.
+ * Statuses: VERIFIED (active registration) | NOT_VERIFIED (not found / not active) | UNABLE_TO_VERIFY (provider could not answer).
+ * Taxpayer details come only from the provider; nothing is filled in from what the user typed.
+ * `request` can be replaced in tests; it defaults to axios.post.
+ */
+export async function verifyGstin({ gstin, userId = null, bypassCache = false, request = axios.post }) {
+  const cleanGstin = String(gstin || '').trim().toUpperCase();
   if (!GSTIN_REGEX.test(cleanGstin)) {
     const error = new Error('Invalid GSTIN format. Standard 15-character Indian GSTIN is required (e.g. 27ABCDE1234F1Z5).');
     error.statusCode = 422;
@@ -453,119 +525,83 @@ export async function verifyGstin({
     throw error;
   }
 
-  // 2. Cache check
   const cacheKey = `GST:${cleanGstin}`;
-  if (!bypassCache) {
-    const cached = gstinVerificationCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return {
-        ...cached.result,
-        fromCache: true,
-      };
-    }
+  const cached = gstinVerificationCache.get(cacheKey);
+  let answer;
+  let fromCache = false;
+  if (!bypassCache && cached && cached.expiresAt > Date.now()) {
+    answer = cached.answer;
+    fromCache = true;
+  } else {
+    answer = await queryGstProvider({ gstin: cleanGstin, request });
+    // Only real answers are cached; failures are retried next time
+    if (answer.definitive) gstinVerificationCache.set(cacheKey, { answer, expiresAt: Date.now() + GST_CACHE_TTL_MS });
   }
 
   const stateCode = cleanGstin.slice(0, 2);
-  const stateName = GST_STATE_CODES[stateCode] || 'India';
-  const pan = cleanGstin.slice(2, 12);
-  const entityCode = pan[3];
-  const constitutionOfBusiness = GST_ENTITY_TYPES[entityCode] || 'Business Entity';
-
-  let providerSucceeded = false;
-  let liveData = null;
-  let providerRequestId = null;
-  const config = getGstProviderConfig();
-
-  // 3. Attempt Live Provider Call
-  if (config.baseUrl && config.apiId && config.apiKey && config.tokenId) {
-    try {
-      const payload = {
-        api_id: config.apiId,
-        api_key: config.apiKey,
-        token_id: config.tokenId,
-        gstin: cleanGstin,
-      };
-
-      const response = await axios.post(config.baseUrl, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': config.apiKey,
-          api_key: config.apiKey,
-          token_id: config.tokenId,
-          api_id: config.apiId,
-          'X-Tunnel-Skip-Anti-Phishing-Page': 'true',
-        },
-        timeout: config.timeoutMs,
-        validateStatus: () => true, // inspect all status codes
-      });
-
-      if (response.status === 200 && (response.data?.success === true || response.data?.data)) {
-        providerSucceeded = true;
-        liveData = response.data.data || response.data;
-        providerRequestId = response.data.requestId || response.data.client_id || null;
-      } else {
-        console.warn(`[GST Verification] Provider returned HTTP ${response.status}. Using statutory verification fallback.`);
-      }
-    } catch (err) {
-      console.warn(`[GST Verification] Provider network call failed: ${err.message}. Using statutory verification fallback.`);
-    }
+  let testMode = false;
+  if (!answer.definitive && isGstTestMode()) {
+    console.warn(`[GST Verification] TEST MODE: provider unavailable (${answer.reason}); treating GSTIN as verified for testing.`);
+    testMode = true;
+    answer = {
+      outcome: 'VERIFIED', definitive: false, requestId: 'TEST_MODE', record: null, reason: 'TEST_MODE',
+      message: `TEST MODE: the GST verification service is unavailable (${answer.reason}), so this GSTIN was marked as verified for testing only. It was not checked with GST records.`,
+    };
   }
 
-  // 4. Construct Verified Result
-  const resolvedLegalName =
-    liveData?.legal_name ||
-    liveData?.trade_name ||
-    liveData?.legalName ||
-    legalName ||
-    `Registered Taxpayer (${pan})`;
-
-  const resolvedTradeName =
-    liveData?.trade_name ||
-    liveData?.legal_name ||
-    legalName ||
-    resolvedLegalName;
-
+  const record = answer.record || {};
+  const verified = answer.outcome === 'VERIFIED';
   const result = {
-    valid: true,
+    verified,
+    status: answer.outcome,
     gstin: cleanGstin,
-    status: liveData?.status || 'ACTIVE',
-    legalName: resolvedLegalName,
-    tradeName: resolvedTradeName,
-    pan,
+    gstStatus: record.gstStatus || null,
+    legalName: record.legalName || null,
+    tradeName: record.tradeName || null,
+    state: record.state || GST_STATE_CODES[stateCode] || null,
     stateCode,
-    state: liveData?.state || stateName,
-    taxpayerType: liveData?.taxpayer_type || liveData?.taxpayerType || 'Regular',
-    constitutionOfBusiness: liveData?.constitution_of_business || constitutionOfBusiness,
-    source: providerSucceeded ? 'EXTERNAL_PROVIDER' : 'STATUTORY_VERIFICATION',
-    requestId: providerRequestId || `GST-${Date.now()}`,
-    verifiedAt: new Date().toISOString(),
-    message: 'GSTIN successfully verified and active on statutory GST network.',
+    pan: cleanGstin.slice(2, 12),
+    taxpayerType: record.taxpayerType || null,
+    constitutionOfBusiness: record.constitutionOfBusiness || null,
+    registrationDate: record.registrationDate || null,
+    reason: answer.reason,
+    message: answer.message,
+    requestId: answer.requestId || null,
+    checkedAt: new Date().toISOString(),
+    ...(testMode ? { testMode: true } : {}),
+    ...(fromCache ? { fromCache: true } : {}),
+    ...(verified ? { verificationToken: issueGstSignupToken({ gstin: cleanGstin, legalName: record.legalName, testMode }) } : {}),
   };
 
-  // Cache verified result
-  gstinVerificationCache.set(cacheKey, {
-    result,
-    expiresAt: Date.now() + GST_CACHE_TTL_MS,
-  });
-
-  // 5. Update user record if authenticated
-  if (userId) {
+  // Signed-in users: record only a real, active verification
+  if (userId && verified && !testMode) {
     try {
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          gstin: cleanGstin,
-          gstStatus: 'Regular GST Registration',
-          taxId: cleanGstin,
-          pan,
-        },
-      });
+      await prisma.user.update({ where: { id: userId }, data: { gstin: cleanGstin, taxId: cleanGstin } });
     } catch {
-      // Non-blocking
+      // Non-blocking: the verification answer is still returned
     }
   }
 
   return result;
+}
+
+/**
+ * Supplier signup check: a GSTIN is accepted only with a valid, unexpired verification token for that
+ * exact GSTIN. Throws 400 otherwise. Returns { legalName, testMode }.
+ */
+export function resolveSignupGstin({ token, gstin }) {
+  const cleanGstin = String(gstin || '').trim().toUpperCase();
+  if (!token) throw inputError('Please verify your GSTIN before completing signup.', 'GSTIN_NOT_VERIFIED', 400);
+  let payload;
+  try {
+    payload = jwt.verify(token, ENV.JWT_SECRET);
+  } catch {
+    throw inputError('Your GSTIN verification has expired. Please verify your GSTIN again.', 'GSTIN_VERIFICATION_EXPIRED', 400);
+  }
+  if (payload?.purpose !== GST_SIGNUP_TOKEN_PURPOSE || payload.g !== cleanGstin) {
+    throw inputError('The GSTIN you submitted is different from the one that was verified. Please verify again.', 'GSTIN_MISMATCH', 400);
+  }
+  return { legalName: payload.legalName || null, testMode: Boolean(payload.testMode) };
 }
 
 /**

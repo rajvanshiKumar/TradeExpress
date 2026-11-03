@@ -15,6 +15,7 @@ import {
   Package,
   Plus,
   Settings,
+  UserCog,
   ShieldCheck,
   Truck,
   Warehouse,
@@ -65,6 +66,7 @@ export const SUPPLIER_NAV_GROUPS = [
     items: [
       { id: 'profile', label: 'Company Profile', to: '/supplier/profile', icon: Building2 },
       { id: 'notifications', label: 'Notifications', to: '/supplier/notifications', icon: Bell, badgeKey: 'notifications' },
+      { id: 'account-settings', label: 'Account Settings', to: '/supplier/account-settings', icon: UserCog },
       { id: 'settings', label: 'Store Settings', to: '/supplier/settings', icon: Settings },
     ],
   },
@@ -212,7 +214,7 @@ export default function SupplierSidebar() {
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <div className="flex items-center gap-2">
             <span className="rounded-md bg-emerald-800 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
-              Supplier HQ
+              Supplier Dashboard
             </span>
             <span className="text-xs font-bold text-slate-700">{supplierCode}</span>
           </div>
@@ -322,6 +324,7 @@ export default function SupplierSidebar() {
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-xs font-bold text-navy-950">{displayName}</p>
+                    <p className="text-[11px] font-semibold text-emerald-700">Supplier Dashboard</p>
                     <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                       <span>{supplierCode}</span>
                       {isVerified && <ShieldCheck className="size-3 text-emerald-600" title="Verified" />}

@@ -1,12 +1,13 @@
+import { Link } from 'react-router-dom';
 import { ArrowRight, CalendarDays, Lightbulb } from 'lucide-react';
 import Button from '../common/Button';
-import { HELP_AUDIENCES, getHelpArticle, getHelpCategory } from '../../data/help/helpContent';
+import { HELP_AUDIENCES, getHelpArticle, getHelpCategory, helpArticlePath } from '../../data/help/helpContent';
 import { formatDate } from '../../utils/formatDate';
 
 const audienceLabel = (id) => HELP_AUDIENCES.find((audience) => audience.id === id)?.label || 'Everyone';
 
 /** Renders one help article (paragraphs, steps, lists, notes), its action and related articles. */
-export default function HelpArticleView({ article, onOpenArticle }) {
+export default function HelpArticleView({ article }) {
   const related = (article.related || []).map(getHelpArticle).filter(Boolean);
 
   return (
@@ -70,14 +71,13 @@ export default function HelpArticleView({ article, onOpenArticle }) {
           <ul className="mt-2 space-y-1">
             {related.map((item) => (
               <li key={item.slug}>
-                <button
-                  type="button"
-                  onClick={() => onOpenArticle(item.slug)}
+                <Link
+                  to={helpArticlePath(item.slug)}
                   className="group flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left text-sm text-navy-800 transition-colors hover:bg-success-50 hover:text-success"
                 >
                   <span>{item.title}</span>
                   <ArrowRight className="size-4 shrink-0 text-muted group-hover:text-success" aria-hidden="true" />
-                </button>
+                </Link>
               </li>
             ))}
           </ul>

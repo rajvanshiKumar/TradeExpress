@@ -1,16 +1,14 @@
 import * as ticketService from '../services/ticketService.js';
 
+// Identity and staff status always come from the authenticated user, never from the request.
+const isStaff = (user) => user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+
 export async function createTicket(req, res, next) {
   try {
-    const userId = req.user?.id || req.body.userId;
     const { subject, category, priority, message } = req.body;
 
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'User must be authenticated to create a ticket.' });
-    }
-
     const ticket = await ticketService.createTicket({
-      userId,
+      userId: req.user.id,
       subject,
       category,
       priority,
@@ -29,10 +27,8 @@ export async function createTicket(req, res, next) {
 
 export async function getTickets(req, res, next) {
   try {
-    const userId = req.user?.id || req.query.userId;
-    const isAdmin = req.user?.role === 'ADMIN' || req.query.admin === 'true';
-
-    if (isAdmin) {
+    // Staff see every ticket; everyone else sees only their own
+    if (isStaff(req.user)) {
       const { status, category, priority, search, page, limit } = req.query;
       const result = await ticketService.getAllTickets({
         status,
@@ -45,11 +41,7 @@ export async function getTickets(req, res, next) {
       return res.json({ success: true, data: result });
     }
 
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'User ID is required.' });
-    }
-
-    const tickets = await ticketService.getUserTickets(userId);
+    const tickets = await ticketService.getUserTickets(req.user.id);
     res.json({
       success: true,
       data: tickets,
@@ -61,11 +53,7 @@ export async function getTickets(req, res, next) {
 
 export async function getTicketById(req, res, next) {
   try {
-    const { id } = req.params;
-    const userId = req.user?.id || req.query.userId;
-    const isAdmin = req.user?.role === 'ADMIN' || req.query.admin === 'true';
-
-    const ticket = await ticketService.getTicketById(id, userId, isAdmin);
+    const ticket = await ticketService.getTicketById(req.params.id, req.user.id, isStaff(req.user));
     res.json({
       success: true,
       data: ticket,
@@ -77,15 +65,11 @@ export async function getTicketById(req, res, next) {
 
 export async function addMessage(req, res, next) {
   try {
-    const { id } = req.params;
-    const { message, senderRole } = req.body;
-    const role = senderRole || (req.user?.role === 'ADMIN' ? 'ADMIN' : 'USER');
-
     const created = await ticketService.addTicketMessage({
-      ticketId: id,
-      senderRole: role,
-      message,
-      userId: req.user?.id,
+      ticketId: req.params.id,
+      senderRole: isStaff(req.user) ? 'ADMIN' : 'USER',
+      message: req.body.message,
+      userId: req.user.id,
     });
 
     res.status(201).json({
@@ -100,10 +84,9 @@ export async function addMessage(req, res, next) {
 
 export async function updateStatus(req, res, next) {
   try {
-    const { id } = req.params;
     const { status } = req.body;
 
-    const updated = await ticketService.updateTicketStatus(id, status);
+    const updated = await ticketService.updateTicketStatus(req.params.id, status);
     res.json({
       success: true,
       message: `Ticket status updated to ${status}.`,

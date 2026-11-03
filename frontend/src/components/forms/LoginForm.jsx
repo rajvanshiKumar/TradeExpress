@@ -85,6 +85,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     phone: "",
     rememberMe: true,
   });
+  const mobileMaxDigits = Math.max(...(COUNTRY_PHONE_RULES[values.country]?.lengths || [10]));
 
   // 6 separate OTP box digits for Email and Mobile OTP
   const [emailOtpDigits, setEmailOtpDigits] = useState(["", "", "", "", "", ""]);
@@ -223,9 +224,9 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     }
   };
 
-  /** Strips all alphabet / non-numeric characters from mobile number */
+  /** Strips all alphabet / non-numeric characters and stops at the country's mobile length (10 for India) */
   const handlePhoneChange = (e) => {
-    const onlyDigits = e.target.value.replace(/\D/g, "");
+    const onlyDigits = e.target.value.replace(/\D/g, "").slice(0, mobileMaxDigits);
     setValues((prev) => ({ ...prev, phone: onlyDigits }));
     if (errors.phone) {
       setErrors((prev) => ({ ...prev, phone: "" }));
@@ -957,7 +958,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
                   type="tel"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  maxLength={15}
+                  maxLength={mobileMaxDigits}
                   required
                   autoComplete="off"
                   name="user_mobile_number"

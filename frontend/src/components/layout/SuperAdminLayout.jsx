@@ -15,6 +15,7 @@ import {
   LifeBuoy,
   UserCheck,
   Sliders,
+  UserCog,
   BarChart3,
   FileCheck2,
   LogOut,
@@ -41,6 +42,7 @@ const NAV_ITEMS = [
   { to: '/super-admin/tickets', label: 'Support Desk', icon: LifeBuoy },
   { to: '/super-admin/admins', label: 'Admin Staff & Roles', icon: UserCheck },
   { to: '/super-admin/settings', label: 'Platform Settings', icon: Sliders },
+  { to: '/super-admin/account-settings', label: 'Account Settings', icon: UserCog },
   { to: '/super-admin/reports', label: 'Financial Reports', icon: BarChart3 },
   { to: '/super-admin/audit', label: 'Security & Audit Log', icon: FileCheck2 },
 ];

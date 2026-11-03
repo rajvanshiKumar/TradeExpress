@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { signJwt } from '../utils/jwt.js';
 import { normalizeMobile, validateVerifiedMobile, validateVerifiedEmail, validateEmailLoginOtp, issueVerifiedEmailToken } from './otpService.js';
-import { resolveSignupPanAadhaar } from './verificationService.js';
+import { resolveSignupGstin, resolveSignupPanAadhaar } from './verificationService.js';
 import { getVerifiedGoogleProfile } from './googleAuthService.js';
 import { validatePassword } from '../utils/passwordValidator.js';
 import {
@@ -535,6 +535,7 @@ export async function registerSupplier({
   panAadhaarStatus = 'NOT_STARTED',
   panAadhaarLinked = false,
   panAadhaarToken,
+  gstVerificationToken,
   documents = [],
   verificationToken,
   emailVerificationToken,
@@ -597,6 +598,9 @@ export async function registerSupplier({
     }
     validateVerifiedEmail({ email: normalizedEmail, verificationToken: emailVerificationToken });
     resumeUser = existingEmail;
+  } else {
+    // A new supplier must also have verified the email address (OTP or Google) before the account is created
+    validateVerifiedEmail({ email: normalizedEmail, verificationToken: emailVerificationToken });
   }
 
   if (existingPhone && existingPhone.id !== resumeUser?.id) {
@@ -718,13 +722,42 @@ export async function registerSupplier({
     claimedLinked: panAadhaarStatus === 'LINKED' || panAadhaarLinked === true || panAadhaarLinked === 'true',
   });
 
+  // A GST Certificate GSTIN must have been verified as active with the GST provider for this exact GSTIN
+  if (isIndia && isGstDoc) {
+    resolveSignupGstin({ token: gstVerificationToken, gstin: cleanGstin });
+  } else if (isIndia && businessType) {
+    // Other certificates have no verification service: the number must match its published format
+    const certificate = String(taxId || '').trim().toUpperCase();
+    const udyam = /^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/;
+    const udyogAadhaar = /^[A-Z]{2}\d{2}[A-Z]\d{7}$/;
+    const formats = {
+      'Udyam Certificate': [udyam],
+      'MSME Certificate': [udyam, udyogAadhaar],
+      'Udyog Aadhaar': [udyogAadhaar],
+    };
+    const patterns = formats[businessType] || [/^[A-Z0-9][A-Z0-9/-]{3,29}$/];
+    if (!certificate || !patterns.some((pattern) => pattern.test(certificate))) {
+      const error = new Error(`Enter a valid ${businessType === 'Other' ? (businessTypeOther || 'certificate') : businessType} number.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  // Office phone (optional): digits only, 10 digits
+  const cleanBusinessPhone = businessPhone ? String(businessPhone).replace(/\D/g, '') : '';
+  if (cleanBusinessPhone && cleanBusinessPhone.length !== 10) {
+    const error = new Error('Office phone number must be exactly 10 digits.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   // Year established validation
   let parsedYear = null;
   if (yearEstablished) {
     parsedYear = parseInt(yearEstablished, 10);
     const currentYear = new Date().getFullYear();
-    if (isNaN(parsedYear) || parsedYear < 1800 || parsedYear > currentYear) {
-      const error = new Error(`Year established must be between 1800 and ${currentYear}.`);
+    if (!/^\d{4}$/.test(String(yearEstablished).trim()) || parsedYear < 1900 || parsedYear > currentYear) {
+      const error = new Error(`Year established must be between 1900 and ${currentYear}.`);
       error.statusCode = 400;
       throw error;
     }
@@ -837,7 +870,7 @@ export async function registerSupplier({
       gstin: cleanGstin,
       pan: cleanPan,
       taxId: (taxId || cleanGstin || '').trim() || null,
-      businessPhone: businessPhone ? businessPhone.trim() : null,
+      businessPhone: cleanBusinessPhone || null,
       yearEstablished: parsedYear,
       companyDescription: cleanDesc,
       logoUrl: logoUrl || null,
@@ -1033,31 +1066,7 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
       matches = await bcrypt.compare(trimmedPass, user.passwordHash);
     }
 
-    // Super Admin credentials match (including temporary dev credentials: 123456)
-    if (!matches && (user.role === 'SUPER_ADMIN' || user.email === 'krajvanshi244@gmail.com')) {
-      if (
-        password === '123456' ||
-        trimmedPass === '123456' ||
-        password === 'super-raj@12345' ||
-        trimmedPass === 'super-raj@12345' ||
-        password === 'modiji@12345' ||
-        trimmedPass === 'modiji@12345'
-      ) {
-        matches = true;
-      }
-    }
-
-    // Admin emergency match if password is modiji@12345
-    if (!matches && user.role === 'ADMIN') {
-      if (
-        password === 'modiji@12345' ||
-        trimmedPass === 'modiji@12345' ||
-        trimmedPass.toLowerCase() === 'modiji@12345' ||
-        trimmedPass === 'Modiji@12345'
-      ) {
-        matches = true;
-      }
-    }
+    // Admin accounts authenticate only with their stored password (no built-in or shared passwords)
 
     if (!matches) {
       const error = new Error('Invalid email or password.');
@@ -1254,14 +1263,16 @@ export async function changePassword({ userId, currentPassword, newPassword }) {
   return { success: true, message: 'Password changed successfully.' };
 }
 
-export async function updateUserProfile(userId, { name, phone, city, country, company, gstin }) {
+/**
+ * Ordinary profile fields only. Phone number and GSTIN change only through their verified flows
+ * (OTP for phone, GST verification for GSTIN), so they are not accepted here.
+ */
+export async function updateUserProfile(userId, { name, city, country, company }) {
   const data = {};
   if (name) data.name = name.trim();
-  if (phone) data.phone = phone.trim();
   if (city) data.city = city.trim();
   if (country) data.country = country.trim();
   if (company !== undefined) data.company = (company || '').trim();
-  if (gstin !== undefined) data.gstin = (gstin || '').trim();
 
   const user = await prisma.user.update({
     where: { id: userId },
@@ -1411,8 +1422,8 @@ function buildBusinessUpdate({ business = {}, statutory = {}, warehouse = {} }) 
 
   if (business.yearEstablished !== undefined && business.yearEstablished !== null && String(business.yearEstablished).trim() !== '') {
     const year = parseInt(business.yearEstablished, 10);
-    if (Number.isNaN(year) || year < 1800 || year > new Date().getFullYear()) {
-      throw kycError(`Year established must be between 1800 and ${new Date().getFullYear()}.`, 400, 'yearEstablished');
+    if (!/^\d{4}$/.test(String(business.yearEstablished).trim()) || year < 1900 || year > new Date().getFullYear()) {
+      throw kycError(`Year established must be between 1900 and ${new Date().getFullYear()}.`, 400, 'yearEstablished');
     }
     data.yearEstablished = year;
   }

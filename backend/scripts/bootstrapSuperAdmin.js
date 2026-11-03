@@ -1,37 +1,62 @@
 import 'dotenv/config';
+import { pathToFileURL } from 'url';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { validatePassword } from '../src/utils/passwordValidator.js';
 
 const prisma = new PrismaClient();
 
-export async function bootstrapSuperAdmin() {
-  const hash = await bcrypt.hash('123456', 10);
-  const user = await prisma.user.upsert({
-    where: { email: 'krajvanshi244@gmail.com' },
-    update: {
-      name: 'Rajvanshi Kumar (Super Admin)',
-      role: 'SUPER_ADMIN',
-      adminRole: 'SUPER_ADMIN',
-      isActive: true,
-      status: 'ACTIVE',
-      passwordHash: hash,
-      company: 'TradeExpress Global HQ',
-    },
-    create: {
-      email: 'krajvanshi244@gmail.com',
-      passwordHash: hash,
-      name: 'Rajvanshi Kumar (Super Admin)',
-      role: 'SUPER_ADMIN',
-      adminRole: 'SUPER_ADMIN',
-      isActive: true,
-      status: 'ACTIVE',
-      phone: '9608888888',
-      isPhoneVerified: true,
-      company: 'TradeExpress Global HQ',
-    },
-  });
+// The password this script used to force on every start. It is public (it was in the source code), so an
+// account that still has it is rotated to SUPER_ADMIN_PASSWORD as soon as that variable is set.
+const KNOWN_DEFAULT_PASSWORD = '123456';
 
-  // Seed default platform settings if empty
+/**
+ * Ensures a Super Admin exists and the platform settings are seeded.
+ *
+ * - Never overwrites an existing Super Admin's password, except to replace the old public default.
+ * - Creates the Super Admin only when none exists, using SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD.
+ * - Never logs passwords.
+ */
+export async function bootstrapSuperAdmin() {
+  const email = (process.env.SUPER_ADMIN_EMAIL || 'krajvanshi244@gmail.com').trim().toLowerCase();
+  const newPassword = process.env.SUPER_ADMIN_PASSWORD || '';
+  const passwordCheck = newPassword ? validatePassword(newPassword) : { isValid: false };
+  if (newPassword && !passwordCheck.isValid) {
+    console.warn(`[Super Admin] SUPER_ADMIN_PASSWORD does not meet the password policy (${passwordCheck.message}). It was not applied.`);
+  }
+
+  let user = await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' }, orderBy: { createdAt: 'asc' } });
+  let auditNote = null;
+
+  if (!user) {
+    if (!passwordCheck.isValid) {
+      console.warn('[Super Admin] No Super Admin exists. Set SUPER_ADMIN_EMAIL and a strong SUPER_ADMIN_PASSWORD in backend/.env, then restart.');
+    } else {
+      user = await prisma.user.create({
+        data: {
+          email,
+          passwordHash: await bcrypt.hash(newPassword, 10),
+          name: 'Super Admin',
+          role: 'SUPER_ADMIN',
+          adminRole: 'SUPER_ADMIN',
+          isActive: true,
+          status: 'ACTIVE',
+          company: 'TradeExpress',
+        },
+      });
+      auditNote = 'Super Admin created from SUPER_ADMIN_EMAIL / SUPER_ADMIN_PASSWORD';
+    }
+  } else if (await bcrypt.compare(KNOWN_DEFAULT_PASSWORD, user.passwordHash)) {
+    if (passwordCheck.isValid) {
+      await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(newPassword, 10) } });
+      auditNote = 'Super Admin password changed from the public default to SUPER_ADMIN_PASSWORD';
+      console.log('[Super Admin] Default password replaced with SUPER_ADMIN_PASSWORD. You can now remove SUPER_ADMIN_PASSWORD from backend/.env.');
+    } else {
+      console.warn('[Super Admin] WARNING: the Super Admin still uses the public default password. Set a strong SUPER_ADMIN_PASSWORD in backend/.env and restart.');
+    }
+  }
+
+  // Seed default platform settings if empty (existing values are never changed)
   const defaultSettings = [
     { key: 'platform_name', value: 'TradeExpress', category: 'general', description: 'Platform display name' },
     { key: 'maintenance_mode', value: 'false', category: 'general', description: 'System-wide maintenance mode switch' },
@@ -43,48 +68,40 @@ export async function bootstrapSuperAdmin() {
     { key: 'rfq_require_approval', value: 'false', category: 'operations', description: 'Whether RFQs must be vetted before broadcasting to suppliers' },
     { key: 'dispute_auto_escalate_hours', value: '48', category: 'disputes', description: 'Hours before an unresolved dispute escalates to Super Admin' },
   ];
-
   for (const s of defaultSettings) {
     await prisma.platformSetting.upsert({
       where: { key: s.key },
       update: {},
-      create: {
-        key: s.key,
-        value: s.value,
-        category: s.category,
-        description: s.description,
-        updatedBy: user.email,
+      create: { key: s.key, value: s.value, category: s.category, description: s.description, updatedBy: user?.email || 'system' },
+    });
+  }
+
+  if (user && auditNote) {
+    await prisma.auditLog.create({
+      data: {
+        actorId: user.id,
+        actorEmail: user.email,
+        actorRole: 'SUPER_ADMIN',
+        action: 'BOOTSTRAP',
+        resource: 'SYSTEM',
+        targetId: user.id,
+        details: { note: auditNote },
+        result: 'SUCCESS',
       },
     });
   }
 
-  // Record initial bootstrap audit log
-  await prisma.auditLog.create({
-    data: {
-      actorId: user.id,
-      actorEmail: user.email,
-      actorRole: 'SUPER_ADMIN',
-      action: 'BOOTSTRAP',
-      resource: 'SYSTEM',
-      targetId: user.id,
-      details: { note: 'Super Admin initialized successfully with full platform control' },
-      result: 'SUCCESS',
-    },
-  });
-
-  console.log('Successfully bootstrapped Super Admin:', {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    status: user.status,
-  });
+  if (user) console.log('Super Admin ready:', { id: user.id, email: user.email });
 }
 
-bootstrapSuperAdmin()
-  .catch((err) => {
-    console.error('Error bootstrapping Super Admin:', err);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// Run directly with `node scripts/bootstrapSuperAdmin.js`; when imported by the server, the server calls it
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  bootstrapSuperAdmin()
+    .catch((err) => {
+      console.error('Error bootstrapping Super Admin:', err);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

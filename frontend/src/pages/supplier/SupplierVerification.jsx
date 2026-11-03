@@ -52,7 +52,7 @@ function validate(form, { submitting, documentCount }) {
   if (business.country === 'India' && business.postalCode && !PIN_RE.test(business.postalCode.trim())) errors.postalCode = 'Enter a valid 6-digit PIN code.';
   if (business.yearEstablished) {
     const year = Number(business.yearEstablished);
-    if (!Number.isInteger(year) || year < 1800 || year > new Date().getFullYear()) errors.yearEstablished = `Enter a year between 1800 and ${new Date().getFullYear()}.`;
+    if (!Number.isInteger(year) || year < 1900 || year > new Date().getFullYear()) errors.yearEstablished = `Enter a year between 1900 and ${new Date().getFullYear()}.`;
   }
   if (submitting && !statutory.gstin.trim() && documentCount === 0) errors.documents = 'Add your GSTIN or at least one business document before submitting.';
   return errors;

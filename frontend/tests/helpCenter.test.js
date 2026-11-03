@@ -9,6 +9,9 @@ import {
   HELP_FAQ_TABS,
   HELP_POPULAR_TOPICS,
   getHelpArticle,
+  helpArticlePath,
+  helpAudiencePath,
+  helpCategoryPath,
 } from '../src/data/help/helpContent.js';
 import { articleBodyText, highlightSegments, searchHelpArticles, tokenize } from '../src/utils/helpSearch.js';
 
@@ -141,10 +144,49 @@ describe('Help Center page', () => {
   const source = fs.readFileSync(path.resolve('src/pages/Help.jsx'), 'utf8');
 
   it('uses the content library, search box, FAQ tabs and the existing ticket system', () => {
-    for (const piece of ['HelpSearchBox', 'HelpFaqTabs', 'HelpArticleView', 'SupportTicketsSection', 'searchHelpArticles']) {
+    for (const piece of ['HelpSearchBox', 'HelpFaqTabs', 'SupportTicketsSection', 'searchHelpArticles']) {
       assert.ok(source.includes(piece), `Help page should use ${piece}`);
     }
     assert.ok(source.includes('How Can We Help You Today?'));
+  });
+
+  it('opens articles and topics as their own pages and keeps old ?article= links working', () => {
+    assert.match(source, /const openArticle = \(slug\) => navigate\(helpArticlePath\(slug\)\);/);
+    assert.match(source, /to=\{helpCategoryPath\(item\.id\)\}/);
+    assert.match(source, /if \(legacyArticle\) navigate\(helpArticlePath\(legacyArticle\), \{ replace: true \}\);/);
+    assert.doesNotMatch(source, /<Modal/);
+  });
+});
+
+describe('Help Center phase 2 pages', () => {
+  const source = fs.readFileSync(path.resolve('src/pages/Help.jsx'), 'utf8');
+  const routes =fs.readFileSync(path.resolve('src/routes/AppRoutes.jsx'), 'utf8');
+  const articlePage = fs.readFileSync(path.resolve('src/pages/help/HelpArticlePage.jsx'), 'utf8');
+  const feedback = fs.readFileSync(path.resolve('src/components/help/HelpFeedback.jsx'), 'utf8');
+
+  it('routes the article, topic, buyer and supplier pages', () => {
+    for (const route of ['/help/article/:slug', '/help/category/:categoryId', '/help/buyers', '/help/suppliers', '/policies']) {
+      assert.ok(routes.includes(`path="${route}"`), `missing route ${route}`);
+    }
+  });
+
+  it('article pages show the article, its topic list, feedback and a not-found state', () => {
+    for (const piece of ['HelpArticleView', 'HelpFeedback', 'In this topic', 'Article not found']) {
+      assert.ok(articlePage.includes(piece), `article page should include ${piece}`);
+    }
+  });
+
+  it('feedback is stored safely in this browser and never claims to have been sent', () => {
+    assert.match(feedback, /try \{\s*localStorage\.setItem/);
+    assert.match(feedback, /catch \{/);
+    assert.doesNotMatch(feedback, /sent to|submitted to|our team will review/i);
+  });
+
+  it('path helpers build the expected URLs', () => {
+    assert.equal(helpArticlePath('post-an-rfq'), '/help/article/post-an-rfq');
+    assert.equal(helpCategoryPath('payments-escrow'), '/help/category/payments-escrow');
+    assert.equal(helpAudiencePath('supplier'), '/help/suppliers');
+    assert.equal(helpAudiencePath('buyer'), '/help/buyers');
   });
 
   it('no longer shows the unverified helpline, email address or non-working language selector', () => {

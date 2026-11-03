@@ -46,29 +46,18 @@ export function AuthProvider({ children }) {
     if (session?.userId && !user) setSession(EMPTY_SESSION);
   }, [session, user, setSession]);
 
-  // Auto-heal admin authentication token if user is signed in as admin/super_admin
+  // An admin session is only valid with the server-issued token from the admin sign-in; without it, sign in again
   useEffect(() => {
     if (session?.userId && (session.role === 'super_admin' || session.role === 'admin')) {
-      const existingToken = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
-      if (!existingToken) {
-        authFetch('/auth/admin-login', {
-          method: 'POST',
-          body: JSON.stringify({ email: 'krajvanshi244@gmail.com', password: '123456' }),
-        })
-          .then((res) => {
-            if (res.ok && res.data?.success && res.data?.data?.token) {
-              try {
-                localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
-                localStorage.setItem('tradesphere_auth_token', res.data.data.token);
-              } catch {
-                // Ignore
-              }
-            }
-          })
-          .catch(() => {});
+      let existingToken = null;
+      try {
+        existingToken = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
+      } catch {
+        existingToken = null;
       }
+      if (!existingToken) setSession(EMPTY_SESSION);
     }
-  }, [session]);
+  }, [session, setSession]);
 
   const lockMessage = () => {
     const seconds = Math.ceil((attempts.lockedUntil - Date.now()) / 1000);
@@ -93,87 +82,33 @@ export function AuthProvider({ children }) {
       return { ok: false, error: GENERIC_FAILURE };
     }
 
+    // The backend is the only authority: it checks the password and returns the account's role.
+    // No passwords or credentials are kept in the browser code.
     let isSuper = false;
     let valid = false;
-
-    // Check Super Admin password (including temporary dev credentials: 123456)
-    if (
-      password === '123456' ||
-      cleanPassword === '123456' ||
-      password === 'super-raj@12345' ||
-      cleanPassword === 'super-raj@12345'
-    ) {
-      valid = true;
-      isSuper = true;
-    }
-
-    // Direct password match for standard admin
-    if (
-      !valid &&
-      (password === 'modiji@12345' ||
-      cleanPassword === 'modiji@12345' ||
-      cleanPassword.toLowerCase() === 'modiji@12345' ||
-      cleanPassword === 'Modiji@12345')
-    ) {
-      valid = true;
-    }
-
-    // Backend MySQL verification
     try {
       const res = await authFetch('/auth/admin-login', {
         method: 'POST',
         body: JSON.stringify({ email: clean, password: cleanPassword || password }),
       });
-      if (res.ok && res.data?.success) {
-        if (res.data.data?.token) {
-          try {
-            localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
-            localStorage.setItem('tradesphere_auth_token', res.data.data.token);
-          } catch {
-            // Ignore
-          }
+      const role = res.data?.data?.user?.role;
+      if (res.ok && res.data?.success && res.data.data?.token && (role === 'SUPER_ADMIN' || role === 'ADMIN')) {
+        try {
+          localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
+          localStorage.setItem('tradesphere_auth_token', res.data.data.token);
+        } catch {
+          // Storage unavailable: the session still works for this tab
         }
-        if (res.data.data?.user?.role === 'SUPER_ADMIN') {
-          valid = true;
-          isSuper = true;
-        } else if (res.data.data?.user?.role === 'ADMIN') {
-          valid = true;
-        }
+        valid = true;
+        isSuper = role === 'SUPER_ADMIN';
       }
     } catch {
-      // Fallback
-    }
-
-    // PBKDF2 WebCrypto fallback
-    if (!valid && isCryptoAvailable() && isAdminConfigured) {
-      try {
-        valid = (await verifyPassword(cleanPassword, ADMIN_PASSWORD_HASH)) ||
-                (await verifyPassword(password, ADMIN_PASSWORD_HASH));
-      } catch {
-        // Fallback
-      }
+      // Server unreachable: sign-in fails below
     }
 
     if (!valid) {
       recordFailure();
       return { ok: false, error: GENERIC_FAILURE };
-    }
-
-    // Ensure token is stored in localStorage if not set yet
-    const currentToken = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
-    if (!currentToken) {
-      try {
-        const tokenRes = await authFetch('/auth/admin-login', {
-          method: 'POST',
-          body: JSON.stringify({ email: 'krajvanshi244@gmail.com', password: 'super-raj@12345' }),
-        });
-        if (tokenRes.ok && tokenRes.data?.success && tokenRes.data?.data?.token) {
-          localStorage.setItem('tradeexpress_auth_token', tokenRes.data.data.token);
-          localStorage.setItem('tradesphere_auth_token', tokenRes.data.data.token);
-        }
-      } catch {
-        // Standalone fallback
-      }
     }
 
     setAttempts({ count: 0, lockedUntil: 0 });

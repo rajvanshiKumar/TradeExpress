@@ -2,7 +2,7 @@ import * as notificationService from '../services/notificationService.js';
 
 export async function getNotifications(req, res, next) {
   try {
-    const userId = req.user?.id || req.query.userId;
+    const userId = req.user.id;
     if (!userId) {
       return res.status(400).json({ success: false, message: 'User ID is required.' });
     }
@@ -54,7 +54,7 @@ export async function createNotification(req, res, next) {
 export async function markAsRead(req, res, next) {
   try {
     const { id } = req.params;
-    const userId = req.user?.id || req.body.userId;
+    const userId = req.user.id;
 
     const updated = await notificationService.markNotificationAsRead(id, userId);
     res.json({
@@ -69,7 +69,7 @@ export async function markAsRead(req, res, next) {
 
 export async function markAllAsRead(req, res, next) {
   try {
-    const userId = req.user?.id || req.body.userId;
+    const userId = req.user.id;
     if (!userId) {
       return res.status(400).json({ success: false, message: 'User ID is required.' });
     }

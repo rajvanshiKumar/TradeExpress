@@ -16,6 +16,7 @@ import {
   Scale,
   Search,
   Settings,
+  UserCog,
   ShieldAlert,
   X,
 } from 'lucide-react';
@@ -51,6 +52,7 @@ export const BUYER_NAV_GROUPS = [
       { id: 'profile', label: 'My Business Profile', to: '/buyer/profile', icon: Building2 },
       { id: 'notifications', label: 'Notifications', to: '/buyer/notifications', icon: Bell, badgeKey: 'notifications' },
       { id: 'disputes', label: 'Help & Disputes', to: '/buyer/disputes', icon: ShieldAlert },
+      { id: 'account-settings', label: 'Account Settings', to: '/buyer/account-settings', icon: UserCog },
       { id: 'settings', label: 'Settings', to: '/buyer/settings', icon: Settings },
     ],
   },

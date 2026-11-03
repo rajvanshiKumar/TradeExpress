@@ -167,6 +167,13 @@ export async function addTicketMessage({ ticketId, senderRole = 'USER', message,
   }
 
   const role = senderRole.toUpperCase();
+  // Only the ticket owner (or support staff) may post on a ticket
+  if (role !== 'ADMIN' && ticket.userId !== userId) {
+    const error = new Error('You can only reply to your own support tickets.');
+    error.statusCode = 403;
+    throw error;
+  }
+
   const createdMessage = await prisma.ticketMessage.create({
     data: {
       ticketId,

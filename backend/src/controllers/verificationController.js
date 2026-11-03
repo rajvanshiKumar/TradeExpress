@@ -101,7 +101,7 @@ export async function getMyPanAadhaarStatus(req, res, next) {
  */
 export async function verifyGstin(req, res, next) {
   try {
-    const { gstin, gstinNumber, legalName } = req.body;
+    const { gstin, gstinNumber } = req.body;
     const finalGstin = gstin || gstinNumber;
 
     if (!finalGstin) {
@@ -115,7 +115,6 @@ export async function verifyGstin(req, res, next) {
 
     const result = await verificationService.verifyGstin({
       gstin: finalGstin,
-      legalName,
       userId,
     });
 

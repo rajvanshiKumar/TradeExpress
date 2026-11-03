@@ -1,7 +1,5 @@
 const API_BASE = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:5000/api').replace(/\/+$/, '');
 
-let tokenRefreshPromise = null;
-
 function buildQueryString(params = {}) {
   const cleanParams = new URLSearchParams();
   Object.entries(params).forEach(([key, val]) => {
@@ -13,44 +11,13 @@ function buildQueryString(params = {}) {
   return str ? `?${str}` : '';
 }
 
-async function ensureAdminToken(forceRefresh = false) {
-  let token = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token') || '';
-  if (token && !forceRefresh) {
-    return token;
-  }
-
-  // Deduplicate concurrent token requests
-  if (tokenRefreshPromise) {
-    return tokenRefreshPromise;
-  }
-
-  tokenRefreshPromise = (async () => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/admin-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ email: 'krajvanshi244@gmail.com', password: '123456' }),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.success && data?.data?.token) {
-        const freshToken = data.data.token;
-        try {
-          localStorage.setItem('tradeexpress_auth_token', freshToken);
-          localStorage.setItem('tradesphere_auth_token', freshToken);
-        } catch {
-          // Ignore localStorage errors
-        }
-        return freshToken;
-      }
-    } catch (err) {
-      console.warn('Super Admin token auto-acquisition notice:', err?.message || err);
-    } finally {
-      tokenRefreshPromise = null;
-    }
+/** The token from the admin sign-in. There is no automatic sign-in: an expired session means signing in again. */
+function ensureAdminToken() {
+  try {
     return localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token') || '';
-  })();
-
-  return tokenRefreshPromise;
+  } catch {
+    return '';
+  }
 }
 
 function getHeaders(token) {
@@ -62,9 +29,9 @@ function getHeaders(token) {
   };
 }
 
-async function request(endpoint, options = {}, isRetry = false) {
+async function request(endpoint, options = {}) {
   const url = `${API_BASE}/super-admin${endpoint}`;
-  let token = await ensureAdminToken();
+  const token = ensureAdminToken();
 
   try {
     const res = await fetch(url, {
@@ -75,18 +42,17 @@ async function request(endpoint, options = {}, isRetry = false) {
       },
     });
 
-    // If 401 Unauthorized (e.g. token missing, expired, or invalid), refresh admin token and retry once
-    if (res.status === 401 && !isRetry) {
+    // Expired or invalid admin session: clear it so the next screen asks the admin to sign in again
+    if (res.status === 401) {
       try {
         localStorage.removeItem('tradeexpress_auth_token');
         localStorage.removeItem('tradesphere_auth_token');
       } catch {
         // Ignore
       }
-      const freshToken = await ensureAdminToken(true);
-      if (freshToken) {
-        return request(endpoint, options, true);
-      }
+      const error = new Error('Your admin session has expired. Please sign in again.');
+      error.status = 401;
+      throw error;
     }
 
     const data = await res.json().catch(() => ({}));

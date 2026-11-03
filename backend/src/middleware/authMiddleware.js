@@ -1,6 +1,12 @@
 import { verifyJwt } from '../utils/jwt.js';
 import prisma from '../config/db.js';
 
+/** True when the token was issued before the account's last password change (or "sign out everywhere"). */
+function isRevokedToken(user, payload) {
+  if (!user.sessionsValidAfter) return false;
+  return !payload.iat || payload.iat * 1000 < user.sessionsValidAfter.getTime();
+}
+
 export async function authenticateJWT(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -30,11 +36,16 @@ export async function authenticateJWT(req, res, next) {
         phone: true,
         city: true,
         country: true,
+        sessionsValidAfter: true,
       },
     });
 
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found.' });
+    }
+
+    if (isRevokedToken(user, payload)) {
+      return res.status(401).json({ success: false, message: 'Your session has ended because your password was changed. Please sign in again.' });
     }
 
     if (user.isActive === false || user.status === 'SUSPENDED') {
@@ -44,7 +55,8 @@ export async function authenticateJWT(req, res, next) {
       });
     }
 
-    req.user = user;
+    const { sessionsValidAfter, ...currentUser } = user; // eslint-disable-line no-unused-vars
+    req.user = currentUser;
     next();
   } catch (error) {
     next(error);
@@ -78,9 +90,15 @@ export async function optionalAuth(req, res, next) {
         isActive: true,
         status: true,
         company: true,
+        sessionsValidAfter: true,
       },
     });
-    req.user = (user && user.isActive !== false && user.status !== 'SUSPENDED') ? user : null;
+    if (user && user.isActive !== false && user.status !== 'SUSPENDED' && !isRevokedToken(user, payload)) {
+      const { sessionsValidAfter, ...currentUser } = user; // eslint-disable-line no-unused-vars
+      req.user = currentUser;
+    } else {
+      req.user = null;
+    }
   } catch {
     req.user = null;
   }

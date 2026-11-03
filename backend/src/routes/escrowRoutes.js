@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import * as escrowController from '../controllers/escrowController.js';
-import { authenticateJWT, optionalAuth } from '../middleware/authMiddleware.js';
+import { authenticateJWT, requireRole } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-router.get('/summary', optionalAuth, escrowController.getSummary);
-router.get('/ledgers', optionalAuth, escrowController.listLedgers);
-router.post('/:orderId/release', optionalAuth, escrowController.releasePayout);
+// Escrow moves real money: platform-wide views and payout release are staff-only
+router.use(authenticateJWT);
+
+router.get('/summary', requireRole('ADMIN'), escrowController.getSummary);
+router.get('/ledgers', requireRole('ADMIN', 'SUPPLIER'), escrowController.listLedgers);
+router.post('/:orderId/release', requireRole('ADMIN'), escrowController.releasePayout);
 
 export default router;

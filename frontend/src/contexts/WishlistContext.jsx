@@ -30,8 +30,8 @@ export function WishlistProvider({ children }) {
       return false;
     }
     const saved = ids.includes(product.id);
+    // No toast: the heart icon itself shows the saved state
     setIds((previous) => (saved ? previous.filter((id) => id !== product.id) : [product.id, ...previous.filter((id) => id !== product.id)]));
-    showToast(saved ? 'Removed from saved products.' : 'Saved to your wishlist.', saved ? 'info' : 'success');
     return !saved;
   }, [user, ids, setIds, showToast]);
 
@@ -52,7 +52,6 @@ export function WishlistProvider({ children }) {
     }
     const saved = supplierIds.includes(company.id);
     setSupplierIds((previous) => (saved ? previous.filter((id) => id !== company.id) : [company.id, ...previous.filter((id) => id !== company.id)]));
-    showToast(saved ? `${company.name} removed from saved suppliers.` : `${company.name} saved to your suppliers.`, saved ? 'info' : 'success');
     return !saved;
   }, [user, supplierIds, setSupplierIds, showToast]);
 

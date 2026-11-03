@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight,
   ChevronRight,
@@ -17,10 +17,8 @@ import {
 } from 'lucide-react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import Breadcrumbs from '../components/common/Breadcrumbs';
-import Modal from '../components/common/Modal';
 import SupportTicketsSection from '../components/support/SupportTicketsSection';
 import HelpSearchBox from '../components/help/HelpSearchBox';
-import HelpArticleView from '../components/help/HelpArticleView';
 import HelpFaqTabs from '../components/help/HelpFaqTabs';
 import Highlight from '../components/help/Highlight';
 import { helpIcon } from '../components/help/helpIcons';
@@ -31,6 +29,9 @@ import {
   HELP_POPULAR_TOPICS,
   getHelpArticle,
   getHelpCategory,
+  helpArticlePath,
+  helpAudiencePath,
+  helpCategoryPath,
 } from '../data/help/helpContent';
 import { searchHelpArticles } from '../utils/helpSearch';
 
@@ -88,7 +89,12 @@ export default function Help() {
   const committedQuery = params.get('q') || '';
   const category = getHelpCategory(params.get('category')) ? params.get('category') : '';
   const audience = HELP_AUDIENCES.some((item) => item.id === params.get('for')) ? params.get('for') : 'all';
-  const article = getHelpArticle(params.get('article') || '');
+  const navigate = useNavigate();
+  // Articles have their own pages now; old ?article= links still work
+  const legacyArticle = params.get('article');
+  useEffect(() => {
+    if (legacyArticle) navigate(helpArticlePath(legacyArticle), { replace: true });
+  }, [legacyArticle, navigate]);
 
   const [query, setQuery] = useState(committedQuery);
   const pendingScroll = useRef(false);
@@ -96,12 +102,20 @@ export default function Help() {
   // Keep the box in step with the URL (browser back/forward)
   useEffect(() => setQuery(committedQuery), [committedQuery]);
 
-  const updateParams = (changes, { push = false } = {}) => {
+  // Links such as /help#support (from the header support menu) open at that section
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return undefined;
+    const timer = setTimeout(() => scrollToId(hash.slice(1)), 50);
+    return () => clearTimeout(timer);
+  }, [hash]);
+
+  const updateParams = (changes) => {
     setParams((previous) => {
       const next = new URLSearchParams(previous);
       Object.entries(changes).forEach(([key, value]) => (value ? next.set(key, value) : next.delete(key)));
       return next;
-    }, { replace: !push });
+    }, { replace: true });
   };
 
   const showResults = Boolean(committedQuery.trim() || category);
@@ -121,17 +135,11 @@ export default function Help() {
     pendingScroll.current = true;
     updateParams({ q: value.trim(), category: '' });
   };
-  const openCategory = (id) => {
-    pendingScroll.current = true;
-    setQuery('');
-    updateParams({ q: '', category: id });
-  };
   const clearResults = () => {
     setQuery('');
     updateParams({ q: '', category: '' });
   };
-  const openArticle = (slug) => updateParams({ article: slug }, { push: true });
-  const closeArticle = () => updateParams({ article: '' });
+  const openArticle = (slug) => navigate(helpArticlePath(slug));
 
   const popularTopics = HELP_POPULAR_TOPICS.map(getHelpArticle).filter(Boolean);
   const visibleCategory = getHelpCategory(category);
@@ -191,7 +199,16 @@ export default function Help() {
             ))}
           </div>
 
-          <p className="mt-6 text-sm text-muted">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm">
+            <Link to={helpAudiencePath('buyer')} className="inline-flex items-center gap-1 font-semibold text-navy-800 hover:text-success">
+              Guides for buyers <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+            <Link to={helpAudiencePath('supplier')} className="inline-flex items-center gap-1 font-semibold text-navy-800 hover:text-success">
+              Guides for suppliers <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          </div>
+
+          <p className="mt-4 text-sm text-muted">
             Can’t find what you need?{' '}
             <a href="#support" onClick={(event) => { event.preventDefault(); scrollToId('support'); }} className="font-semibold text-success hover:underline">
               Contact support
@@ -331,14 +348,13 @@ export default function Help() {
                       </li>
                     ))}
                   </ul>
-                  <button
-                    type="button"
-                    onClick={() => openCategory(item.id)}
+                  <Link
+                    to={helpCategoryPath(item.id)}
                     className="mt-auto inline-flex items-center gap-1 pt-3 text-sm font-semibold text-success hover:underline"
                     aria-label={`View all ${articles.length} articles in ${item.title}`}
                   >
                     View all {articles.length} <ArrowRight className="size-4" aria-hidden="true" />
-                  </button>
+                  </Link>
                 </li>
               );
             })}
@@ -410,14 +426,6 @@ export default function Help() {
         </nav>
       </div>
 
-      <Modal
-        open={Boolean(article)}
-        onClose={closeArticle}
-        title={article?.title || 'Help article'}
-        size="lg"
-      >
-        {article ? <HelpArticleView key={article.slug} article={article} onOpenArticle={openArticle} /> : null}
-      </Modal>
     </div>
   );
 }

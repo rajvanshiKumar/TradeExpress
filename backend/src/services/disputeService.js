@@ -23,6 +23,13 @@ export async function createDispute({
     throw error;
   }
 
+  // Only the buyer who placed the order can dispute it
+  if (!buyerId || order.userId !== buyerId) {
+    const error = new Error('You can only raise a dispute on your own orders.');
+    error.statusCode = 403;
+    throw error;
+  }
+
   if (order.dispute) {
     const error = new Error('A dispute has already been filed for this order.');
     error.statusCode = 400;
@@ -43,7 +50,7 @@ export async function createDispute({
   const dispute = await prisma.dispute.create({
     data: {
       orderId: order.id,
-      buyerId: buyerId || order.userId || 'guest-buyer',
+      buyerId,
       reason: reason || 'QUALITY_MISMATCH',
       description: description?.trim() || 'Goods inspection failed.',
       photoProof: photoProof || null,

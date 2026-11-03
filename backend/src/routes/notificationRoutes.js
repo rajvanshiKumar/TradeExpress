@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import * as notificationController from '../controllers/notificationController.js';
-import { optionalAuth } from '../middleware/authMiddleware.js';
+import { authenticateJWT, requireRole } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-router.use(optionalAuth);
+// Users read and update only their own notifications; only staff can create one for another user
+router.use(authenticateJWT);
 
 router.get('/', notificationController.getNotifications);
-router.post('/', notificationController.createNotification);
+router.post('/', requireRole('ADMIN'), notificationController.createNotification);
 router.patch('/read-all', notificationController.markAllAsRead);
 router.patch('/:id/read', notificationController.markAsRead);
 

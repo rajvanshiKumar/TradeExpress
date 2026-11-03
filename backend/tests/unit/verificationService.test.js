@@ -47,6 +47,28 @@ test('PAN-Aadhaar verification uses only real provider answers', async (t) => {
     assert.equal(isValidAadhaarNumber(VALID_AADHAAR), true);
   });
 
+  await t.test('UAT: sample Aadhaar numbers that fail the check digit still go to the provider, which decides', async () => {
+    const saved = process.env.PAN_AADHAAR_API_BASE_URL;
+    process.env.PAN_AADHAAR_API_BASE_URL = 'https://provider.test/v1/uat/pan/aadhaar-link-status';
+    try {
+      clearVerificationCache();
+      const provider = stubProvider(200, linkedReply('ABXXXXXX4F'));
+      const result = await check(provider.request, { aadhaarNumber: '319857939334' });
+      assert.equal(provider.calls.length, 1, 'UAT sends the number to the provider');
+      assert.equal(result.status, 'LINKED');
+      await assert.rejects(check(provider.request, { aadhaarNumber: '12345' }), (err) => err.code === 'INVALID_AADHAAR_FORMAT');
+    } finally {
+      process.env.PAN_AADHAAR_API_BASE_URL = saved;
+    }
+  });
+
+  await t.test('PROD: the same number is rejected locally without spending a provider credit', async () => {
+    clearVerificationCache();
+    const provider = stubProvider(200, linkedReply('ABXXXXXX4F'));
+    await assert.rejects(check(provider.request, { aadhaarNumber: '319857939334' }), (err) => err.code === 'INVALID_AADHAAR_NUMBER');
+    assert.equal(provider.calls.length, 0);
+  });
+
   await t.test('PAN is required and must be well formed', async () => {
     const provider = stubProvider(200, linkedReply('ABXXXXXX4F'));
     await assert.rejects(check(provider.request, { pan: null }), (err) => err.code === 'PAN_REQUIRED');

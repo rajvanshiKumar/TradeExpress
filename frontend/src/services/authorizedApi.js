@@ -70,7 +70,11 @@ export async function authorizedRequest(method, path, body, { timeoutMs = 15000 
     const message = response.status === 401
       ? 'Your session has expired. Please sign in again.'
       : data?.message || `The server responded with status ${response.status}.`;
-    throw new ApiRequestError(message, response.status, fieldErrors);
+    const error = new ApiRequestError(message, response.status, fieldErrors);
+    // Server error code and retry time (e.g. resend cooldown), for screens that react to them
+    error.code = data?.code;
+    error.cooldownRemaining = data?.cooldownRemaining;
+    throw error;
   }
   return data.data;
 }

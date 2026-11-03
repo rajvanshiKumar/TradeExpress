@@ -16,6 +16,7 @@ import disputeRoutes from './disputeRoutes.js';
 import reviewRoutes from './reviewRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
 import ticketRoutes from './ticketRoutes.js';
+import accountRoutes from './accountRoutes.js';
 import superAdminRoutes from './superAdminRoutes.js';
 import messageRoutes from './messageRoutes.js';
 import verificationRoutes from './verificationRoutes.js';
@@ -49,6 +50,7 @@ router.use('/disputes', disputeRoutes);
 router.use('/reviews', reviewRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/tickets', ticketRoutes);
+router.use('/account', accountRoutes);
 router.use('/messages', messageRoutes);
 router.use('/conversations', messageRoutes);
 

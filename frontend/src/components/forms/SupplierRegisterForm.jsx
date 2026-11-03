@@ -44,6 +44,7 @@ import {
 } from '../../utils/constants';
 import { normalizeEmail, parseMobile, mobileExample, rules, validate, hasErrors } from '../../utils/validators';
 import { validatePassword } from '../../utils/passwordRules';
+import { certificateFormatHint, isValidCertificateFormat, normalizeCertificateNumber } from '../../utils/certificateFormats';
 
 const STEPS = [
   { id: 1, label: 'Account Details', desc: 'Credentials & contact' },
@@ -72,7 +73,7 @@ const getCertificatePlaceholder = (businessType, businessTypeOther) => {
   if (businessType === 'Other') {
     return `Enter ${businessTypeOther?.trim() || 'certificate'} number`;
   }
-  return `Enter ${businessType || 'certificate'} number`;
+  return certificateFormatHint(businessType) || `Enter ${businessType || 'certificate'} number`;
 };
 
 const getCertificateMaxLength = (businessType) => {
@@ -81,6 +82,16 @@ const getCertificateMaxLength = (businessType) => {
   }
   return 30;
 };
+
+// Year Established: a choice of real years only (newest first), so an impossible year cannot be entered
+const YEAR_ESTABLISHED_MIN = 1900;
+const YEAR_ESTABLISHED_OPTIONS = [
+  { value: '', label: 'Not specified' },
+  ...Array.from({ length: new Date().getFullYear() - YEAR_ESTABLISHED_MIN + 1 }, (_, i) => {
+    const year = String(new Date().getFullYear() - i);
+    return { value: year, label: year };
+  }),
+];
 
 const SERVER_UNREACHABLE = 'Unable to reach the TradeExpress server. Please check your connection and try again.';
 // OTP and registration calls wait for email/SMS delivery and password hashing on the server
@@ -183,9 +194,22 @@ export default function SupplierRegisterForm() {
   const [panAadhaarError, setPanAadhaarError] = useState('');
 
   // GSTIN Verification States
-  const [gstVerified, setGstVerified] = useState(false);
+  // Result of the last GSTIN check, for the GSTIN it was run on. "Verified" is derived below so it can
+  // never outlive a change to the GSTIN, business type or country.
+  const [gstCheck, setGstCheck] = useState(null);
   const [gstVerifying, setGstVerifying] = useState(false);
-  const [gstVerificationData, setGstVerificationData] = useState(null);
+  const normalizedTaxId = String(values.taxId || '').trim().toUpperCase();
+  const requiresGstVerification = values.country === 'India' && values.businessType === 'GST Certificate';
+  const gstResult = gstCheck && gstCheck.gstin === normalizedTaxId ? gstCheck : null;
+  const gstVerified = Boolean(gstResult?.verified && gstResult.verificationToken);
+
+  // Other certificate types have no verification service: the Verify button checks the published number
+  // format (shown as "Valid format", never "Verified") for the exact type and number entered.
+  const [certCheck, setCertCheck] = useState(null);
+  const [certChecking, setCertChecking] = useState(false);
+  const certCheckTimer = useRef(null);
+  const certFormatChecked = Boolean(certCheck?.valid && certCheck.type === values.businessType && certCheck.number === normalizedTaxId);
+  useEffect(() => () => clearTimeout(certCheckTimer.current), []);
 
   // Countdown timers for OTP cooldowns
   useEffect(() => {
@@ -230,11 +254,20 @@ export default function SupplierRegisterForm() {
     }
   };
 
+  const mobileMaxDigits = Math.max(...(COUNTRY_PHONE_RULES[values.countryCode || 'India']?.lengths || [10]));
+
   // Handle Input Changes
   const handleChange = (field) => (e) => {
     let val = e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e;
     if (field === 'phone') {
-      val = String(val || '').replace(/\D/g, '');
+      // Digits only, and typing stops at the mobile length for the selected country (10 for India)
+      val = String(val || '').replace(/\D/g, '').slice(0, mobileMaxDigits);
+    }
+    if (field === 'businessPhone') {
+      val = String(val || '').replace(/\D/g, '').slice(0, 10);
+    }
+    if (field === 'yearEstablished') {
+      val = String(val || '').replace(/\D/g, '').slice(0, 4);
     }
 
     setValues((prev) => {
@@ -270,10 +303,7 @@ export default function SupplierRegisterForm() {
       setPhoneOtpError('');
       setPhoneToken('');
 
-      const digits = String(val || '').replace(/\D/g, '');
-      const country = values.countryCode || values.country || 'India';
-      const example = COUNTRY_PHONE_RULES[country]?.example || '98765 43210';
-      const invalidMsg = `Please enter a valid mobile number (e.g. ${example}).`;
+      const digits = String(val || '');
 
       if (digits.length > 0) {
         const nameMissing = !values.name || !values.name.trim();
@@ -287,17 +317,13 @@ export default function SupplierRegisterForm() {
         }
       }
 
-      if (digits.length > 10) {
-        setErrors((prev) => ({ ...prev, phone: invalidMsg }));
-      } else {
-        setErrors((prev) => {
-          if (prev.phone && prev.phone.includes('Please enter a valid mobile number')) {
-            const { phone, ...rest } = prev;
-            return rest;
-          }
-          return prev;
-        });
-      }
+      setErrors((prev) => {
+        if (prev.phone && prev.phone.includes('Please enter a valid mobile number')) {
+          const { phone, ...rest } = prev;
+          return rest;
+        }
+        return prev;
+      });
     }
     if (field === 'email') {
       setEmailVerified(false);
@@ -513,7 +539,7 @@ export default function SupplierRegisterForm() {
       }
       setEmailVerified(true);
       setEmailOtpSent(false);
-      setEmailToken(data.verificationToken || 'evt_verified_email');
+      setEmailToken(data.verificationToken || '');
       setErrors((prev) => ({ ...prev, email: '' }));
     } catch {
       setEmailOtpError(SERVER_UNREACHABLE);
@@ -565,7 +591,7 @@ export default function SupplierRegisterForm() {
           return;
         }
         setEmailVerified(true);
-        setEmailToken(data.verificationToken || 'evt_verified_email');
+        setEmailToken(data.verificationToken || '');
         setOtpModalType(null);
       }
     } catch {
@@ -804,7 +830,8 @@ export default function SupplierRegisterForm() {
 
   // GSTIN Verification
   const handleVerifyGstin = async () => {
-    const rawGst = String(values.taxId || '').trim().toUpperCase();
+    if (gstVerifying) return;
+    const rawGst = normalizedTaxId;
     const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
     if (!gstinRegex.test(rawGst)) {
       setErrors((prev) => ({
@@ -815,6 +842,7 @@ export default function SupplierRegisterForm() {
     }
 
     setGstVerifying(true);
+    setGstCheck(null);
     setErrors((prev) => {
       const next = { ...prev };
       delete next.taxId;
@@ -829,35 +857,58 @@ export default function SupplierRegisterForm() {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({
-          gstin: rawGst,
-          legalName: values.companyName,
-        }),
+        body: JSON.stringify({ gstin: rawGst }),
+        signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success && data.data) {
-        setGstVerified(true);
-        setGstVerificationData(data.data);
+        // Only an answer for this exact GSTIN counts; anything but VERIFIED shows the real reason
+        setGstCheck({ ...data.data, gstin: rawGst });
+        if (!data.data.verified) {
+          setErrors((prev) => ({ ...prev, taxId: data.data.message || 'This GSTIN could not be verified.' }));
+        }
       } else {
-        const msg = data.message || data.error?.message || 'Unable to verify GSTIN.';
-        setErrors((prev) => ({ ...prev, taxId: msg }));
+        setErrors((prev) => ({ ...prev, taxId: data.message || data.error?.message || 'Unable to verify GSTIN. Please try again.' }));
       }
     } catch {
-      // Client-side fallback if server unreachable
-      const stateCode = rawGst.slice(0, 2);
-      const pan = rawGst.slice(2, 12);
-      setGstVerified(true);
-      setGstVerificationData({
-        gstin: rawGst,
-        stateCode,
-        pan,
-        legalName: values.companyName || `Taxpayer (${pan})`,
-        status: 'ACTIVE',
-      });
+      // Never mark a GSTIN as verified without an answer from the server
+      setErrors((prev) => ({ ...prev, taxId: 'Could not reach the TradeExpress verification server. Please check your connection and try again.' }));
     } finally {
       setGstVerifying(false);
     }
+  };
+
+  // Verify automatically once a complete, well-formed GSTIN is entered. Each GSTIN is checked once
+  // automatically; after a failure the Verify button retries.
+  const autoCheckedGstin = useRef('');
+  useEffect(() => {
+    if (!requiresGstVerification || gstResult || gstVerifying) return undefined;
+    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(normalizedTaxId)) return undefined;
+    if (autoCheckedGstin.current === normalizedTaxId) return undefined;
+    const timer = setTimeout(() => {
+      autoCheckedGstin.current = normalizedTaxId;
+      handleVerifyGstin();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [normalizedTaxId, requiresGstVerification, gstResult, gstVerifying]);
+
+  const handleCheckCertificate = () => {
+    if (certChecking) return;
+    const type = values.businessType;
+    const number = normalizedTaxId;
+    setCertChecking(true);
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.taxId;
+      return next;
+    });
+    certCheckTimer.current = setTimeout(() => {
+      const valid = isValidCertificateFormat(type, number);
+      setCertCheck({ type, number, valid });
+      if (!valid) setErrors((prev) => ({ ...prev, taxId: `This does not look like a valid ${getCertificateFieldLabel(type, values.businessTypeOther)} number. Expected: ${certificateFormatHint(type)}.` }));
+      setCertChecking(false);
+    }, 2000);
   };
 
   // Step Validations
@@ -910,16 +961,32 @@ export default function SupplierRegisterForm() {
           const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
           if (!gstinRegex.test(values.taxId.trim().toUpperCase())) {
             stepErrors.taxId = 'Enter a valid 15-character Indian GSTIN (e.g. 27ABCDE1234F1Z5).';
+          } else if (!gstVerified) {
+            // The GSTIN in the box must itself have been verified as active
+            stepErrors.taxId = gstResult && !gstResult.verified
+              ? (gstResult.message || 'This GSTIN could not be verified. Please check it and verify again.')
+              : 'Please verify your GSTIN by clicking “Verify” before continuing.';
           }
         }
+      }
+
+      if (values.country === 'India' && values.businessType && values.businessType !== 'GST Certificate' && values.taxId?.trim() && !stepErrors.taxId && !certFormatChecked) {
+        stepErrors.taxId = certCheck && certCheck.number === normalizedTaxId && !certCheck.valid
+          ? `This does not look like a valid ${getCertificateFieldLabel(values.businessType, values.businessTypeOther)} number. Expected: ${certificateFormatHint(values.businessType)}.`
+          : 'Please click “Verify” to check your certificate number before continuing.';
+      }
+
+      // Office phone (optional): exactly 10 digits when given
+      if (values.businessPhone && values.businessPhone.length !== 10) {
+        stepErrors.businessPhone = 'Office phone number must be exactly 10 digits.';
       }
 
       // Year Established validation
       if (values.yearEstablished) {
         const yr = Number(values.yearEstablished);
         const curr = new Date().getFullYear();
-        if (Number.isNaN(yr) || yr < 1800 || yr > curr) {
-          stepErrors.yearEstablished = `Enter a plausible established year between 1800 and ${curr}.`;
+        if (!Number.isInteger(yr) || yr < YEAR_ESTABLISHED_MIN || yr > curr) {
+          stepErrors.yearEstablished = `Choose a year between ${YEAR_ESTABLISHED_MIN} and ${curr}.`;
         }
       }
 
@@ -1066,8 +1133,9 @@ export default function SupplierRegisterForm() {
       businessTypeOther: values.businessType === 'Other' ? values.businessTypeOther.trim() : '',
       gstStatus: values.country === 'India' ? values.gstStatus : 'Not Applicable',
       taxId: values.taxId ? values.taxId.trim().toUpperCase() : '',
+      gstVerificationToken: requiresGstVerification && gstVerified ? gstResult.verificationToken : null,
       panNumber: values.panNumber ? values.panNumber.trim().toUpperCase() : '',
-      businessPhone: values.businessPhone.trim(),
+      businessPhone: values.businessPhone,
       yearEstablished: values.yearEstablished ? parseInt(values.yearEstablished, 10) : null,
       companyDescription: values.companyDescription.trim(),
       logoUrl: values.logoUrl,
@@ -1081,8 +1149,8 @@ export default function SupplierRegisterForm() {
       panAadhaarCheckedAt: values.panAadhaarCheckedAt || null,
       panAadhaarToken: values.panAadhaarToken || null,
       documents: values.documents || [],
-      verificationToken: phoneToken || 'evt_supplier_phone',
-      emailVerificationToken: emailToken || 'evt_supplier_email',
+      verificationToken: phoneToken || null,
+      emailVerificationToken: emailToken || null,
     };
 
     try {
@@ -1355,6 +1423,8 @@ export default function SupplierRegisterForm() {
                   <div className="relative flex items-center flex-1 min-w-0">
                     <input
                       type="tel"
+                      inputMode="numeric"
+                      maxLength={mobileMaxDigits}
                       placeholder={`e.g. ${COUNTRY_PHONE_RULES[values.countryCode || 'India']?.example || '98765 43210'}`}
                       value={values.phone}
                       onChange={handleChange('phone')}
@@ -1579,8 +1649,6 @@ export default function SupplierRegisterForm() {
                     const selected = typeof val === 'string' ? val : (val?.target?.value ?? '');
                     handleChange('businessType')(selected);
                     handleChange('gstStatus')(selected);
-                    setGstVerified(false);
-                    setGstVerificationData(null);
                   }}
                   options={SUPPLIER_BUSINESS_TYPES}
                   placeholder="Select Certificate / Registration Type"
@@ -1622,12 +1690,11 @@ export default function SupplierRegisterForm() {
                       placeholder={getCertificatePlaceholder(values.businessType, values.businessTypeOther)}
                       value={values.taxId}
                       onChange={(e) => {
-                        handleChange('taxId')(e.target.value.toUpperCase());
-                        setGstVerified(false);
-                        setGstVerificationData(null);
+                        // Any change to the GSTIN needs a fresh verification (the status is derived from the value)
+                        handleChange('taxId')(normalizeCertificateNumber(values.businessType, e.target.value));
                       }}
                       className={`w-full font-mono uppercase rounded-xl border ${
-                        values.businessType === 'GST Certificate' ? 'pl-3.5 pr-28' : 'px-3.5'
+                        values.businessType === 'GST Certificate' ? 'pl-3.5 pr-28' : 'pl-3.5 pr-36'
                       } py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
                         errors.taxId ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
                       }`}
@@ -1643,7 +1710,7 @@ export default function SupplierRegisterForm() {
                           <button
                             type="button"
                             onClick={handleVerifyGstin}
-                            disabled={gstVerifying || (values.taxId || '').length !== 15}
+                            disabled={gstVerifying || normalizedTaxId.length !== 15}
                             className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition"
                           >
                             {gstVerifying ? 'Verifying...' : 'Verify'}
@@ -1651,13 +1718,35 @@ export default function SupplierRegisterForm() {
                         )}
                       </div>
                     )}
+                    {values.businessType !== 'GST Certificate' && (
+                      <div className="absolute right-1.5 flex items-center">
+                        {certFormatChecked ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold" title="The number matches the official format. It has not been checked with a government register.">
+                            <CheckCircle2 className="size-3.5" />
+                            <span>Valid format</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleCheckCertificate}
+                            disabled={certChecking || normalizedTaxId.length < 4}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition"
+                          >
+                            {certChecking ? 'Checking...' : 'Verify'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {errors.taxId && <p className="mt-1 text-xs text-red-600">{errors.taxId}</p>}
-                  {gstVerificationData && values.businessType === 'GST Certificate' && (
+                  {/* Details only for the GSTIN in the box, and only as returned by the GST provider.
+                      Test-mode results have no provider details, so only the "Verified" badge shows. */}
+                  {gstVerified && values.businessType === 'GST Certificate' && !gstResult.testMode && gstResult.legalName && (
                     <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 font-medium bg-emerald-50/70 border border-emerald-200/60 rounded-lg px-2.5 py-1">
                       <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
                       <span>
-                        {gstVerificationData.legalName} • {gstVerificationData.state} ({gstVerificationData.status})
+                        {[gstResult.legalName, gstResult.state].filter(Boolean).join(' • ')}
+                        {gstResult.gstStatus ? ` (${gstResult.gstStatus})` : ''}
                       </span>
                     </div>
                   )}
@@ -1686,12 +1775,18 @@ export default function SupplierRegisterForm() {
                   Office Phone Number (Optional)
                 </label>
                 <input
-                  type="text"
-                  placeholder="e.g. +91 22 4567 8900 ext 102"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="10-digit number, e.g. 2245678900"
                   value={values.businessPhone}
                   onChange={handleChange('businessPhone')}
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm transition focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+                  onKeyDown={handlePhoneKeyDown}
+                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                    errors.businessPhone ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                  }`}
                 />
+                {errors.businessPhone && <p className="mt-1 text-xs text-red-600">{errors.businessPhone}</p>}
               </div>
 
               {/* Year Established */}
@@ -1699,14 +1794,13 @@ export default function SupplierRegisterForm() {
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Year Established (Optional)
                 </label>
-                <input
-                  type="number"
-                  placeholder="e.g. 2012"
+                <CustomSelect
+                  id="supplier-year-established"
                   value={values.yearEstablished}
-                  onChange={handleChange('yearEstablished')}
-                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                    errors.yearEstablished ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                  }`}
+                  onChange={(val) => handleChange('yearEstablished')(typeof val === 'string' ? val : (val?.target?.value ?? ''))}
+                  options={YEAR_ESTABLISHED_OPTIONS}
+                  placeholder="Select year"
+                  searchable={true}
                 />
                 {errors.yearEstablished && <p className="mt-1 text-xs text-red-600">{errors.yearEstablished}</p>}
               </div>

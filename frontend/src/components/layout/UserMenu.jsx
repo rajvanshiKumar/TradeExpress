@@ -11,6 +11,7 @@ import {
   Scale,
   ShieldCheck,
   Sparkles,
+  UserCog,
   UserRound,
 } from 'lucide-react';
 import Dropdown from '../common/Dropdown';
@@ -31,6 +32,12 @@ function AvatarImage({ src }) {
     />
   );
 }
+
+const ACCOUNT_SETTINGS_PATHS = {
+  buyer: '/buyer/account-settings',
+  supplier: '/supplier/account-settings',
+  super_admin: '/super-admin/account-settings',
+};
 
 const ROLE_BADGES = {
   super_admin: {
@@ -242,6 +249,18 @@ export default function UserMenu() {
             <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
               Preferences
             </div>
+
+            {ACCOUNT_SETTINGS_PATHS[user.role] ? (
+              <Link to={ACCOUNT_SETTINGS_PATHS[user.role]} onClick={close} className={menuItemClass}>
+                <span className="flex items-center gap-2.5">
+                  <span className="flex size-6 items-center justify-center rounded-lg bg-slate-100 text-slate-700 shrink-0 group-hover:bg-slate-700 group-hover:text-white transition-colors">
+                    <UserCog className="size-3.5" aria-hidden="true" />
+                  </span>
+                  <span>Account Settings</span>
+                </span>
+                <ChevronRight className="size-3 text-slate-300 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+              </Link>
+            ) : null}
 
             {user.role === 'buyer' && (
               <Link to="/buyer/profile" onClick={close} className={menuItemClass}>

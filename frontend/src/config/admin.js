@@ -1,8 +1,6 @@
 // Admin account configuration, kept apart from buyer and supplier registration.
 //
-// Admin credentials:
-// Email: krajvanshi244@gmail.com
-// Password: modiji@12345
+// Admin sign-in is checked only by the backend (/auth/admin-login). Never write credentials here.
 //
 // Salted PBKDF2 hash of the password is configured below and in .env
 

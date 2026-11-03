@@ -223,3 +223,59 @@ export async function sendSupplierVerificationOtpEmail({ email, name = 'Supplier
 }
 
 
+
+const ACCOUNT_CODE_PURPOSES = {
+  PASSWORD_CHANGE: 'confirm it is you before changing your password',
+  EMAIL_CHANGE_CURRENT: 'confirm it is you before changing your email address',
+  EMAIL_CHANGE_NEW: 'confirm this new email address for your TradeExpress account',
+};
+
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+/** One-time code for an Account Settings change. Returns { success } and never throws. */
+export async function sendAccountCodeEmail({ email, name, otp, purpose }) {
+  try {
+    const transporter = await getTransporter();
+    const action = ACCOUNT_CODE_PURPOSES[purpose] || 'confirm a change to your account';
+    await transporter.sendMail({
+      from: ENV.SMTP_USER ? `TradeExpress Security <${ENV.SMTP_USER}>` : ENV.SMTP_FROM,
+      to: email,
+      subject: `Your TradeExpress verification code: ${otp}`,
+      text: `Hello ${name || ''},\n\nUse this code to ${action}: ${otp}\n\nThe code expires in 5 minutes. If you did not request it, you can ignore this email; your account has not been changed. Never share this code with anyone.\n\nTradeExpress`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px">
+        <h2 style="color:#123f25;margin-top:0">Verify it's you</h2>
+        <p style="color:#334155">Hello ${escapeHtml(name)},</p>
+        <p style="color:#334155">Use this code to ${escapeHtml(action)}:</p>
+        <p style="font-size:32px;font-weight:bold;letter-spacing:6px;color:#123f25;text-align:center;margin:20px 0">${escapeHtml(otp)}</p>
+        <p style="color:#64748b;font-size:13px">The code expires in 5 minutes. If you did not request it, ignore this email; your account has not been changed. Never share this code with anyone.</p>
+      </div>`,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('[TradeExpress Email Error] Account verification code could not be sent:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/** Security notice after an account change (password or email). Returns { success } and never throws. */
+export async function sendAccountSecurityEmail({ email, name, subject, message }) {
+  try {
+    const transporter = await getTransporter();
+    await transporter.sendMail({
+      from: ENV.SMTP_USER ? `TradeExpress Security <${ENV.SMTP_USER}>` : ENV.SMTP_FROM,
+      to: email,
+      subject,
+      text: `Hello ${name || ''},\n\n${message}\n\nIf you did not make this change, contact TradeExpress support immediately.\n\nTradeExpress`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px">
+        <h2 style="color:#123f25;margin-top:0">${escapeHtml(subject)}</h2>
+        <p style="color:#334155">Hello ${escapeHtml(name)},</p>
+        <p style="color:#334155">${escapeHtml(message)}</p>
+        <p style="color:#b91c1c;font-size:13px">If you did not make this change, contact TradeExpress support immediately.</p>
+      </div>`,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('[TradeExpress Email Error] Account security notice could not be sent:', error.message);
+    return { success: false, error: error.message };
+  }
+}

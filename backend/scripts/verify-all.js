@@ -45,13 +45,18 @@ async function runE2EVerification() {
     assert(loginResult.token && loginResult.token.length > 20, 'JWT token successfully generated');
     assert(loginResult.user.role === 'BUYER', 'Buyer role verified in database');
 
-    const adminLogin = await authService.loginUser({
-      email: 'krajvanshi244@gmail.com',
-      password: 'modiji@12345',
-      isAdminLogin: true,
-    });
-    assert(adminLogin.token && adminLogin.token.length > 20, 'Admin JWT token generated');
-    assert(adminLogin.user.role === 'ADMIN' || adminLogin.user.role === 'SUPER_ADMIN', 'Admin or Super Admin role verified in database');
+    // Admin login uses the real Super Admin credentials from the environment (no built-in passwords exist)
+    if (process.env.SUPER_ADMIN_PASSWORD) {
+      const adminLogin = await authService.loginUser({
+        email: process.env.SUPER_ADMIN_EMAIL || 'krajvanshi244@gmail.com',
+        password: process.env.SUPER_ADMIN_PASSWORD,
+        isAdminLogin: true,
+      });
+      assert(adminLogin.token && adminLogin.token.length > 20, 'Admin JWT token generated');
+      assert(adminLogin.user.role === 'ADMIN' || adminLogin.user.role === 'SUPER_ADMIN', 'Admin or Super Admin role verified in database');
+    } else {
+      console.log('  (skipped admin login check: set SUPER_ADMIN_PASSWORD to include it)');
+    }
 
     // TEST 3: Product Retrieval & Image URL Integrity
     console.log('\n[Test 3] Testing Product Retrieval & HD Image URLs...');

@@ -3,8 +3,6 @@ import { Link, useLocation } from "react-router-dom";
 import {
   BadgePercent,
   ChevronDown,
-  Heart,
-  HelpCircle,
   Menu,
   Scale,
   Search,
@@ -20,9 +18,9 @@ import MobileMenu from "./MobileMenu";
 import LanguageSelector from "./LanguageSelector";
 import NotificationsMenu, { CountDot } from "./NotificationsMenu";
 import UserMenu from "./UserMenu";
+import SupportMenu from "./SupportMenu";
 import useAuth from "../../hooks/useAuth";
 import useCart from "../../hooks/useCart";
-import useWishlist from "../../hooks/useWishlist";
 import useDisclosure from "../../hooks/useDisclosure";
 import useScrolled from "../../hooks/useScrolled";
 import { useTranslation } from "../../i18n/LanguageContext";
@@ -47,11 +45,11 @@ function IconLink({ to, icon: Icon, label, count, className = "" }) {
 function isActive(to, location) {
   const [path] = to.split("?");
   if (to.includes("role=supplier")) return false;
-  if (to === "/help" && (location.pathname === "/help" || location.pathname === "/info/help")) return true;
+  // Deals is /products?deal=1: highlight Deals there, and Products only on the plain products page
   if (to.includes("deal=1")) {
     return location.pathname === "/products" && location.search.includes("deal=1");
   }
-  if (path === "/products" && to === "/products") {
+  if (to === "/products") {
     return location.pathname === "/products" && !location.search.includes("deal=1");
   }
   return (
@@ -66,7 +64,6 @@ export default function Header() {
   const { user } = useAuth();
   const { t } = useTranslation();
   const { count: cartCount } = useCart();
-  const { count: wishlistCount } = useWishlist();
   const mobileMenu = useDisclosure();
   const scrolled = useScrolled();
   const [megaOpen, setMegaOpen] = useState(false);
@@ -158,40 +155,26 @@ export default function Header() {
               ...(!isAuthPage
                 ? [{ label: "Compare Products", to: "/compare-products" }]
                 : []),
-              { label: "Wishlist", to: "/wishlist" },
-              ...(user && user.role !== "super_admin"
-                ? [
-                    { label: "Deals", to: "/products?deal=1" },
-                    { label: "Help Center", to: "/help" },
-                  ]
-                : []),
+              { label: "Deals", to: "/products?deal=1" },
               { label: "About Us", to: "/info/about" },
             ].map((item) => {
               const active = isActive(item.to, location);
               const isAbout = item.to === "/info/about";
               const isExporters = item.to === "/exporters";
-              const isWishlist = item.to === "/wishlist";
               const isDeals = item.to.includes("deal=1");
-              const isHelp = item.to === "/help";
 
               // Responsive tiering:
               // - Categories, Products, Suppliers, Post RFQ, Compare Products: visible on lg+ (1024px+)
-              // - Deals: visible on lg+ (1024px+)
-              // - Wishlist (with Heart symbol): visible on min-[1180px]+
-              // - Help Center: visible on xl+ (1280px+)
               // - Exporters: visible on xl+ (1280px+)
+              // - Deals: visible on xl+ (1280px+)
               // - About Us: visible on min-[1420px]+ when logged in, or min-[1360px]+ when guest
               const hideClass = isAbout
                 ? user
                   ? "hidden min-[1420px]:inline-flex "
                   : "hidden min-[1360px]:inline-flex "
-                : isExporters
+                : isExporters || isDeals
                   ? "hidden xl:inline-flex "
-                  : isHelp
-                    ? "hidden xl:inline-flex "
-                    : isWishlist
-                      ? "hidden min-[1180px]:inline-flex "
-                      : "";
+                  : "";
 
               const displayClass = hideClass ? hideClass : "inline-flex ";
 
@@ -212,32 +195,11 @@ export default function Header() {
                       </span>
                     );
                   }
-                  if (label === "Wishlist" || label === "Saved") {
-                    return (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Heart className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
-                        <span>Wishlist</span>
-                        {wishlistCount > 0 ? (
-                          <span className="ml-0.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-navy-900/10 px-1 text-[10px] font-bold text-navy-950">
-                            {wishlistCount}
-                          </span>
-                        ) : null}
-                      </span>
-                    );
-                  }
-                  if (label === "Deals" || label === "Wholesale Deals") {
+                  if (label === "Deals") {
                     return (
                       <span className="inline-flex items-center gap-1.5">
                         <BadgePercent className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
                         <span>{t('nav.deals', {}, 'Deals')}</span>
-                      </span>
-                    );
-                  }
-                  if (label === "Help Center" || label === "Help") {
-                    return (
-                      <span className="inline-flex items-center gap-1.5">
-                        <HelpCircle className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
-                        <span>{t('nav.help', {}, 'Help Center')}</span>
                       </span>
                     );
                   }
@@ -258,9 +220,6 @@ export default function Header() {
                   }
                   if (label === "Compare Products") {
                     return t('nav.compareProducts', {}, 'Compare');
-                  }
-                  if (label === "Wishlist") {
-                    return t('nav.wishlist', {}, 'Wishlist');
                   }
                   if (label === "About Us") {
                     return t('nav.about', {}, 'About Us');
@@ -331,10 +290,11 @@ export default function Header() {
               aria-expanded={searchOpen}
               aria-controls="header-search"
               size="sm"
-              className={`!size-7.5 sm:!size-8 xl:!size-8.5 shrink-0 ${scrolled ? "" : "max-lg:hidden"}`}
+              className={`!size-7.5 sm:!size-8 xl:!size-8.5 shrink-0 -translate-x-1 ${scrolled ? "" : "max-lg:hidden"}`}
             />
-            <LanguageSelector />
-            {user?.role !== "super_admin" && (
+            {/* Very narrow phones choose language from the menu ("Region, language & currency") so Sign up fits */}
+            <LanguageSelector className="max-[389px]:hidden" />
+            {user && user.role !== "super_admin" && (
               <NotificationsMenu className="hidden sm:inline-flex" />
             )}
             <IconLink
@@ -343,6 +303,9 @@ export default function Header() {
               label="Cart"
               count={cartCount}
             />
+            {/* Help & support menu, right after the cart (phones reach Help from the menu). Guests get it in
+                place of the notifications bell, which for them only says "Login to view". */}
+            {user?.role !== "super_admin" && <SupportMenu className="hidden sm:block" />}
 
             {/* Direct Super Admin / Admin quick pill if logged in */}
             {user?.role === "super_admin" ? (

@@ -724,3 +724,8 @@ export const HELP_POPULAR_TOPICS = [
 
 export const getHelpArticle = (slug) => HELP_ARTICLES.find((article) => article.slug === slug && article.published !== false) || null;
 export const getHelpCategory = (id) => HELP_CATEGORIES.find((category) => category.id === id) || null;
+
+/** Help Center page paths, shared by the pages, search box, FAQ tabs and links. */
+export const helpArticlePath = (slug) => `/help/article/${slug}`;
+export const helpCategoryPath = (id) => `/help/category/${id}`;
+export const helpAudiencePath = (audience) => (audience === 'supplier' ? '/help/suppliers' : '/help/buyers');
