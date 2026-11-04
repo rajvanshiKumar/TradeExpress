@@ -1216,6 +1216,8 @@ export async function getUserProfile(userId) {
   return user;
 }
 
+const PASSWORD_RESET_SENT_MESSAGE = 'If an account with this email exists, password reset instructions have been sent.';
+
 export async function forgotPassword(email) {
   const normalizedEmail = (email || '').toLowerCase().trim();
   const user = await prisma.user.findUnique({
@@ -1223,8 +1225,8 @@ export async function forgotPassword(email) {
   });
 
   if (!user) {
-    // Return success to avoid email enumeration attacks
-    return { success: true, message: 'If an account with this email exists, password reset instructions have been sent.' };
+    // Same answer as for a real account, to avoid email enumeration attacks
+    return { success: true, message: PASSWORD_RESET_SENT_MESSAGE };
   }
 
   // Generate 6-digit OTP and secure random token
@@ -1260,14 +1262,11 @@ export async function forgotPassword(email) {
     }).catch((e) => console.error('[AuthService] Failed to send reset email:', e.message));
   });
 
-  return {
-    success: true,
-    message: 'Password reset code has been sent to your email.',
-    token, // Provided in development sandbox mode for immediate testing
-  };
+  // The code and link go only to the registered email: returning them here would let anyone reset any account
+  return { success: true, message: PASSWORD_RESET_SENT_MESSAGE };
 }
 
-export async function resetPassword({ token, otp, newPassword }) {
+export async function resetPassword({ email, token, otp, newPassword }) {
   const passCheck = validatePassword(newPassword);
   if (!passCheck.isValid) {
     const error = new Error(passCheck.message);
@@ -1275,12 +1274,17 @@ export async function resetPassword({ token, otp, newPassword }) {
     throw error;
   }
 
+  // Plain strings only: an object here would be read by Prisma as a filter and could match another account's token
+  const cleanToken = typeof token === 'string' ? token.trim() : '';
+  const cleanOtp = typeof otp === 'string' ? otp.trim() : '';
+  const cleanEmail = typeof email === 'string' ? email.toLowerCase().trim() : '';
+
   let resetToken = null;
 
-  if (token) {
+  if (cleanToken) {
     resetToken = await prisma.passwordResetToken.findFirst({
       where: {
-        token,
+        token: cleanToken,
         used: false,
         expiresAt: { gt: new Date() },
       },
@@ -1288,10 +1292,12 @@ export async function resetPassword({ token, otp, newPassword }) {
     });
   }
 
-  if (!resetToken && otp) {
+  // A 6-digit code is short, so it only counts for the account it was sent to
+  if (!resetToken && cleanOtp && cleanEmail) {
     resetToken = await prisma.passwordResetToken.findFirst({
       where: {
-        otp: String(otp).trim(),
+        otp: cleanOtp,
+        user: { email: cleanEmail },
         used: false,
         expiresAt: { gt: new Date() },
       },
@@ -1310,7 +1316,8 @@ export async function resetPassword({ token, otp, newPassword }) {
   await prisma.$transaction([
     prisma.user.update({
       where: { id: resetToken.userId },
-      data: { passwordHash },
+      // Whoever had the old password is signed out everywhere
+      data: { passwordHash, sessionsValidAfter: new Date(Math.ceil(Date.now() / 1000) * 1000) },
     }),
     prisma.passwordResetToken.update({
       where: { id: resetToken.id },

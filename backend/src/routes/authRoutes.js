@@ -243,12 +243,14 @@ router.post(
 
 router.post(
   '/forgot-password',
+  authRateLimiter,
   validate([body('email').isEmail().withMessage('Valid email is required.')]),
   authController.forgotPassword
 );
 
 router.post(
   '/reset-password',
+  authRateLimiter,
   validate([
     newPasswordValidationRule,
   ]),

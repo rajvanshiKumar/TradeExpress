@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MailCheck, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import AuthShell from './AuthShell';
 import Input from '../components/common/Input';
@@ -11,9 +11,13 @@ import { validatePassword } from '../utils/passwordRules';
 import { apiPost } from '../services/apiClient';
 
 export default function ForgotPassword() {
-  const [step, setStep] = useState('request'); // 'request' | 'reset' | 'success'
-  const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
+  // The emailed link carries its reset token and email, so it opens directly on the new-password step
+  const [searchParams] = useSearchParams();
+  const linkToken = searchParams.get('token') || '';
+  const loginPath = searchParams.get('from') === 'admin' ? '/super-admin/login' : '/login';
+  const [step, setStep] = useState(linkToken ? 'reset' : 'request'); // 'request' | 'reset' | 'success'
+  const [email, setEmail] = useState(searchParams.get('email') || '');
+  const [otp, setOtp] = useState(linkToken);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -49,7 +53,8 @@ export default function ForgotPassword() {
 
   const handleResetSubmit = async (event) => {
     event.preventDefault();
-    if (!otp.trim()) return setError('Please enter the 6-digit OTP code or reset token.');
+    const code = otp.trim();
+    if (!code) return setError('Please enter the 6-digit OTP code or reset token.');
 
     const passEval = validatePassword(newPassword);
     if (!passEval.isValid) {
@@ -65,7 +70,7 @@ export default function ForgotPassword() {
     try {
       await apiPost('auth/reset-password', {
         email: normalizeEmail(email),
-        token: otp.trim(),
+        ...(/^\d{6}$/.test(code) ? { otp: code } : { token: code }),
         newPassword,
       });
       setStep('success');
@@ -95,7 +100,7 @@ export default function ForgotPassword() {
             Your TradeExpress account password has been reset. You can now login to your dashboard.
           </p>
           <div className="mt-6 flex justify-center">
-            <Button to="/login" variant="primary" size="lg">
+            <Button to={loginPath} variant="primary" size="lg">
               Login now
             </Button>
           </div>
@@ -198,7 +203,7 @@ export default function ForgotPassword() {
             >
               ← Back to enter email
             </button>
-            <Link to="/login" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
+            <Link to={loginPath} className="text-xs font-semibold text-brand-600 hover:text-brand-700">
               Back to login
             </Link>
           </div>
@@ -226,7 +231,7 @@ export default function ForgotPassword() {
           </Button>
           <p className="text-center text-sm text-muted">
             Remembered it?{' '}
-            <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">
+            <Link to={loginPath} className="font-semibold text-brand-600 hover:text-brand-700">
               Back to login
             </Link>
           </p>

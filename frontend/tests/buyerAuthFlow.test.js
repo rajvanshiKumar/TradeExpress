@@ -44,6 +44,13 @@ describe('Buyer signup and sign-in fast-path checks', () => {
     assert.match(adminBlock, /if \(failure === GENERIC_FAILURE\) recordFailure\(\)/);
   });
 
+  it('sends a 6-digit reset code as otp and accepts the emailed link', () => {
+    const reset = fs.readFileSync(path.resolve('src/pages/ForgotPassword.jsx'), 'utf8');
+    assert.match(reset, /\{ otp: code \} : \{ token: code \}/);
+    assert.match(reset, /searchParams\.get\('token'\)/);
+    assert.match(signin, /to="\/forgot-password\?from=admin"/);
+  });
+
   it('does not make a second profile request after signin', () => {
     const loginBlock = auth.slice(auth.indexOf('const login = useCallback'), auth.indexOf('const loginMobile = useCallback'));
     assert.match(loginBlock, /\/auth\/login/);

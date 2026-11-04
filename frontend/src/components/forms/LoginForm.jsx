@@ -774,6 +774,11 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
                 {errors.password}
               </p>
             ) : null}
+            <div className="mt-1.5 text-right">
+              <Link to="/forgot-password?from=admin" className="text-xs font-semibold text-emerald-800 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
           </div>
         </>
       ) : null}
