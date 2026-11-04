@@ -257,7 +257,7 @@ export async function checkPanAadhaarLinkStatus({
   // Checked locally first, so a mistyped number never spends a paid provider credit. Every real Aadhaar
   // passes this check digit; the provider's UAT (test) environment may use sample numbers that do not,
   // so in UAT the provider decides.
-  if (!isPanAadhaarUatProvider() && !isValidAadhaarNumber(aadhaar)) {
+  if (!isPanAadhaarUatProvider() && !isPanAadhaarTestMode() && !isValidAadhaarNumber(aadhaar)) {
     throw inputError('This Aadhaar number is not valid (its last digit does not match). Please check all 12 digits and try again.', 'INVALID_AADHAAR_NUMBER');
   }
 
@@ -267,11 +267,20 @@ export async function checkPanAadhaarLinkStatus({
     throw inputError('Invalid PAN format. Enter the 10-character PAN (e.g. ABCDE1234F).', 'INVALID_PAN_FORMAT');
   }
 
+  // Local/demo signup: accept any correctly shaped PAN/Aadhaar pair without calling
+  // the paid provider. This mode is disabled automatically in production.
+  const testMode = isPanAadhaarTestMode();
   const cacheKey = secretHash(`${aadhaar}:${cleanPan}`);
   const cached = linkStatusCache.get(cacheKey);
   let outcome;
   let fromCache = false;
-  if (!bypassCache && cached && cached.expiresAt > Date.now()) {
+  if (testMode) {
+    outcome = {
+      status: 'LINKED', linked: true, maskedPan: null, requestId: 'TEST_MODE', definitive: false,
+      reason: 'TEST_MODE',
+      message: 'TEST MODE: accepted for signup only. PAN–Aadhaar linkage was not checked with Income Tax records.',
+    };
+  } else if (!bypassCache && cached && cached.expiresAt > Date.now()) {
     outcome = cached.outcome;
     fromCache = true;
   } else {
@@ -282,7 +291,7 @@ export async function checkPanAadhaarLinkStatus({
   }
 
   const result = {
-    success: outcome.definitive,
+    success: outcome.definitive || outcome.linked,
     status: outcome.status,
     linked: outcome.linked,
     maskedPan: outcome.maskedPan,

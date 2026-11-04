@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildSnapshot, cleanRegistrationNumber, parseProfilePhoto, validateLegalStructure, verificationStatus,
+  buildSnapshot, cleanRegistrationNumber, parseProfilePhoto, siteUrl, validateLegalStructure, verificationStatus,
 } from '../../src/services/supplierDocumentService.js';
 import { certificateSvg } from '../../src/services/documents/certificateTemplate.js';
 import { idCardBackSvg, idCardFrontSvg } from '../../src/services/documents/idCardTemplate.js';
@@ -35,6 +35,30 @@ describe('Supplier verification status', () => {
   it('shows SUSPENDED even for an approved supplier', () => {
     assert.equal(verificationStatus({ status: 'SUSPENDED', kycStatus: 'VERIFIED' }), 'SUSPENDED');
     assert.equal(verificationStatus({ status: 'ACTIVE', isActive: false, kycStatus: 'VERIFIED' }), 'SUSPENDED');
+  });
+});
+
+describe('Address inside the QR code', () => {
+  const withEnv = (publicUrl, frontendUrl, run) => {
+    const saved = [process.env.PUBLIC_SITE_URL, process.env.FRONTEND_URL];
+    if (publicUrl === undefined) delete process.env.PUBLIC_SITE_URL; else process.env.PUBLIC_SITE_URL = publicUrl;
+    if (frontendUrl === undefined) delete process.env.FRONTEND_URL; else process.env.FRONTEND_URL = frontendUrl;
+    try {
+      run();
+    } finally {
+      if (saved[0] === undefined) delete process.env.PUBLIC_SITE_URL; else [process.env.PUBLIC_SITE_URL] = saved;
+      if (saved[1] === undefined) delete process.env.FRONTEND_URL; else process.env.FRONTEND_URL = saved[1];
+    }
+  };
+
+  it('prefers PUBLIC_SITE_URL, then the deployed site', () => {
+    withEnv('https://shop.example.com/', 'https://site.example.com', () => assert.equal(siteUrl(), 'https://shop.example.com'));
+    withEnv(undefined, 'https://site.example.com/', () => assert.equal(siteUrl(), 'https://site.example.com'));
+  });
+
+  it('never prints a localhost address, which no phone could open', () => {
+    withEnv('http://localhost:5173', 'http://127.0.0.1:5173', () => assert.doesNotMatch(siteUrl(), /localhost|127\.0/));
+    withEnv(undefined, 'http://localhost:5173', () => assert.equal(siteUrl(), 'https://www.tradeexpress.in'));
   });
 });
 
@@ -120,6 +144,15 @@ describe('Certificate and ID card templates', () => {
     assert.notEqual(qr(a), qr(b));
     // The certificate and the card carry the same code
     assert.equal(qr(a), qr(idCardBackSvg(sample('PENDING'))));
+  });
+
+  it('puts the ID card front and back side by side on one page, each at true card size', async () => {
+    const pdf = (await renderIdCardPdf(sample('VERIFIED'))).toString('latin1');
+    assert.equal((pdf.match(/\/Type \/Page\b/g) || []).length, 1);
+    const box = /\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/.exec(pdf);
+    const mm = (pt) => (Number(pt) * 25.4) / 72;
+    assert.ok(Math.abs(mm(box[1]) - (54 * 2 + 8 * 3)) < 0.1);
+    assert.ok(Math.abs(mm(box[2]) - (85.6 + 8 * 2)) < 0.1);
   });
 
   it('copes with very long details without failing', async () => {

@@ -72,7 +72,7 @@ export default function SupplierPayments() {
 
   function exportCsvStatement() {
     if (!paymentData.ledger.length) {
-      showToast('No transaction records available to export.', 'info');
+      showToast('No transaction records available to export.', 'warning');
       return;
     }
 

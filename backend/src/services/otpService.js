@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import prisma from '../config/db.js';
 import { ENV } from '../config/env.js';
 import * as msg91Service from './msg91Service.js';
@@ -813,6 +814,22 @@ export async function verifyAndLoginMobile({ phone, country = 'India', otp, role
 
 const emailVerificationStore = new Map();
 
+const EMAIL_VERIFIED_PURPOSE = 'EMAIL_VERIFIED';
+const EMAIL_VERIFIED_VALIDITY = '1h'; // Long enough to finish the multi-step signup form
+// A separate key, so this token can never be used as a login token, or the other way round
+const emailVerifiedSecret = () => `${ENV.JWT_SECRET}:email-verified`;
+
+/**
+ * Proof that an email address passed verification. It is signed rather than kept in server memory, so a restart or a
+ * failed signup attempt does not lose it. It only ever works for this exact email, and a registered email cannot sign up
+ * again, so it does not need to be single-use.
+ */
+const signEmailVerified = (normalizedEmail) => jwt.sign(
+  { purpose: EMAIL_VERIFIED_PURPOSE, email: normalizedEmail },
+  emailVerifiedSecret(),
+  { expiresIn: EMAIL_VERIFIED_VALIDITY },
+);
+
 // Periodic cleanup of expired email verifications every 5 minutes
 setInterval(() => {
   const now = Date.now();
@@ -911,18 +928,11 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
 
   // Check development OTP bypass
   if (isDevOtpAllowed(cleanOtp)) {
-    const verificationToken = 'evt_' + crypto.randomBytes(24).toString('hex');
-    emailVerificationStore.set(normalizedEmail, {
-      verified: true,
-      verifiedAt: Date.now(),
-      verificationToken,
-      verificationTokenExpiresAt: Date.now() + VERIFICATION_TOKEN_VALIDITY_MS,
-      purpose,
-    });
+    emailVerificationStore.delete(normalizedEmail);
     return {
       success: true,
       message: 'Email verified successfully.',
-      verificationToken,
+      verificationToken: signEmailVerified(normalizedEmail),
       email: normalizedEmail,
     };
   }
@@ -949,40 +959,28 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
     throw authError(AUTH_MESSAGES.OTP_INVALID, 400, AUTH_ERROR_CODES.OTP_INVALID);
   }
 
-  const verificationToken = 'evt_' + crypto.randomBytes(24).toString('hex');
-  session.verified = true;
-  session.verifiedAt = Date.now();
-  session.verificationToken = verificationToken;
-  session.verificationTokenExpiresAt = Date.now() + VERIFICATION_TOKEN_VALIDITY_MS;
+  // The code itself can only be used once
+  emailVerificationStore.delete(normalizedEmail);
 
   return {
     success: true,
     message: 'Email address verified successfully.',
-    verificationToken,
+    verificationToken: signEmailVerified(normalizedEmail),
     email: normalizedEmail,
   };
 }
 
 /**
  * Records an email address as verified by a trusted identity provider (Google), issuing the same kind
- * of single-use token an email OTP produces, so signup can continue without a second OTP.
+ * of token an email OTP produces, so signup can continue without a second OTP.
  */
 export function issueVerifiedEmailToken(email) {
-  const normalizedEmail = (email || '').toLowerCase().trim();
-  const verificationToken = 'evt_' + crypto.randomBytes(24).toString('hex');
-  emailVerificationStore.set(normalizedEmail, {
-    verified: true,
-    verifiedAt: Date.now(),
-    verificationToken,
-    verificationTokenExpiresAt: Date.now() + VERIFICATION_TOKEN_VALIDITY_MS,
-    purpose: 'registration',
-  });
-  return verificationToken;
+  return signEmailVerified((email || '').toLowerCase().trim());
 }
 
 /**
  * Validates that an email address was legitimately verified via OTP before account creation.
- * Consumes the verification token to prevent replay attacks.
+ * Stays valid if this signup attempt fails on something else, so correcting that mistake does not mean verifying again.
  */
 export function validateVerifiedEmail({ email, verificationToken }) {
   if (!verificationToken) {
@@ -991,27 +989,19 @@ export function validateVerifiedEmail({ email, verificationToken }) {
     throw error;
   }
 
+  if (process.env.NODE_ENV !== 'production' && String(verificationToken).startsWith('evt_test_')) return true;
+
   const normalizedEmail = (email || '').toLowerCase().trim();
-  const session = emailVerificationStore.get(normalizedEmail);
-
-  if (
-    session &&
-    session.verified &&
-    session.verificationToken === verificationToken &&
-    Date.now() <= (session.verificationTokenExpiresAt || session.expiresAt || 0)
-  ) {
-    // Invalidate / consume session token
-    emailVerificationStore.delete(normalizedEmail);
-    return true;
+  try {
+    const payload = jwt.verify(String(verificationToken), emailVerifiedSecret());
+    if (payload.purpose === EMAIL_VERIFIED_PURPOSE && payload.email === normalizedEmail) return true;
+  } catch {
+    // Expired, altered or not one of ours: handled below
   }
 
-  if (process.env.NODE_ENV !== 'production' && String(verificationToken).startsWith('evt_test_')) {
-    if (session) emailVerificationStore.delete(normalizedEmail);
-    return true;
-  }
-
-  const error = new Error('Invalid or expired email verification token. Please verify your email again.');
+  const error = new Error('Your email verification has expired. Please verify your email again.');
   error.statusCode = 400;
+  error.errorCode = 'EMAIL_VERIFICATION_EXPIRED';
   throw error;
 }
 

@@ -60,8 +60,16 @@ const addYears = (date, years) => {
   return next;
 };
 
+/**
+ * The public address printed in QR codes: PUBLIC_SITE_URL, otherwise the deployed site's FRONTEND_URL.
+ * A localhost address can never be used, because it would not open on anyone else's phone.
+ */
 export function siteUrl() {
-  return String(process.env.PUBLIC_SITE_URL || 'https://www.tradeexpress.in').trim().replace(/\/+$/, '');
+  const usable = (value) => {
+    const clean = String(value || '').trim().replace(/\/+$/, '');
+    return /^https?:\/\/[^/]+/i.test(clean) && !/^https?:\/\/(localhost|127\.|\[::1\])/i.test(clean) ? clean : '';
+  };
+  return usable(process.env.PUBLIC_SITE_URL) || usable(process.env.FRONTEND_URL) || 'https://www.tradeexpress.in';
 }
 const websiteLabel = () => siteUrl().replace(/^https?:\/\//, '');
 const supportEmail = () => String(process.env.SUPPORT_EMAIL || 'support@tradeexpress.in').trim();
@@ -155,7 +163,16 @@ async function loadSupplier(userId) {
  */
 export async function ensureSupplierDocument(userId, { photo } = {}) {
   const existing = await prisma.supplierDocument.findUnique({ where: { userId }, select: DOCUMENT_SELECT });
-  if (existing?.supplierId) return existing;
+  if (existing?.supplierId) {
+    // The Supplier ID never changes, but the code follows the site's address, so moving to a new domain updates every QR
+    const currentUrl = `${siteUrl()}/supplier/${existing.supplierId}`;
+    if (existing.publicProfileUrl === currentUrl) return existing;
+    return prisma.supplierDocument.update({
+      where: { userId },
+      data: { publicProfileUrl: currentUrl, qrCodeDataUrl: await qrPngDataUrl(currentUrl) },
+      select: DOCUMENT_SELECT,
+    });
+  }
 
   const user = await loadSupplier(userId);
   const now = new Date();

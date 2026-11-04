@@ -128,7 +128,6 @@ export default function SupplierRegisterForm() {
 
     // Step 2: Business Information
     legalStructure: '',
-    registrationNumber: '',
     businessType: 'GST Certificate',
     businessTypeOther: '',
     gstStatus: '',
@@ -499,7 +498,7 @@ export default function SupplierRegisterForm() {
       if (res.ok && data.success) {
         setEmailOtpSent(true);
         setEmailCooldown(data.cooldownSeconds || 60);
-        if (data.resumeSignup) showToast(data.message, 'info');
+        if (data.resumeSignup) showToast(data.message, 'warning');
       } else if (data.code === 'OTP_COOLDOWN' && data.cooldownRemaining > 0) {
         // A code was sent to this address moments ago: keep the entry open and resume the countdown
         setEmailOtpSent(true);
@@ -613,7 +612,7 @@ export default function SupplierRegisterForm() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      showToast('Logo file size must be less than 5 MB.');
+      showToast('Logo file size must be less than 5 MB.', 'error');
       return;
     }
     setLogoUploading(true);
@@ -630,10 +629,10 @@ export default function SupplierRegisterForm() {
         setValues((prev) => ({ ...prev, logoUrl: data.fileUrl || data.url }));
         showToast('Company logo uploaded successfully.');
       } else {
-        showToast(data.message || 'Logo upload failed.');
+        showToast(data.message || 'Logo upload failed.', 'error');
       }
     } catch {
-      showToast('Error uploading logo.');
+      showToast('Error uploading logo.', 'error');
     } finally {
       setLogoUploading(false);
     }
@@ -644,7 +643,7 @@ export default function SupplierRegisterForm() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     if (values.businessImages.length + files.length > 8) {
-      showToast('You can upload a maximum of 8 business photos/videos.');
+      showToast('You can upload a maximum of 8 business photos/videos.', 'error');
       return;
     }
     setMediaUploading(true);
@@ -664,7 +663,7 @@ export default function SupplierRegisterForm() {
       }
       showToast('Media uploaded successfully.');
     } catch {
-      showToast('Error uploading media.');
+      showToast('Error uploading media.', 'error');
     } finally {
       setMediaUploading(false);
     }
@@ -775,7 +774,8 @@ export default function SupplierRegisterForm() {
           userConsent: true,
           bypassCache: true,
         }),
-        signal: AbortSignal.timeout(10000),
+        // Longer than the server's 30-second limit for the provider, so a slow reply is never reported as a connection failure
+        signal: AbortSignal.timeout(35000),
       });
 
       const data = await res.json();
@@ -954,9 +954,6 @@ export default function SupplierRegisterForm() {
 
     if (step === 2) {
       if (!values.legalStructure) stepErrors.legalStructure = 'Please select your business type.';
-      if (values.registrationNumber.trim() && !/^[A-Za-z0-9][A-Za-z0-9 ./-]*$/.test(values.registrationNumber.trim())) {
-        stepErrors.registrationNumber = 'Use only letters, numbers, spaces, dots, slashes or hyphens.';
-      }
       if (!values.businessType) stepErrors.businessType = 'Please select your business type.';
       if (values.businessType === 'Other' && !values.businessTypeOther.trim()) {
         stepErrors.businessTypeOther = 'Please specify your business type.';
@@ -1143,7 +1140,6 @@ export default function SupplierRegisterForm() {
       factoryAddress: '',
       profilePhoto: values.profilePhoto,
       legalStructure: values.legalStructure,
-      registrationNumber: values.registrationNumber.trim().toUpperCase(),
       businessType: values.businessType,
       businessTypeOther: values.businessType === 'Other' ? values.businessTypeOther.trim() : '',
       gstStatus: values.country === 'India' ? values.gstStatus : 'Not Applicable',
@@ -1197,6 +1193,17 @@ export default function SupplierRegisterForm() {
         });
         setBusy(false);
         window.scrollTo({ top: 100, behavior: 'smooth' });
+        return;
+      }
+
+      if (data.code === 'EMAIL_VERIFICATION_EXPIRED') {
+        setEmailVerified(false);
+        setEmailToken('');
+        setEmailOtpSent(false);
+        setErrors((prev) => ({ ...prev, email: data.message }));
+        setFormError('');
+        setCurrentStep(1);
+        setBusy(false);
         return;
       }
 
@@ -1664,7 +1671,7 @@ export default function SupplierRegisterForm() {
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               {/* Legal form of the business, printed on the certificate */}
-              <div>
+              <div className="sm:col-span-2">
                 <label htmlFor="supplier-legal-structure" className="block text-xs font-semibold text-slate-700 mb-1">
                   Business Type <span className="text-red-500">*</span>
                 </label>
@@ -1677,21 +1684,6 @@ export default function SupplierRegisterForm() {
                   searchable={false}
                 />
                 {errors.legalStructure && <p className="mt-1 text-xs text-red-600">{errors.legalStructure}</p>}
-              </div>
-              <div>
-                <label htmlFor="supplier-registration-number" className="block text-xs font-semibold text-slate-700 mb-1">
-                  Business Registration Number <span className="font-normal text-slate-400">(if applicable)</span>
-                </label>
-                <input
-                  id="supplier-registration-number"
-                  type="text"
-                  maxLength={64}
-                  placeholder="e.g. UDYAM-UP-12-3456789"
-                  value={values.registrationNumber}
-                  onChange={handleChange('registrationNumber')}
-                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${errors.registrationNumber ? 'border-red-500' : 'border-slate-300'}`}
-                />
-                {errors.registrationNumber && <p className="mt-1 text-xs text-red-600">{errors.registrationNumber}</p>}
               </div>
 
               {/* Business Registration Type / Certificate Dropdown */}

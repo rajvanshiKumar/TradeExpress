@@ -205,6 +205,7 @@ export default function ProductDetails() {
               >
                 {outOfStock ? 'Out of stock' : inCart(product.id) ? 'In Cart (Click to Remove)' : 'Add to Cart'}
               </Button>
+              <BuyNowButton product={product} quantity={quantity} variant={variantEntries.length ? variant : null} size="lg" full />
               <Button variant="outline" icon={FileText} to={`/rfq?product=${product.id}`}>Request a Quote</Button>
               <Button variant="outline" icon={MessageSquare} onClick={() => targetCompany && contact(targetCompany, product)} disabled={!product}>Contact Supplier</Button>
               <div className="flex gap-2.5 sm:col-span-2">

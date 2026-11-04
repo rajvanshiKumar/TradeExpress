@@ -8,7 +8,7 @@ import { DocumentImage, ProfilePhotoField, VerificationBadge } from '../../compo
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import useNotifications from '../../hooks/useNotifications';
 import {
-  getMyDocuments, myCertificatePdf, myIdCardPdf, myPhoto, myPreview, updateMyDetails, updateMyPhoto, updateMyPrivacy,
+  getMyDocuments, myCertificatePdf, myIdCardPdf, myPhoto, myPreview, updateMyDetails, updateMyPhoto,
 } from '../../services/supplierDocumentApi';
 import { formatDate } from '../../utils/formatDate';
 import { saveBlob } from '../../utils/profilePhoto';
@@ -49,14 +49,8 @@ function DownloadButton({ label, download, disabled }) {
   );
 }
 
-const PRIVACY_OPTIONS = [
-  { key: 'showBusinessAddress', label: 'Full business address', hint: 'Otherwise only your city, state and country are shown.' },
-  { key: 'showBusinessPhone', label: 'Business phone number', hint: 'Shown only if you added one to your profile.' },
-  { key: 'showBusinessEmail', label: 'Business email address', hint: 'Buyers can always reach you with Contact Supplier.' },
-];
-
 export default function SupplierDocuments() {
-  useDocumentTitle('My TradeExpress Documents');
+  useDocumentTitle('TradeExpress ID & Certificates');
   const { showToast } = useNotifications();
   const [doc, setDoc] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -66,7 +60,6 @@ export default function SupplierDocuments() {
   const [photoPreview, setPhotoPreview] = useState('');
   const [details, setDetails] = useState({ legalStructure: '', registrationNumber: '' });
   const [detailsBusy, setDetailsBusy] = useState(false);
-  const [privacyBusy, setPrivacyBusy] = useState(false);
 
   const apply = useCallback((data) => {
     setDoc(data);
@@ -131,18 +124,6 @@ export default function SupplierDocuments() {
     }
   };
 
-  const togglePrivacy = async (key) => {
-    if (privacyBusy) return;
-    setPrivacyBusy(true);
-    try {
-      setDoc(await updateMyPrivacy({ ...doc.privacy, [key]: !doc.privacy[key] }));
-    } catch (error) {
-      showToast(error.message, 'error');
-    } finally {
-      setPrivacyBusy(false);
-    }
-  };
-
   if (loadError) return <div className="ts-card"><ErrorState text={loadError} onRetry={load} /></div>;
   if (!doc) return <PageSkeleton />;
 
@@ -153,7 +134,7 @@ export default function SupplierDocuments() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-navy-900">My TradeExpress Documents</h1>
+          <h1 className="text-2xl font-bold text-navy-900">TradeExpress ID &amp; Certificates</h1>
           <p className="mt-1 text-sm text-slate-600">Your Registration Certificate and Supplier ID Card. Download them at any time.</p>
         </div>
         <VerificationBadge status={doc.documentStatus} className="text-sm" />
@@ -242,26 +223,6 @@ export default function SupplierDocuments() {
               </a>
             </div>
           </div>
-          <fieldset className="mt-4 border-t border-slate-100 pt-3">
-            <legend className="pt-3 text-sm font-bold text-navy-900">Show on your public profile</legend>
-            <div className="mt-2 space-y-2">
-              {PRIVACY_OPTIONS.map((option) => (
-                <label key={option.key} className="flex cursor-pointer items-start gap-2.5">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 size-4 rounded border-slate-300 accent-emerald-700"
-                    checked={Boolean(doc.privacy[option.key])}
-                    disabled={privacyBusy}
-                    onChange={() => togglePrivacy(option.key)}
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-slate-800">{option.label}</span>
-                    <span className="block text-xs text-slate-500">{option.hint}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
         </section>
 
         <section aria-labelledby="details-heading" className="ts-card space-y-5 p-4 sm:p-5">

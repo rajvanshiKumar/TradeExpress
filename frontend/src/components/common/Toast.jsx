@@ -18,6 +18,14 @@ const styles = {
     badge: 'Unavailable / Error',
     badgeBg: 'bg-rose-100 text-rose-900 border-rose-300',
   },
+  warning: {
+    icon: CircleAlert,
+    border: 'border-amber-400/70',
+    bg: 'bg-amber-50/95',
+    iconColor: 'text-amber-600',
+    badge: 'Please note',
+    badgeBg: 'bg-amber-100 text-amber-900 border-amber-300',
+  },
   info: {
     icon: Info,
     border: 'border-navy-300',
@@ -40,7 +48,7 @@ export default function ToastViewport() {
       aria-atomic="false"
     >
       {toasts.map((toast) => {
-        const theme = styles[toast.tone] ?? styles.success;
+        const theme = styles[toast.tone] ?? styles.info;
         const Icon = theme.icon;
         const isUnavailable =
           toast.message?.toLowerCase().includes('not available') ||

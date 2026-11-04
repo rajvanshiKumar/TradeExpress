@@ -180,7 +180,7 @@ export default function ProductComparison() {
   const executeSearch = async (rawQuery) => {
     const query = (rawQuery !== undefined ? rawQuery : searchInput).trim();
     if (!query) {
-      showToast('Please enter a product name, keyword, or material to search.', 'info');
+      showToast('Please enter a product name, keyword, or material to search.', 'warning');
       return;
     }
 

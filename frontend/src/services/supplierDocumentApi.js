@@ -4,7 +4,6 @@ import { API_BASE, ApiRequestError, authorizedBlob, authorizedRequest } from './
 export const getMyDocuments = () => authorizedRequest('GET', 'supplier/documents');
 export const updateMyPhoto = (photo) => authorizedRequest('PUT', 'supplier/documents/photo', { photo }, { timeoutMs: 60000 });
 export const updateMyDetails = (changes) => authorizedRequest('PATCH', 'supplier/documents/details', changes);
-export const updateMyPrivacy = (changes) => authorizedRequest('PATCH', 'supplier/documents/privacy', changes);
 export const myPreview = (kind) => authorizedBlob(`supplier/documents/preview/${kind}`);
 export const myCertificatePdf = () => authorizedBlob('supplier/documents/certificate.pdf');
 export const myIdCardPdf = () => authorizedBlob('supplier/documents/id-card.pdf');

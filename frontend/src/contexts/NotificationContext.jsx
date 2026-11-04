@@ -61,8 +61,12 @@ export function NotificationProvider({ children }) {
     setToasts((previous) => previous.filter((toast) => toast.id !== id));
   }, []);
 
-  /** tone: success | error | info */
+  /**
+   * tone: error | warning are shown. success | info are confirmations of a click, which the page itself already shows,
+   * so they do not pop up. Use 'warning' for guidance a person must see, such as "Please sign in".
+   */
   const showToast = useCallback((message, tone = 'success') => {
+    if (tone !== 'error' && tone !== 'warning') return null;
     const id = makeId('toast');
     setToasts((previous) => [...previous.slice(-3), { id, message, tone }]);
     timers.current.set(id, window.setTimeout(() => dismissToast(id), 4200));

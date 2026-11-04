@@ -7,6 +7,9 @@ import { idCardBackSvg, idCardFrontSvg } from './idCardTemplate.js';
 const MM_TO_PT = 72 / 25.4;
 const A4_LANDSCAPE = [841.89, 595.28];
 const CR80 = [54 * MM_TO_PT, 85.6 * MM_TO_PT];
+const CARD_MARGIN = 8 * MM_TO_PT;
+const CARD_GAP = 8 * MM_TO_PT;
+const CARD_PAGE = [CR80[0] * 2 + CARD_GAP + CARD_MARGIN * 2, CR80[1] + CARD_MARGIN * 2];
 
 const drawOptions = (width, height) => ({
   width,
@@ -43,13 +46,15 @@ export async function renderCertificatePdf(data) {
   return finished;
 }
 
-/** The ID card as two pages, front and back, each the size of a standard CR80 card. */
+/** The ID card on one page: front and back side by side, each the exact size of a standard CR80 card. */
 export async function renderIdCardPdf(data) {
   const doc = newPdf({ Title: `Supplier ID Card ${data.supplierId}`, Subject: data.businessName });
   const finished = collect(doc);
-  [idCardFrontSvg, idCardBackSvg].forEach((draw) => {
-    doc.addPage({ size: CR80, margin: 0 });
-    SVGtoPDF(doc, draw(data), 0, 0, drawOptions(CR80[0], CR80[1]));
+  doc.addPage({ size: CARD_PAGE, margin: 0 });
+  // A light background, so the white card's rounded edges stay visible
+  doc.rect(0, 0, CARD_PAGE[0], CARD_PAGE[1]).fill('#eef1ef');
+  [idCardFrontSvg, idCardBackSvg].forEach((draw, index) => {
+    SVGtoPDF(doc, draw(data), CARD_MARGIN + index * (CR80[0] + CARD_GAP), CARD_MARGIN, drawOptions(CR80[0], CR80[1]));
   });
   doc.end();
   return finished;

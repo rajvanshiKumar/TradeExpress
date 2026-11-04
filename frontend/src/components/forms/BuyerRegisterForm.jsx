@@ -257,7 +257,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
         setEmailOtpSent(true);
         setEmailCooldown(data.cooldownSeconds || 30);
         setEmailOtp('');
-        if (data.resumeSignup) showToast(data.message, 'info');
+        if (data.resumeSignup) showToast(data.message, 'warning');
         setTimeout(() => emailOtpInputsRef.current[0]?.focus(), 150);
       } else if (data.code === 'OTP_COOLDOWN' && data.cooldownRemaining > 0) {
         // A code was sent to this address moments ago: keep the entry open and resume the countdown
@@ -745,6 +745,16 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           email: payload.email,
         });
         window.scrollTo({ top: 80, behavior: 'smooth' });
+        return;
+      }
+
+      if (data.code === 'EMAIL_VERIFICATION_EXPIRED') {
+        setEmailVerified(false);
+        setEmailToken('');
+        setEmailOtpSent(false);
+        setErrors((prev) => ({ ...prev, email: data.message }));
+        setFormError('');
+        setCurrentStep(1);
         return;
       }
 

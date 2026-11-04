@@ -140,7 +140,7 @@ export default function BuyerCardsAccounts() {
     if (result.status === 'saved') {
       setAddOpen(false);
       await refreshMethods().catch(() => {});
-      showToast(`Card ending in ${result.method.last4} saved. ${CHARGE_MESSAGES[result.verificationCharge] ?? ''}`.trim());
+      if (CHARGE_MESSAGES[result.verificationCharge]) showToast(CHARGE_MESSAGES[result.verificationCharge], 'warning');
     } else if (result.status === 'failed') {
       setAddError(result.message);
     }

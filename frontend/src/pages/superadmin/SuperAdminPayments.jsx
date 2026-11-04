@@ -235,7 +235,7 @@ export default function SuperAdminPayments() {
 
   const exportPaymentsCsv = () => {
     if (!payments.length) {
-      showToast('No payment transactions to export.', 'info');
+      showToast('No payment transactions to export.', 'warning');
       return;
     }
 

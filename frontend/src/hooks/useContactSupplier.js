@@ -18,12 +18,11 @@ export default function useContactSupplier() {
   return useCallback(
     async (company, product = null, initialMessage = '') => {
       if (!user) {
-        showToast('Please sign in to message a supplier.', 'info');
         navigate('/login', { state: { from: `${location.pathname}${location.search}` } });
         return;
       }
       if (user.role !== 'buyer' && user.role !== 'admin' && user.role !== 'super_admin') {
-        showToast('Switch to a buyer account to start a conversation with a supplier.', 'info');
+        showToast('Switch to a buyer account to start a conversation with a supplier.', 'warning');
         return;
       }
 
