@@ -54,6 +54,8 @@ const SupplierInquiries = lazy(() => import('../pages/supplier/SupplierInquiries
 const SupplierAnalytics = lazy(() => import('../pages/supplier/SupplierAnalytics'));
 const SupplierSettings = lazy(() => import('../pages/supplier/SupplierSettings'));
 const SupplierVerification = lazy(() => import('../pages/supplier/SupplierVerification'));
+const SupplierDocuments = lazy(() => import('../pages/supplier/SupplierDocuments'));
+const PublicSupplierProfile = lazy(() => import('../pages/PublicSupplierProfile'));
 const SupplierQuotations = lazy(() => import('../pages/supplier/SupplierQuotations'));
 const SupplierTransport = lazy(() => import('../pages/supplier/SupplierTransport'));
 const SupplierPayments = lazy(() => import('../pages/supplier/SupplierPayments'));
@@ -72,6 +74,7 @@ const AdminVerification = lazy(() => import('../pages/admin/AdminVerification'))
 const SuperAdminDashboard = lazy(() => import('../pages/superadmin/SuperAdminDashboard'));
 const SuperAdminUsers = lazy(() => import('../pages/superadmin/SuperAdminUsers'));
 const SuperAdminSuppliers = lazy(() => import('../pages/superadmin/SuperAdminSuppliers'));
+const SuperAdminSupplierDocuments = lazy(() => import('../pages/superadmin/SuperAdminSupplierDocuments'));
 const SuperAdminProducts = lazy(() => import('../pages/superadmin/SuperAdminProducts'));
 const SuperAdminCategories = lazy(() => import('../pages/superadmin/SuperAdminCategories'));
 const SuperAdminRfqs = lazy(() => import('../pages/superadmin/SuperAdminRfqs'));
@@ -98,6 +101,7 @@ export default function AppRoutes() {
         <Route path="/categories/:slug" element={<CategoryDetails />} />
         <Route path="/suppliers" element={<Suppliers />} />
         <Route path="/suppliers/:slug" element={<SupplierDetails />} />
+        <Route path="/supplier/:supplierCode" element={<PublicSupplierProfile />} />
         <Route path="/exporters" element={<Exporters />} />
         <Route path="/help" element={<Help />} />
         <Route path="/help/article/:slug" element={<HelpArticlePage />} />
@@ -199,6 +203,7 @@ export default function AppRoutes() {
             <Route path="/supplier/profile" element={<SupplierProfile />} />
             <Route path="/supplier/notifications" element={<SupplierNotifications />} />
             <Route path="/supplier/verification" element={<SupplierVerification />} />
+            <Route path="/supplier/documents" element={<SupplierDocuments />} />
           </Route>
         </Route>
         <Route element={<RoleRoute roles={['admin']} />}>
@@ -217,6 +222,7 @@ export default function AppRoutes() {
             <Route path="/super-admin" element={<SuperAdminDashboard />} />
             <Route path="/super-admin/users" element={<SuperAdminUsers />} />
             <Route path="/super-admin/suppliers" element={<SuperAdminSuppliers />} />
+            <Route path="/super-admin/supplier-documents" element={<SuperAdminSupplierDocuments />} />
             <Route path="/super-admin/products" element={<SuperAdminProducts />} />
             <Route path="/super-admin/categories" element={<SuperAdminCategories />} />
             <Route path="/super-admin/rfqs" element={<SuperAdminRfqs />} />

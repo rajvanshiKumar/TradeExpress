@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, startTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
+import { useLocation } from 'react-router-dom';
 import { AuthContext } from './contextObjects';
 import useLocalStorage from '../hooks/useLocalStorage';
 import seedUsers, { DEFAULT_NOTIFICATION_PREFS } from '../data/users';
@@ -6,10 +7,25 @@ import { ADMIN_EMAIL, ADMIN_EMAILS, ADMIN_PASSWORD_HASH, ADMIN_PROFILE, SUPER_AD
 import { DEFAULT_PREFERENCES, STORAGE_KEYS } from '../utils/constants';
 import { normalizeEmail } from '../utils/validators';
 import { hashPassword, isCryptoAvailable, verifyPassword } from '../utils/passwords';
-import { removeStorage } from '../utils/storage';
+import { fullKey, removeStorage } from '../utils/storage';
 import makeId from '../utils/ids';
 import { authFetch } from '../api/authClient';
-import { sessionMatchesToken } from '../utils/authSession';
+import {
+  AUTH_CHANGED_EVENT,
+  EMPTY_SESSION,
+  TOKEN_KEYS,
+  bindWindow,
+  getAuthToken,
+  readRoleSession,
+  rememberActiveSlot,
+  resolveWindowSlot,
+  roleSessionKey,
+  signOutWindow,
+  slotForPath,
+  slotForRole,
+  storeAuthToken,
+  writeRoleSession,
+} from '../utils/authSession';
 import addressService from '../services/addressService';
 
 // Front-end prototype authentication.
@@ -30,15 +46,43 @@ const adminFailureMessage = (res) => {
   if (res.status === 403 || res.status === 429) return res.data?.message || GENERIC_FAILURE;
   return GENERIC_FAILURE;
 };
-const EMPTY_SESSION = { userId: null, role: null, expiresAt: 0 };
-
-
+// How often an open window checks whether its own login has expired
+const SESSION_CHECK_MS = 30 * 1000;
 
 const newSession = (userId, role) => ({ userId, role, expiresAt: Date.now() + SESSION_HOURS * 3600 * 1000 });
 
 export function AuthProvider({ children }) {
-  const [accounts, setAccounts] = useLocalStorage(STORAGE_KEYS.accounts, seedUsers);
-  const [session, setSession] = useLocalStorage(STORAGE_KEYS.session, EMPTY_SESSION);
+  const [accounts, setAccounts] = useLocalStorage(STORAGE_KEYS.accounts, seedUsers, { syncWindows: true });
+  const { pathname } = useLocation();
+  // Which role this window acts as, and that role's session. Other windows can act as other roles at the same time.
+  const [slot, setSlot] = useState(() => resolveWindowSlot(pathname));
+  const [session, setSessionState] = useState(() => readRoleSession(slot));
+
+  // Opening a dashboard whose role is signed in makes this window act as that role, before the page below renders
+  const pathSlot = slotForPath(pathname);
+  if (pathSlot && pathSlot !== slot && readRoleSession(pathSlot).userId) {
+    bindWindow(pathSlot);
+    setSlot(pathSlot);
+    setSessionState(readRoleSession(pathSlot));
+  }
+
+  const slotRef = useRef(slot);
+  slotRef.current = slot;
+
+  /** Signs this window in as the session's role, or signs its current role out. Other roles are not touched. */
+  const setSession = useCallback((next) => {
+    if (next?.userId) {
+      const nextSlot = slotForRole(next.role);
+      writeRoleSession(nextSlot, next);
+      bindWindow(nextSlot);
+      setSlot(nextSlot);
+      setSessionState(next);
+    } else {
+      signOutWindow();
+      setSlot(null);
+      setSessionState(EMPTY_SESSION);
+    }
+  }, []);
   const [preferences, setPreferenceState] = useLocalStorage(STORAGE_KEYS.preferences, DEFAULT_PREFERENCES);
   // Buyer addresses live in MySQL; this is only the loaded copy for the signed-in buyer.
   const [addressState, setAddressState] = useState({ ownerId: null, items: [], loading: false, error: '' });
@@ -54,34 +98,32 @@ export function AuthProvider({ children }) {
     return found && found.status !== 'Suspended' && found.role === session.role ? found : null;
   }, [accounts, session]);
 
-  // Clean up a stale, expired or tampered session so the app never shows a half-signed-in state.
+  // Follows this window's own role only: a sign-in or sign-out of that role elsewhere, an expired login, or a token
+  // the server rejected. Changes to other roles are ignored, so they can never sign this window out.
   useEffect(() => {
-    if (session?.userId && !user) setSession(EMPTY_SESSION);
-  }, [session, user, setSession]);
-
-  // The page session must belong to the same account and role as the stored login token. The token is shared by
-  // every tab, so signing in with another account in a second tab (or an expired token) would otherwise leave this
-  // tab showing e.g. a supplier dashboard while sending a buyer's token, and the server answers 403.
-  const [tokenCheck, setTokenCheck] = useState(0);
-  useEffect(() => {
+    const refresh = () => setSessionState((current) => {
+      const latest = readRoleSession(slotRef.current);
+      return latest.userId === current.userId && latest.role === current.role && latest.expiresAt === current.expiresAt ? current : latest;
+    });
     const onStorage = (event) => {
-      if (!event.key || ['tradeexpress_auth_token', 'tradesphere_auth_token'].includes(event.key) || event.key.endsWith(STORAGE_KEYS.session)) {
-        setTokenCheck((n) => n + 1);
-      }
+      const own = slotRef.current;
+      if (own && (!event.key || event.key === TOKEN_KEYS[own] || event.key === fullKey(roleSessionKey(own)))) refresh();
     };
+    const onFocus = () => {
+      rememberActiveSlot(slotRef.current);
+      refresh();
+    };
+    const timer = window.setInterval(refresh, SESSION_CHECK_MS);
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener(AUTH_CHANGED_EVENT, refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener(AUTH_CHANGED_EVENT, refresh);
+    };
   }, []);
-  useEffect(() => {
-    if (!session?.userId) return;
-    let token = null;
-    try {
-      token = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
-    } catch {
-      token = null;
-    }
-    if (!sessionMatchesToken(session, token)) setSession(EMPTY_SESSION);
-  }, [session, setSession, tokenCheck]);
 
   const lockMessage = () => {
     const seconds = Math.ceil((attempts.lockedUntil - Date.now()) / 1000);
@@ -118,12 +160,7 @@ export function AuthProvider({ children }) {
       });
       const role = res.data?.data?.user?.role;
       if (res.ok && res.data?.success && res.data.data?.token && (role === 'SUPER_ADMIN' || role === 'ADMIN')) {
-        try {
-          localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
-          localStorage.setItem('tradesphere_auth_token', res.data.data.token);
-        } catch {
-          // Storage unavailable: the session still works for this tab
-        }
+        storeAuthToken(res.data.data.token);
         valid = true;
         isSuper = role === 'SUPER_ADMIN';
       } else {
@@ -174,8 +211,7 @@ export function AuthProvider({ children }) {
       }
 
       if (res.data?.data?.token) {
-        localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
-        localStorage.setItem('tradesphere_auth_token', res.data.data.token);
+        storeAuthToken(res.data.data.token);
         backendUser = res.data.data.user;
       }
     } catch (err) {
@@ -266,8 +302,7 @@ export function AuthProvider({ children }) {
       }
 
       if (res.data?.data?.token) {
-        localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
-        localStorage.setItem('tradesphere_auth_token', res.data.data.token);
+        storeAuthToken(res.data.data.token);
         backendUser = res.data.data.user;
       }
     } catch (err) {
@@ -351,8 +386,7 @@ export function AuthProvider({ children }) {
       if (res.data?.data) {
         backendUser = res.data.data.user;
         if (res.data.data.token) {
-          localStorage.setItem('tradeexpress_auth_token', res.data.data.token);
-          localStorage.setItem('tradesphere_auth_token', res.data.data.token);
+          storeAuthToken(res.data.data.token);
         }
       }
     } catch (err) {
@@ -382,8 +416,7 @@ export function AuthProvider({ children }) {
   const setAuthUser = useCallback(async (backendUser, token, rawPassword = '') => {
     if (!backendUser?.id) return null;
     if (token) {
-      localStorage.setItem('tradeexpress_auth_token', token);
-      localStorage.setItem('tradesphere_auth_token', token);
+      storeAuthToken(token);
     }
     const cleanRole = (backendUser.role || 'buyer').toLowerCase();
     const activeAccount = {
@@ -411,19 +444,13 @@ export function AuthProvider({ children }) {
 
   /** Signs out and clears session-related data (the Buy Now selection). The cart is kept. */
   const logout = useCallback(() => {
-    // End this device's session on the server too, so the token stops working everywhere (best effort)
-    try {
-      const token = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
-      if (token) authFetch('/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
-    } catch {
-      // Storage unavailable: the local sign-out below still happens
-    }
+    // End this role's session on the server too, so its token stops working (best effort). Only this token is ended.
+    const token = getAuthToken();
+    if (token) authFetch('/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    if (slotRef.current === 'buyer') removeStorage(STORAGE_KEYS.buyNow);
     startTransition(() => {
       setSession(EMPTY_SESSION);
     });
-    removeStorage(STORAGE_KEYS.buyNow);
-    localStorage.removeItem('tradeexpress_auth_token');
-    localStorage.removeItem('tradesphere_auth_token');
     setAttempts({ count: 0, lockedUntil: 0 });
   }, [setSession]);
 

@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { syncAfterVerification } from './supplierDocumentService.js';
 import {
   getActiveCommissionPolicy,
   updateCommissionPolicy,
@@ -566,6 +567,9 @@ export async function reviewSupplierKyc({ supplierId, status, rejectionReason, n
     where: { userId: supplierId },
     data: { status: docStatus, notes: notes || null },
   });
+
+  // Approval issues the certificate and ID card; any other decision withdraws them
+  await syncAfterVerification(supplierId);
 
   await logAuditAction({
     req,
@@ -1702,6 +1706,8 @@ export async function deleteSubAdmin({ adminId, req }) {
 // ==========================================
 export async function getPlatformSettings() {
   const settings = await prisma.platformSetting.findMany({
+    // The document signatory has its own screen, under Supplier Documents
+    where: { NOT: { key: { startsWith: 'document_' } } },
     orderBy: { key: 'asc' },
   });
 

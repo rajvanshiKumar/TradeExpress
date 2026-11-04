@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, startTransition } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { slotForPath, slotForRole } from "../../utils/authSession";
 import {
   Eye,
   EyeOff,
@@ -427,7 +428,9 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
         ? from.startsWith("/admin") || from === "/messages"
         : authUser.role === "super_admin"
         ? from.startsWith("/super-admin") || from.startsWith("/admin") || from === "/messages"
-        : !from.startsWith("/admin") && !from.startsWith("/super-admin"));
+        : !from.startsWith("/admin") && !from.startsWith("/super-admin")) &&
+      // Never return to another role's dashboard: that would switch this window to that role
+      (!slotForPath(from) || slotForPath(from) === slotForRole(authUser.role));
 
     const targetHome = ROLE_HOME[authUser.role] || (authUser.role === "supplier" ? "/supplier" : "/buyer");
     startTransition(() => {

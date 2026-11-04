@@ -1,3 +1,4 @@
+import { getAuthToken, handleRejectedToken } from '../utils/authSession.js';
 // Optional public API adapter.
 //
 // TradeExpress ships with NO external API configured: every service works from seeded
@@ -49,15 +50,9 @@ async function request(method, path, body = null, { signal, timeoutMs = 12000, h
 
   const cleanPath = String(path).replace(/^\/+/, '');
 
-  // Check for stored token
-  try {
-    const token = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
-    if (token && !reqHeaders.Authorization) {
-      reqHeaders.Authorization = `Bearer ${token}`;
-    }
-  } catch {
-    // Ignore localStorage access issues
-  }
+  // This window's own login token
+  const token = reqHeaders.Authorization ? '' : getAuthToken();
+  if (token) reqHeaders.Authorization = `Bearer ${token}`;
 
   try {
     const url = `${BASE_URL}/${cleanPath}`;
@@ -70,6 +65,8 @@ async function request(method, path, body = null, { signal, timeoutMs = 12000, h
     }
 
     if (!response.ok) {
+      // A rejected token ends this role's sign-in. On /auth routes a 401 can simply mean wrong credentials.
+      if (response.status === 401 && token && !cleanPath.startsWith('auth/')) handleRejectedToken(token);
       const message = data?.message || data?.error || `The API responded with status ${response.status}.`;
       throw new ApiError(message, response.status, data);
     }

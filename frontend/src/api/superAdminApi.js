@@ -1,3 +1,4 @@
+import { getTokenForSlot, handleRejectedToken } from '../utils/authSession.js';
 const API_BASE = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:5000/api').replace(/\/+$/, '');
 
 function buildQueryString(params = {}) {
@@ -13,15 +14,11 @@ function buildQueryString(params = {}) {
 
 /** The token from the admin sign-in. There is no automatic sign-in: an expired session means signing in again. */
 function ensureAdminToken() {
-  try {
-    return localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token') || '';
-  } catch {
-    return '';
-  }
+  return getTokenForSlot('admin');
 }
 
 function getHeaders(token) {
-  const activeToken = token || localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token') || '';
+  const activeToken = token || ensureAdminToken();
   return {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -44,12 +41,7 @@ async function request(endpoint, options = {}) {
 
     // Expired or invalid admin session: clear it so the next screen asks the admin to sign in again
     if (res.status === 401) {
-      try {
-        localStorage.removeItem('tradeexpress_auth_token');
-        localStorage.removeItem('tradesphere_auth_token');
-      } catch {
-        // Ignore
-      }
+      handleRejectedToken(token);
       const error = new Error('Your admin session has expired. Please sign in again.');
       error.status = 401;
       throw error;

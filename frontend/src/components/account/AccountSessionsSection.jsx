@@ -1,3 +1,4 @@
+import { storeAuthToken } from '../../utils/authSession';
 import { useCallback, useEffect, useState } from 'react';
 import { Laptop, LogOut, MonitorSmartphone, RefreshCw, Smartphone } from 'lucide-react';
 import Button from '../common/Button';
@@ -11,13 +12,7 @@ import { formatDateTime } from '../../utils/formatDate';
 const METHOD_LABELS = { PASSWORD: 'Password', OTP: 'One-time code', GOOGLE: 'Google', SIGNUP: 'Account sign-up', ADMIN: 'Admin sign-in' };
 
 function storeToken(token) {
-  if (!token) return;
-  try {
-    localStorage.setItem('tradeexpress_auth_token', token);
-    localStorage.setItem('tradesphere_auth_token', token);
-  } catch {
-    // Storage unavailable: this tab keeps working until reload
-  }
+  if (token) storeAuthToken(token);
 }
 
 const DeviceIcon = ({ device }) => (/iOS|Android/.test(device) ? <Smartphone className="size-5" aria-hidden="true" /> : <Laptop className="size-5" aria-hidden="true" />);

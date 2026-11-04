@@ -9,6 +9,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   ClipboardList,
+  FileBadge2,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -59,6 +60,7 @@ export const SUPPLIER_NAV_GROUPS = [
     items: [
       { id: 'payments', label: 'Payments & Payouts', to: '/supplier/payments', icon: CircleDollarSign },
       { id: 'verification', label: 'Business Verification', to: '/supplier/verification', icon: ShieldCheck, badgeKey: 'kyc' },
+      { id: 'documents', label: 'My TradeExpress Documents', to: '/supplier/documents', icon: FileBadge2 },
     ],
   },
   {

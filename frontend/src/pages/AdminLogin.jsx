@@ -12,7 +12,8 @@ export default function AdminLogin() {
 
   useDocumentTitle('Super Admin Login');
 
-  if (user) return <Navigate to={ROLE_HOME[user.role] || '/'} replace />;
+  // A Buyer or Supplier in this window can still open this page: their own sign-in is left untouched
+  if (user?.role === 'super_admin' || user?.role === 'admin') return <Navigate to={ROLE_HOME[user.role] || '/'} replace />;
 
   const topBadge = (
     <div className="mb-6 space-y-3">

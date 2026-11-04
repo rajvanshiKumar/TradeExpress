@@ -209,6 +209,8 @@ router.post(
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
     body('country').trim().notEmpty().withMessage('Country is required.'),
     body('businessType').trim().notEmpty().withMessage('Business type is required.'),
+    body('profilePhoto').notEmpty().withMessage('A profile photograph is required.'),
+    body('legalStructure').trim().notEmpty().withMessage('Please select your business type.'),
     body('companyDescription').trim().notEmpty().withMessage('Company description is required.'),
   ]),
   authController.registerSupplier

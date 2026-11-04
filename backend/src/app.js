@@ -28,6 +28,8 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
   optionsSuccessStatus: 204,
+  // Lets the browser read the name of a downloaded document when the site and API are on different addresses
+  exposedHeaders: ['Content-Disposition'],
 };
 
 app.use(cors(corsOptions));

@@ -1,3 +1,4 @@
+import { storeAuthToken } from '../../utils/authSession';
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import OtpSendError from './OtpSendError';
@@ -731,8 +732,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
       if (res.ok && data.success) {
         if (data.data?.token) {
-          localStorage.setItem('tradeexpress_auth_token', data.data.token);
-          localStorage.setItem('tradesphere_auth_token', data.data.token);
+          storeAuthToken(data.data.token);
         }
         if (setAuthUser && data.data) {
           await setAuthUser(data.data.user || data.data, data.data.token, '');

@@ -4,6 +4,7 @@ import * as controller from '../controllers/superAdminController.js';
 import { authenticateJWT, requireRole } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
 import { validatePassword } from '../utils/passwordValidator.js';
+import * as documents from '../controllers/supplierDocumentController.js';
 
 const router = Router();
 
@@ -12,6 +13,19 @@ router.use(authenticateJWT, requireRole('SUPER_ADMIN'));
 
 // Dashboard
 router.get('/dashboard', controller.getDashboard);
+
+// Supplier certificates and ID cards
+router.get('/supplier-documents', documents.adminList);
+router.get('/supplier-documents/signatory', documents.adminGetSignatory);
+router.put('/supplier-documents/signatory', documents.adminUpdateSignatory);
+router.get('/supplier-documents/:id', documents.adminGet);
+router.get('/supplier-documents/:id/preview/:kind', documents.adminPreview);
+router.get('/supplier-documents/:id/certificate.pdf', documents.adminCertificate);
+router.get('/supplier-documents/:id/id-card.pdf', documents.adminIdCard);
+router.get('/supplier-documents/:id/photo', documents.adminPhoto);
+router.put('/supplier-documents/:id/photo', documents.adminReplacePhoto);
+router.post('/supplier-documents/:id/regenerate', documents.adminRegenerate);
+router.patch('/supplier-documents/:id/validity', documents.adminValidity);
 
 // Users
 router.get('/users', controller.listUsers);

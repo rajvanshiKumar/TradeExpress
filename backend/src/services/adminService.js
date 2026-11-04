@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { syncAfterVerification } from './supplierDocumentService.js';
 import { getActiveCommissionPolicy } from './commissionTierService.js';
 
 export async function listPendingKyc() {
@@ -60,6 +61,9 @@ export async function reviewKyc(userId, { status, rejectionReason = '', notes = 
     where: { userId },
     data: { status: isApproved ? 'APPROVED' : 'REJECTED', notes: notes || null },
   });
+
+  // Approval issues the certificate and ID card; a rejection withdraws them
+  await syncAfterVerification(userId);
 
   return user;
 }

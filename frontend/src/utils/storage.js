@@ -4,7 +4,7 @@
 
 import { LEGACY_STORAGE_PREFIX, STORAGE_PREFIX } from './constants.js';
 
-const fullKey = (key) => `${STORAGE_PREFIX}${key}`;
+export const fullKey = (key) => `${STORAGE_PREFIX}${key}`;
 
 function available() {
   try {

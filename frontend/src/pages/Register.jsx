@@ -20,7 +20,9 @@ export default function Register({ defaultRole }) {
       ? 'Supplier Sign Up — TradeExpress'
       : 'Buyer Sign Up — TradeExpress'
   );
-  if (user) return <Navigate to={ROLE_HOME[user.role]} replace />;
+  // Signing up for another role in this window is allowed and leaves the current sign-in untouched
+  const explicitRole = defaultRole || searchParams.get('role');
+  if (user && (!explicitRole || role === user.role)) return <Navigate to={ROLE_HOME[user.role]} replace />;
 
   const handleRoleChange = (newRole) => {
     setRole(newRole);

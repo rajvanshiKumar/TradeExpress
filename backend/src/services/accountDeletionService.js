@@ -91,6 +91,7 @@ async function closeAccount({ userId, role, statusReason, authorize }) {
       await tx.rfq.updateMany({ where: { buyerId: userId, status: 'OPEN' }, data: { status: 'CLOSED' } });
     }
 
+    await tx.supplierDocument.deleteMany({ where: { userId } });
     await tx.user.update({
       where: { id: userId },
       data: {

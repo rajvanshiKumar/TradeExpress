@@ -1,3 +1,4 @@
+import { getAuthToken } from '../utils/authSession.js';
 // Account Settings API (signed-in user's own account only; the server takes the identity from the login token).
 import { ApiRequestError, authorizedRequest } from './authorizedApi';
 
@@ -27,12 +28,7 @@ export const deleteAccount = ({ grant, confirmation }) => authorizedRequest('POS
 
 /** Uploads a profile photo (PNG, JPG or WEBP, at most 2 MB). Returns the updated account settings. */
 export async function uploadAccountAvatar(file) {
-  let token = null;
-  try {
-    token = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
-  } catch {
-    token = null;
-  }
+  const token = getAuthToken();
   if (!token) throw new ApiRequestError('Please sign in again to continue.', 401);
 
   const formData = new FormData();

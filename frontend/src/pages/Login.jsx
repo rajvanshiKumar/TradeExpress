@@ -18,8 +18,10 @@ export default function Login({ defaultRole = null }) {
   const initialRole = searchParams.get('role') === 'supplier' || defaultRole === 'supplier' ? 'supplier' : 'buyer';
   const [role, setRole] = useState(initialRole);
   useDocumentTitle('Login');
-  // Already signed in: go to the right dashboard instead of showing the form again.
-  if (user) return <Navigate to={ROLE_HOME[user.role]} replace />;
+  // Already signed in as this role: go to its dashboard. A link for another role (e.g. /supplier/login) shows the
+  // form, so this window can sign in as that role without ending the current one.
+  const explicitRole = defaultRole || searchParams.get('role');
+  if (user && (!explicitRole || role === user.role)) return <Navigate to={ROLE_HOME[user.role]} replace />;
 
   const switcher = (
     <div className="mb-7 flex justify-center">

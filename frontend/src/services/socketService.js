@@ -1,6 +1,8 @@
 import { io } from 'socket.io-client';
+import { getAuthToken } from '../utils/authSession.js';
 
 let socket = null;
+let socketToken = '';
 
 function getSocketUrl() {
   const apiBase = (import.meta.env.VITE_PUBLIC_API_BASE_URL || 'http://localhost:5000/api').trim();
@@ -8,23 +10,11 @@ function getSocketUrl() {
   return apiBase.replace(/\/api\/?$/, '') || 'http://localhost:5000';
 }
 
-function getStoredToken() {
-  try {
-    return (
-      localStorage.getItem('tradeexpress_auth_token') ||
-      localStorage.getItem('tradesphere_auth_token') ||
-      ''
-    );
-  } catch {
-    return '';
-  }
-}
-
 /**
  * Connect to Socket.IO server with JWT authentication.
  */
 export function connectSocket() {
-  const token = getStoredToken();
+  const token = getAuthToken();
   if (!token) {
     if (socket) {
       socket.disconnect();
@@ -33,10 +23,12 @@ export function connectSocket() {
     return null;
   }
 
-  // If already connected with same token, reuse
-  if (socket?.connected) {
+  // If already connected with same token, reuse. A different token means this window changed role.
+  if (socket?.connected && socketToken === token) {
     return socket;
   }
+  if (socket) socket.disconnect();
+  socketToken = token;
 
   const url = getSocketUrl();
   socket = io(url, {

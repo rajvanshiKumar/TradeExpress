@@ -54,6 +54,8 @@ model User {
   postalCode          String?
   country             String?              @default("India")
   supplierCode        String?              @unique
+  legalStructure      String?              // Proprietorship, Partnership, Private Limited, ...
+  registrationNumber  String?
   businessType        String?
   businessTypeOther   String?
   gstStatus           String?
@@ -99,6 +101,7 @@ model User {
   supplierOrders      Order[]              @relation("SupplierOrders")
   carts               Cart[]
   kycDocuments        KycDocument[]
+  supplierDocument    SupplierDocument?
   passwordResetTokens PasswordResetToken[]
   accountVerifications AccountVerification[]
   rfqs                Rfq[]                @relation("BuyerRfqs")
@@ -450,6 +453,36 @@ model OrderStatusHistory {
 
   @@index([orderId])
   @@map("order_status_history")
+}
+
+// A supplier's permanent Supplier ID, Certificate Number and QR code. Verification status is read live from the user.
+model SupplierDocument {
+  id                  String    @id @default(uuid())
+  userId              String    @unique
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sequence            Int       @unique @default(autoincrement())
+  supplierId          String?   @unique
+  certificateNumber   String?   @unique
+  legacySupplierCode  String?
+  publicProfileUrl    String?   @db.Text
+  qrCodeDataUrl       String?   @db.MediumText
+  photoData           Bytes?    @db.MediumBlob
+  photoMime           String?
+  snapshot            Json?     // Details printed on the documents, frozen at approval
+  issueDate           DateTime?
+  validUntil          DateTime?
+  idCardValidUntil    DateTime?
+  verifiedAt          DateTime?
+  revision            Int       @default(1)
+  generatedAt         DateTime  @default(now())
+  showBusinessAddress Boolean   @default(false)
+  showBusinessPhone   Boolean   @default(false)
+  showBusinessEmail   Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([legacySupplierCode])
+  @@map("supplier_documents")
 }
 
 model KycDocument {

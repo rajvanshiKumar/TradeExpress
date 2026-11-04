@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { publicSupplierRouter, supplierDocumentRouter } from './supplierDocumentRoutes.js';
 import authRoutes from './authRoutes.js';
 import productRoutes from './productRoutes.js';
 import categoryRoutes from './categoryRoutes.js';
@@ -38,6 +39,8 @@ router.use('/tracking', trackingRoutes);
 router.use('/cart', cartRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/transport', transportRoutes);
+router.use('/public/suppliers', publicSupplierRouter);
+router.use('/supplier/documents', supplierDocumentRouter);
 router.use('/supplier', supplierRoutes);
 router.use('/supplier/products', supplierProductRoutes);
 router.use('/supplier/orders', supplierOrderRoutes);

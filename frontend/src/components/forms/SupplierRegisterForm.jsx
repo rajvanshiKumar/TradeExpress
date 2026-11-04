@@ -1,3 +1,5 @@
+import { ProfilePhotoField } from '../suppliers/SupplierDocumentParts';
+import { storeAuthToken } from '../../utils/authSession';
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import OtpSendError from './OtpSendError';
@@ -46,6 +48,8 @@ import {
 import { normalizeEmail, parseMobile, mobileExample, rules, validate, hasErrors } from '../../utils/validators';
 import { validatePassword } from '../../utils/passwordRules';
 import { certificateFormatHint, isValidCertificateFormat, normalizeCertificateNumber } from '../../utils/certificateFormats';
+
+const LEGAL_STRUCTURES = ['Proprietorship', 'Partnership', 'Limited Liability Partnership (LLP)', 'Private Limited', 'Public Limited', 'One Person Company (OPC)', 'Other'];
 
 const STEPS = [
   { id: 1, label: 'Account Details', desc: 'Credentials & contact' },
@@ -113,6 +117,7 @@ export default function SupplierRegisterForm() {
   // Form State
   const [values, setValues] = useState({
     // Step 1: Account Details
+    profilePhoto: '',
     name: googleSignup?.name || '',
     companyName: '',
     phone: '',
@@ -122,6 +127,8 @@ export default function SupplierRegisterForm() {
     confirmPassword: '',
 
     // Step 2: Business Information
+    legalStructure: '',
+    registrationNumber: '',
     businessType: 'GST Certificate',
     businessTypeOther: '',
     gstStatus: '',
@@ -916,6 +923,7 @@ export default function SupplierRegisterForm() {
     const stepErrors = {};
 
     if (step === 1) {
+      if (!values.profilePhoto) stepErrors.profilePhoto = 'Please upload your profile photograph. It is required for your Supplier ID Card.';
       if (!values.name.trim()) stepErrors.name = 'Full name is required.';
       if (!values.companyName.trim()) stepErrors.companyName = 'Company / Legal Business name is required.';
       if (!values.phone.trim()) {
@@ -945,6 +953,10 @@ export default function SupplierRegisterForm() {
     }
 
     if (step === 2) {
+      if (!values.legalStructure) stepErrors.legalStructure = 'Please select your business type.';
+      if (values.registrationNumber.trim() && !/^[A-Za-z0-9][A-Za-z0-9 ./-]*$/.test(values.registrationNumber.trim())) {
+        stepErrors.registrationNumber = 'Use only letters, numbers, spaces, dots, slashes or hyphens.';
+      }
       if (!values.businessType) stepErrors.businessType = 'Please select your business type.';
       if (values.businessType === 'Other' && !values.businessTypeOther.trim()) {
         stepErrors.businessTypeOther = 'Please specify your business type.';
@@ -1129,6 +1141,9 @@ export default function SupplierRegisterForm() {
       businessAddress: (values.businessAddress && values.businessAddress.trim()) || (values.country === 'India' ? `${values.city.trim()}, ${values.state.trim()} - ${values.postalCode.trim()}` : ''),
       factoryAddressSame: true,
       factoryAddress: '',
+      profilePhoto: values.profilePhoto,
+      legalStructure: values.legalStructure,
+      registrationNumber: values.registrationNumber.trim().toUpperCase(),
       businessType: values.businessType,
       businessTypeOther: values.businessType === 'Other' ? values.businessTypeOther.trim() : '',
       gstStatus: values.country === 'India' ? values.gstStatus : 'Not Applicable',
@@ -1167,8 +1182,7 @@ export default function SupplierRegisterForm() {
       if (res.ok && data.success) {
         // Store tokens for automatic sign-in and activate session
         if (data.data?.token) {
-          localStorage.setItem('tradeexpress_auth_token', data.data.token);
-          localStorage.setItem('tradesphere_auth_token', data.data.token);
+          storeAuthToken(data.data.token);
         }
         if (setAuthUser && data.data) {
           await setAuthUser(data.data.user || data.data, data.data.token, '');
@@ -1359,6 +1373,14 @@ export default function SupplierRegisterForm() {
             {/* Hidden dummy fields to prevent browser password managers from autofilling saved credentials into email & password */}
             <input type="text" name="fake_username_remembered" tabIndex={-1} aria-hidden="true" className="sr-only opacity-0 pointer-events-none absolute -top-96" />
             <input type="password" name="fake_password_remembered" tabIndex={-1} aria-hidden="true" className="sr-only opacity-0 pointer-events-none absolute -top-96" />
+
+            <ProfilePhotoField
+              id="supplier-signup-photo"
+              required
+              value={values.profilePhoto}
+              error={errors.profilePhoto}
+              onSelect={(photo) => handleChange('profilePhoto')(photo)}
+            />
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               {/* Full Name */}
@@ -1641,6 +1663,37 @@ export default function SupplierRegisterForm() {
             </div>
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              {/* Legal form of the business, printed on the certificate */}
+              <div>
+                <label htmlFor="supplier-legal-structure" className="block text-xs font-semibold text-slate-700 mb-1">
+                  Business Type <span className="text-red-500">*</span>
+                </label>
+                <CustomSelect
+                  id="supplier-legal-structure"
+                  value={values.legalStructure}
+                  onChange={(val) => handleChange('legalStructure')(typeof val === 'string' ? val : (val?.target?.value ?? ''))}
+                  options={LEGAL_STRUCTURES}
+                  placeholder="Select business type"
+                  searchable={false}
+                />
+                {errors.legalStructure && <p className="mt-1 text-xs text-red-600">{errors.legalStructure}</p>}
+              </div>
+              <div>
+                <label htmlFor="supplier-registration-number" className="block text-xs font-semibold text-slate-700 mb-1">
+                  Business Registration Number <span className="font-normal text-slate-400">(if applicable)</span>
+                </label>
+                <input
+                  id="supplier-registration-number"
+                  type="text"
+                  maxLength={64}
+                  placeholder="e.g. UDYAM-UP-12-3456789"
+                  value={values.registrationNumber}
+                  onChange={handleChange('registrationNumber')}
+                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${errors.registrationNumber ? 'border-red-500' : 'border-slate-300'}`}
+                />
+                {errors.registrationNumber && <p className="mt-1 text-xs text-red-600">{errors.registrationNumber}</p>}
+              </div>
+
               {/* Business Registration Type / Certificate Dropdown */}
               <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">

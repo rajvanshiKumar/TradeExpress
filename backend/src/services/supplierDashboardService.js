@@ -168,7 +168,7 @@ export async function getSupplierOverview(supplierUser) {
     prisma.notification.count({
       where: {
         userId: supplierUser.id,
-        isRead: false,
+        read: false,
       },
     }),
   ]);

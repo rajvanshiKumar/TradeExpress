@@ -1,3 +1,4 @@
+import { storeAuthToken } from '../../utils/authSession';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, MailCheck, ShieldCheck } from 'lucide-react';
 import Button from '../common/Button';
@@ -23,13 +24,7 @@ const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).p
 
 /** Stores the new login token issued after a password or email change (other sessions are signed out). */
 function storeToken(token) {
-  if (!token) return;
-  try {
-    localStorage.setItem('tradeexpress_auth_token', token);
-    localStorage.setItem('tradesphere_auth_token', token);
-  } catch {
-    // Storage unavailable: the current tab keeps working until reload
-  }
+  if (token) storeAuthToken(token);
 }
 
 export function Steps({ steps, current }) {

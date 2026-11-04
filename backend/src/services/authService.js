@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { cleanRegistrationNumber, ensureSupplierDocument, parseProfilePhoto, validateLegalStructure } from './supplierDocumentService.js';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { issueLoginToken } from './sessionService.js';
@@ -239,7 +240,7 @@ export async function authenticateGoogle({ code, role }) {
     if (!user.googleId || (!user.avatarUrl && profile.picture) || !user.isVerified) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { googleId: profile.googleId, isVerified: true, ...(!user.avatarUrl && profile.picture ? { avatarUrl: profile.picture } : {}) },
+        data: { googleId: profile.googleId, ...(user.role === 'SUPPLIER' ? {} : { isVerified: true }), ...(!user.avatarUrl && profile.picture ? { avatarUrl: profile.picture } : {}) },
         select: GOOGLE_USER_SELECT,
       });
     }
@@ -587,6 +588,9 @@ export async function registerSupplier({
   companyDescription,
   logoUrl,
   businessImages,
+  profilePhoto,
+  legalStructure,
+  registrationNumber,
   state,
   city,
   postalCode,
@@ -896,6 +900,11 @@ export async function registerSupplier({
     throw error;
   }
 
+  // A clear photograph, the business type and a valid registration number are needed for the documents
+  const photo = parseProfilePhoto(profilePhoto);
+  const cleanLegalStructure = validateLegalStructure(legalStructure);
+  const cleanRegistration = cleanRegistrationNumber(registrationNumber);
+
   // 2. Generate unique supplier ID with timestamp & random entropy (a resumed signup keeps its code)
   let supplierCode = resumeUser?.supplierCode || null;
   let codeUnique = Boolean(supplierCode);
@@ -928,6 +937,8 @@ export async function registerSupplier({
       postalCode: postalCode ? postalCode.trim() : null,
       country: country.trim(),
       supplierCode,
+      legalStructure: cleanLegalStructure,
+      registrationNumber: cleanRegistration,
       businessType,
       businessTypeOther: businessType === 'Other' ? (businessTypeOther || '').trim() : null,
       gstStatus: isIndia ? gstStatus : null,
@@ -1012,6 +1023,17 @@ export async function registerSupplier({
     }
   }
 
+  // Permanent Supplier ID, Certificate Number and QR code. If this fails the account is still created, and the record
+  // is completed the next time the supplier opens their documents.
+  let documentRecord = null;
+  try {
+    documentRecord = await ensureSupplierDocument(user.id, { photo });
+    supplierCode = documentRecord.supplierId;
+    user.supplierCode = documentRecord.supplierId;
+  } catch (error) {
+    console.error('[Supplier Documents] Could not create the record at registration:', error.message);
+  }
+
   // 6. Audit log (dispatched asynchronously, non-blocking)
   import('./auditService.js')
     .then(({ logAuditAction }) =>
@@ -1039,6 +1061,7 @@ export async function registerSupplier({
     },
     token,
     supplierCode,
+    certificateNumber: documentRecord?.certificateNumber || null,
     documentsCount: validDocsCount,
   };
 }
