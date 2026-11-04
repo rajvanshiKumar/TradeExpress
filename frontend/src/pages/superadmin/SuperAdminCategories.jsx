@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
+import Image from '../../components/common/Image';
 
 export default function SuperAdminCategories() {
   const { showToast } = useNotifications();
@@ -195,7 +196,7 @@ export default function SuperAdminCategories() {
                 <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-3">
                     {c.photo ? (
-                      <img src={c.photo} alt={c.name} className="size-11 rounded-xl object-cover border border-slate-200" />
+                      <Image photo={c.photo} width={88} height={88} alt={c.name} className="size-11 rounded-xl object-cover border border-slate-200" />
                     ) : (
                       <div className="size-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
                         <FolderTree className="size-5" />
@@ -352,13 +353,18 @@ export default function SuperAdminCategories() {
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Cover Image URL</label>
-                <input
-                  type="url"
-                  value={formData.photo}
-                  onChange={(e) => setFormData({ ...formData, photo: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                />
+                <div className="flex items-center gap-2">
+                  {formData.photo ? (
+                    <Image photo={formData.photo} width={88} height={88} alt="Cover preview" className="size-10 shrink-0 rounded-lg object-cover border border-slate-200" />
+                  ) : null}
+                  <input
+                    type="text"
+                    value={formData.photo}
+                    onChange={(e) => setFormData({ ...formData, photo: e.target.value })}
+                    placeholder="https://..."
+                    className="w-full p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                </div>
               </div>
 
               <div>

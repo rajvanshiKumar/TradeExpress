@@ -20,6 +20,16 @@ const SESSION_HOURS = 12;
 const MAX_ATTEMPTS = 5;
 const LOCK_SECONDS = 30;
 const GENERIC_FAILURE = 'The email or password is incorrect.';
+const CONNECTION_FAILURE = 'Unable to connect to the authentication server. Please check your connection and try again.';
+
+// Only a rejected password is reported as wrong credentials. An outage, rate limit or blocked account says so,
+// otherwise a correct password looks wrong.
+const adminFailureMessage = (res) => {
+  if (res.status === 0) return CONNECTION_FAILURE;
+  if (res.status >= 500) return 'The server could not complete sign-in. Please try again shortly.';
+  if (res.status === 403 || res.status === 429) return res.data?.message || GENERIC_FAILURE;
+  return GENERIC_FAILURE;
+};
 const EMPTY_SESSION = { userId: null, role: null, expiresAt: 0 };
 
 
@@ -100,6 +110,7 @@ export function AuthProvider({ children }) {
     // No passwords or credentials are kept in the browser code.
     let isSuper = false;
     let valid = false;
+    let failure = CONNECTION_FAILURE;
     try {
       const res = await authFetch('/auth/admin-login', {
         method: 'POST',
@@ -115,14 +126,16 @@ export function AuthProvider({ children }) {
         }
         valid = true;
         isSuper = role === 'SUPER_ADMIN';
+      } else {
+        failure = adminFailureMessage(res);
       }
     } catch {
-      // Server unreachable: sign-in fails below
+      // Server unreachable: reported as a connection problem below
     }
 
     if (!valid) {
-      recordFailure();
-      return { ok: false, error: GENERIC_FAILURE };
+      if (failure === GENERIC_FAILURE) recordFailure();
+      return { ok: false, error: failure };
     }
 
     setAttempts({ count: 0, lockedUntil: 0 });

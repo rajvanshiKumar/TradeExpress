@@ -14,6 +14,7 @@ import {
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
 import CustomSelect from '../../components/common/CustomSelect';
+import Image from '../../components/common/Image';
 
 export default function SuperAdminProducts() {
   const { showToast } = useNotifications();
@@ -204,8 +205,10 @@ export default function SuperAdminProducts() {
                   {/* Image & Moderation Badge */}
                   <div className="relative aspect-4/3 bg-slate-100 overflow-hidden">
                     {p.photo ? (
-                      <img
-                        src={p.photo}
+                      <Image
+                        photo={p.photo}
+                        width={480}
+                        height={360}
                         alt={p.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />

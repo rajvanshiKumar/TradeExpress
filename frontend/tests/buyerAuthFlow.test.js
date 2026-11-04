@@ -36,6 +36,14 @@ describe('Buyer signup and sign-in fast-path checks', () => {
     assert.match(signin, /finally\s*\{\s*emailOtpVerifyLockRef\.current = false/);
   });
 
+  it('reports an outage or rate limit on admin sign-in instead of calling the password wrong', () => {
+    const adminBlock = auth.slice(auth.indexOf('const loginAdmin = useCallback'), auth.indexOf('const login = useCallback'));
+    assert.match(auth, /if \(res\.status === 0\) return CONNECTION_FAILURE/);
+    assert.match(auth, /res\.status === 403 \|\| res\.status === 429/);
+    assert.match(adminBlock, /failure = adminFailureMessage\(res\)/);
+    assert.match(adminBlock, /if \(failure === GENERIC_FAILURE\) recordFailure\(\)/);
+  });
+
   it('does not make a second profile request after signin', () => {
     const loginBlock = auth.slice(auth.indexOf('const login = useCallback'), auth.indexOf('const loginMobile = useCallback'));
     assert.match(loginBlock, /\/auth\/login/);
