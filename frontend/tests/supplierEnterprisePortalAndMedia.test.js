@@ -11,7 +11,7 @@ describe('Supplier Enterprise Portal & Media Test Suite', () => {
       { label: 'Buyer Inquiries/RFQs', to: '/supplier/inquiries' },
       { label: 'My Quotations', to: '/supplier/quotations' },
       { label: 'Orders', to: '/supplier/orders' },
-      { label: 'Shipping & Delivery', to: '/supplier/shipping' },
+      { label: 'Transport & Delivery Management', to: '/supplier/transport' },
       { label: 'Payments & Earnings', to: '/supplier/payments' },
       { label: 'Verification Center', to: '/supplier/verification' },
       { label: 'Business Profile', to: '/supplier/profile' },

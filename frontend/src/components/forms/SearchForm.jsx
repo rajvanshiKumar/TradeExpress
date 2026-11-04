@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import useProducts from '../../hooks/useProducts';
 import VisualSearchModal from '../common/VisualSearchModal';
+import SearchSuggestions, { buildSuggestionItems } from '../search/SearchSuggestions';
+import useSearchSuggestions from '../../hooks/useSearchSuggestions';
 import { useTranslation } from '../../i18n/LanguageContext';
 
 const SCOPES = [
@@ -50,6 +52,26 @@ export default function SearchForm({
   const [categoryFilter, setCategoryFilter] = useState('');
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
+
+  // Live suggestions (product searches only: the header's Products scope and the hero search)
+  const formRef = useRef(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const suggestionsEnabled = isHero || scope === 'products';
+  const suggestions = useSearchSuggestions(query, { enabled: suggestionsEnabled && suggestOpen });
+  const suggestionItems = suggestions.status === 'idle' ? [] : buildSuggestionItems(suggestions, query);
+  const showSuggestions = suggestOpen && suggestionsEnabled && query.trim().length > 0 && suggestions.status !== 'idle';
+  const suggestionsId = `${idPrefix}-suggestions`;
+
+  // Close the suggestions when clicking anywhere outside the search bar
+  useEffect(() => {
+    if (!suggestOpen) return undefined;
+    const onPointer = (event) => {
+      if (!formRef.current?.contains(event.target)) setSuggestOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    return () => document.removeEventListener('mousedown', onPointer);
+  }, [suggestOpen]);
 
   // Keep the header field in sync with the page being viewed.
   useEffect(() => {
@@ -98,6 +120,8 @@ export default function SearchForm({
 
   const submit = (event) => {
     event.preventDefault();
+    setSuggestOpen(false);
+    setActiveIndex(-1);
     const params = new URLSearchParams();
     const text = query.trim();
     if (text) params.set('q', text);
@@ -111,6 +135,38 @@ export default function SearchForm({
     const search = params.toString();
     navigate(`${path}${search ? `?${search}` : ''}`);
     onSubmitted?.();
+  };
+
+  const pickSuggestion = (item) => {
+    setSuggestOpen(false);
+    setActiveIndex(-1);
+    if (item.type === 'search') {
+      formRef.current?.requestSubmit();
+      return;
+    }
+    navigate(item.to);
+    onSubmitted?.();
+  };
+
+  const handleQueryKeyDown = (event) => {
+    if (!showSuggestions || !suggestionItems.length) {
+      if (event.key === 'Escape' && suggestOpen) setSuggestOpen(false);
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveIndex((index) => (index + 1) % suggestionItems.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex((index) => (index <= 0 ? suggestionItems.length - 1 : index - 1));
+    } else if (event.key === 'Enter' && activeIndex >= 0 && suggestionItems[activeIndex]) {
+      event.preventDefault();
+      pickSuggestion(suggestionItems[activeIndex]);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setSuggestOpen(false);
+      setActiveIndex(-1);
+    }
   };
 
   const placeholder =
@@ -136,6 +192,7 @@ export default function SearchForm({
 
   return (
     <form
+      ref={formRef}
       role="search"
       onSubmit={submit}
       className={`relative flex w-full items-stretch rounded-full bg-white p-1 transition-all ${
@@ -389,7 +446,18 @@ export default function SearchForm({
         type="search"
         autoFocus={autoFocus}
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setSuggestOpen(true);
+          setActiveIndex(-1);
+        }}
+        onFocus={() => setSuggestOpen(true)}
+        onKeyDown={handleQueryKeyDown}
+        role={suggestionsEnabled ? 'combobox' : undefined}
+        aria-autocomplete={suggestionsEnabled ? 'list' : undefined}
+        aria-expanded={suggestionsEnabled ? showSuggestions : undefined}
+        aria-controls={suggestionsEnabled ? suggestionsId : undefined}
+        aria-activedescendant={showSuggestions && activeIndex >= 0 ? `${suggestionsId}-option-${activeIndex}` : undefined}
         placeholder={placeholder}
         autoComplete="off"
         className={`min-w-0 flex-1 bg-transparent px-3 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none sm:px-4 font-medium ${
@@ -420,6 +488,18 @@ export default function SearchForm({
         <Search className="size-4" aria-hidden="true" />
         <span className={isHero ? 'inline' : 'hidden lg:inline'}>{t('common.search', {}, 'Search')}</span>
       </button>
+
+      {showSuggestions ? (
+        <SearchSuggestions
+          id={suggestionsId}
+          status={suggestions.status}
+          items={suggestionItems}
+          query={query}
+          activeIndex={activeIndex}
+          onPick={pickSuggestion}
+          onHover={setActiveIndex}
+        />
+      ) : null}
 
       {/* Visual Search Modal */}
       <VisualSearchModal

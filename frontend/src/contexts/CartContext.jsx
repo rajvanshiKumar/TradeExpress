@@ -87,7 +87,7 @@ export function CartProvider({ children }) {
     setItems((previous) => (previous.some((item) => item.productId === product.id)
       ? previous.map((item) => (item.productId === product.id ? { ...item, quantity: nextQuantity, variant: variant ?? item.variant } : item))
       : [...previous, { productId: product.id, quantity: nextQuantity, variant }]));
-    showToast(existing ? 'Cart quantity updated.' : `${product.name} added to cart.`);
+    // No toast on success: the cart badge and the button state already confirm it
   }, [items, setItems, showToast]);
 
   const updateQuantity = useCallback((productId, quantity) => {
@@ -96,11 +96,10 @@ export function CartProvider({ children }) {
     setItems((previous) => previous.map((item) => (item.productId === productId ? { ...item, quantity: clampQuantity(product, quantity) } : item)));
   }, [products, setItems]);
 
+  // Removing is silent: the line disappearing from the cart is the confirmation
   const removeFromCart = useCallback((productId) => {
-    const product = products.find((item) => item.id === productId) || seedProducts.find((item) => item.id === productId);
     setItems((previous) => previous.filter((item) => item.productId !== productId));
-    showToast(product?.name ? `${product.name} removed from cart.` : 'Removed from cart.', 'info');
-  }, [products, setItems, showToast]);
+  }, [setItems]);
 
   const toggleCart = useCallback((product, quantity = product?.moq || 1, variant = null) => {
     if (!product) return false;

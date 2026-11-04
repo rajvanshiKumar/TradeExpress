@@ -16,6 +16,15 @@ export const changePasswordWithCode = ({ grant, newPassword, confirmPassword }) 
 export const requestEmailChange = ({ grant, newEmail }) => authorizedRequest('POST', 'account/email/request-change', { grant, newEmail });
 export const completeEmailChange = ({ grant, otp }) => authorizedRequest('POST', 'account/email/verify-new', { grant, otp });
 
+// Change phone: the new number is verified by SMS (same endpoints as signup), then the change is applied
+export const sendPhoneCode = (phone) => authorizedRequest('POST', 'auth/send-mobile-otp', { phone, country: 'India' });
+export const verifyPhoneCode = (phone, otp) => authorizedRequest('POST', 'auth/verify-mobile-otp', { phone, country: 'India', otp });
+export const changePhone = ({ grant, phone, verificationToken }) => authorizedRequest('POST', 'account/phone/change', { grant, phone, country: 'India', verificationToken });
+
+// Account deletion (Buyers and Suppliers). Uses an ACCOUNT_DELETE authorization from a verified email code.
+export const getDeletionStatus = () => authorizedRequest('GET', 'account/delete/status');
+export const deleteAccount = ({ grant, confirmation }) => authorizedRequest('POST', 'account/delete', { grant, confirmation }, { timeoutMs: 60000 });
+
 /** Uploads a profile photo (PNG, JPG or WEBP, at most 2 MB). Returns the updated account settings. */
 export async function uploadAccountAvatar(file) {
   let token = null;
@@ -45,3 +54,13 @@ export async function uploadAccountAvatar(file) {
   }
   return data.data;
 }
+
+// Active login sessions (signed-in devices)
+export const listSessions = () => authorizedRequest('GET', 'account/sessions');
+export const revokeSession = (id) => authorizedRequest('POST', `account/sessions/${encodeURIComponent(id)}/revoke`);
+export const revokeOtherSessions = () => authorizedRequest('POST', 'account/sessions/revoke-others');
+
+// Preferences (applied by the platform) and personal data export
+export const getPreferences = () => authorizedRequest('GET', 'account/preferences');
+export const updatePreferences = (changes) => authorizedRequest('PATCH', 'account/preferences', changes);
+export const exportAccountData = () => authorizedRequest('GET', 'account/data-export', undefined, { timeoutMs: 30000 });

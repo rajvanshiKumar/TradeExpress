@@ -19,7 +19,7 @@ describe('Account Settings structure', () => {
 
   it('only marks built sections as available; nothing pretends to work', () => {
     const available = rows.filter((row) => row.available).map((row) => row.id).sort();
-    assert.deepEqual(available, ['connected', 'email', 'member', 'password', 'profile', 'tax']);
+    assert.deepEqual(available, ['connected', 'delete', 'email', 'email-preferences', 'language', 'member', 'notifications', 'password', 'phone', 'privacy', 'profile', 'sessions', 'tax']);
   });
 
   it('never offers self-service deletion or tax details to the Super Admin', () => {
@@ -81,5 +81,26 @@ describe('Change password and change email screens', () => {
     for (const text of ['Enter a valid email address.', 'The email addresses do not match.', 'The new email address must be different from your current one.']) {
       assert.ok(flows.includes(text), `missing check: ${text}`);
     }
+  });
+});
+
+describe('Delete Account', () => {
+  const del = read('src/components/account/AccountDeleteSection.jsx');
+
+  it('asks for a final, professional confirmation before deleting', () => {
+    assert.ok(del.includes('title="Delete your TradeExpress account?"'));
+    assert.match(del, /Are you sure you want to permanently delete the account/);
+    assert.match(del, /Yes, delete my account/);
+    assert.match(del, /Cancel/);
+  });
+
+  it('requires email verification, typing DELETE and an acknowledgement', () => {
+    assert.ok(del.includes("sendAccountCode('ACCOUNT_DELETE')"));
+    assert.ok(del.includes("typed.trim() === 'DELETE' && understood"));
+  });
+
+  it('explains consequences and shows what blocks deletion', () => {
+    assert.match(del, /Deleting your account is permanent/);
+    assert.match(del, /Your account can’t be deleted yet/);
   });
 });

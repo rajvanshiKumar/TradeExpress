@@ -9,6 +9,7 @@ import { hashPassword, isCryptoAvailable, verifyPassword } from '../utils/passwo
 import { removeStorage } from '../utils/storage';
 import makeId from '../utils/ids';
 import { authFetch } from '../api/authClient';
+import { sessionMatchesToken } from '../utils/authSession';
 import addressService from '../services/addressService';
 
 // Front-end prototype authentication.
@@ -20,6 +21,8 @@ const MAX_ATTEMPTS = 5;
 const LOCK_SECONDS = 30;
 const GENERIC_FAILURE = 'The email or password is incorrect.';
 const EMPTY_SESSION = { userId: null, role: null, expiresAt: 0 };
+
+
 
 const newSession = (userId, role) => ({ userId, role, expiresAt: Date.now() + SESSION_HOURS * 3600 * 1000 });
 
@@ -46,18 +49,29 @@ export function AuthProvider({ children }) {
     if (session?.userId && !user) setSession(EMPTY_SESSION);
   }, [session, user, setSession]);
 
-  // An admin session is only valid with the server-issued token from the admin sign-in; without it, sign in again
+  // The page session must belong to the same account and role as the stored login token. The token is shared by
+  // every tab, so signing in with another account in a second tab (or an expired token) would otherwise leave this
+  // tab showing e.g. a supplier dashboard while sending a buyer's token, and the server answers 403.
+  const [tokenCheck, setTokenCheck] = useState(0);
   useEffect(() => {
-    if (session?.userId && (session.role === 'super_admin' || session.role === 'admin')) {
-      let existingToken = null;
-      try {
-        existingToken = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
-      } catch {
-        existingToken = null;
+    const onStorage = (event) => {
+      if (!event.key || ['tradeexpress_auth_token', 'tradesphere_auth_token'].includes(event.key) || event.key.endsWith(STORAGE_KEYS.session)) {
+        setTokenCheck((n) => n + 1);
       }
-      if (!existingToken) setSession(EMPTY_SESSION);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+  useEffect(() => {
+    if (!session?.userId) return;
+    let token = null;
+    try {
+      token = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
+    } catch {
+      token = null;
     }
-  }, [session, setSession]);
+    if (!sessionMatchesToken(session, token)) setSession(EMPTY_SESSION);
+  }, [session, setSession, tokenCheck]);
 
   const lockMessage = () => {
     const seconds = Math.ceil((attempts.lockedUntil - Date.now()) / 1000);
@@ -137,6 +151,7 @@ export function AuthProvider({ children }) {
           password,
           role: expectedRole ? expectedRole.toUpperCase() : undefined,
           otp: options?.otp,
+          country: options?.country || 'India',
         }),
       });
 
@@ -328,7 +343,10 @@ export function AuthProvider({ children }) {
         }
       }
     } catch (err) {
-      console.warn('Backend registration failed, falling back to local verification:', err);
+      console.warn('Backend registration failed.');
+      if (String(role).toLowerCase() === 'buyer') {
+        return { ok: false, error: err?.message || 'Unable to reach the registration server. Please try again.' };
+      }
     }
 
     // Only if backend was unreachable, fall back to checking local memory
@@ -380,6 +398,13 @@ export function AuthProvider({ children }) {
 
   /** Signs out and clears session-related data (the Buy Now selection). The cart is kept. */
   const logout = useCallback(() => {
+    // End this device's session on the server too, so the token stops working everywhere (best effort)
+    try {
+      const token = localStorage.getItem('tradeexpress_auth_token') || localStorage.getItem('tradesphere_auth_token');
+      if (token) authFetch('/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    } catch {
+      // Storage unavailable: the local sign-out below still happens
+    }
     startTransition(() => {
       setSession(EMPTY_SESSION);
     });

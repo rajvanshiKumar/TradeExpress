@@ -18,17 +18,10 @@ router.get('/users', controller.listUsers);
 router.get('/users/export/csv', controller.exportUsersCsv);
 router.get('/users/:id', controller.getUserDetails);
 router.patch('/users/:id/status', controller.updateUserStatus);
-router.post(
-  '/users/:id/reset-password',
-  validate([
-    body('newPassword').custom((value) => {
-      const res = validatePassword(value);
-      if (!res.isValid) throw new Error(res.message);
-      return true;
-    }),
-  ]),
-  controller.resetUserPassword
-);
+// Sends the user a reset link; the Super Admin never sets or sees another user's password
+router.post('/users/:id/reset-password', controller.sendPasswordResetLink);
+router.get('/users/:id/deletion-check', controller.getUserDeletionCheck);
+router.post('/users/:id/delete', controller.deleteUserAccount);
 
 // Suppliers & KYC
 router.get('/suppliers/kyc', controller.listSuppliersKyc);

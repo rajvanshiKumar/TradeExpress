@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body, param } from 'express-validator';
 import * as supplierInventoryController from '../controllers/supplierInventoryController.js';
-import { authenticateJWT, requireRole } from '../middleware/authMiddleware.js';
+import { authenticateJWT, requireRole, requireSuperAdmin } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
@@ -10,6 +10,15 @@ const router = Router();
 router.use(authenticateJWT, requireRole('SUPPLIER', 'ADMIN'));
 
 router.get('/', supplierInventoryController.listInventory);
+
+// Platform-wide check that stored reserved/committed figures match open orders (Super Admin only)
+router.get('/reconciliation', requireSuperAdmin, supplierInventoryController.getReconciliation);
+
+router.get(
+  '/:productId/detail',
+  validate([param('productId').notEmpty().withMessage('Product ID is required.')]),
+  supplierInventoryController.getProductDetail
+);
 
 router.post(
   '/:productId/adjust',

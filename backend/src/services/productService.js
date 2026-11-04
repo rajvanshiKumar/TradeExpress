@@ -843,3 +843,36 @@ export async function getSimilarProductsForComparison({
   };
 }
 
+
+/**
+ * Search-as-you-type suggestions: active products and categories matching the typed text (1+ characters).
+ * Names that start with the text come first, then names containing it, then other searchable fields.
+ */
+export async function suggestProducts(query, { limit = 8 } = {}) {
+  const q = String(query || '').trim().slice(0, 80);
+  if (!q) return { query: '', products: [], categories: [] };
+  const take = Math.min(Math.max(Number(limit) || 8, 1), 10);
+  const select = { id: true, name: true, slug: true, photo: true, categorySlug: true, category: { select: { name: true } } };
+
+  const [startsWith, nameContains, otherFields, categories] = await Promise.all([
+    prisma.product.findMany({ where: { status: 'Active', name: { startsWith: q } }, select, orderBy: [{ featured: 'desc' }, { name: 'asc' }], take }),
+    prisma.product.findMany({ where: { status: 'Active', name: { contains: q } }, select, orderBy: [{ featured: 'desc' }, { name: 'asc' }], take }),
+    // Other fields only matter once a word is being typed; one letter would match almost everything
+    q.length >= 2
+      ? prisma.product.findMany({
+        where: { status: 'Active', OR: [{ subcategory: { contains: q } }, { summary: { contains: q } }, { sku: { contains: q } }] },
+        select, orderBy: [{ featured: 'desc' }, { name: 'asc' }], take,
+      })
+      : Promise.resolve([]),
+    prisma.category.findMany({ where: { name: { contains: q } }, select: { slug: true, name: true }, orderBy: { name: 'asc' }, take: 4 }),
+  ]);
+
+  const seen = new Set();
+  const products = [];
+  for (const product of [...startsWith, ...nameContains, ...otherFields]) {
+    if (seen.has(product.id) || products.length >= take) continue;
+    seen.add(product.id);
+    products.push({ id: product.id, name: product.name, slug: product.slug, photo: product.photo, categorySlug: product.categorySlug, categoryName: product.category?.name || null });
+  }
+  return { query: q, products, categories };
+}

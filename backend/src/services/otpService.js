@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import prisma from '../config/db.js';
+import { ENV } from '../config/env.js';
 import * as msg91Service from './msg91Service.js';
 import * as powerstextService from './powerstextService.js';
 import {
@@ -49,6 +50,23 @@ const VERIFICATION_TOKEN_VALIDITY_MS = 15 * 60 * 1000; // 15 minutes to complete
 // Expired in-memory OTP sessions are kept briefly so users see "expired" rather than "not requested"
 const EXPIRED_SESSION_GRACE_MS = 30 * 60 * 1000;
 
+function generateOtp() {
+  let otp;
+  do {
+    otp = String(crypto.randomInt(100000, 1000000));
+  } while (otp === '123456');
+  return otp;
+}
+
+function hashesMatch(candidate, expected) {
+  if (typeof candidate !== 'string' || typeof expected !== 'string' || candidate.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(expected));
+}
+
+function hashOtp(otp) {
+  return crypto.createHmac('sha256', ENV.JWT_SECRET).update(String(otp)).digest('hex');
+}
+
 /** The email helpers report failures instead of throwing; a code that was never sent must not be reported as sent. */
 function assertEmailSent(result) {
   if (result && result.success === false) {
@@ -60,15 +78,17 @@ function assertEmailSent(result) {
 
 /** Finds the account that owns a mobile number, in any of its stored formats. */
 function findUserByMobile(normalized) {
+  const phoneValues = [...new Set([
+    normalized.formattedPhone,
+    normalized.msg91Mobile,
+    `+${normalized.msg91Mobile}`,
+    normalized.national,
+  ].filter(Boolean))];
   return prisma.user.findFirst({
     where: {
-      OR: [
-        { phone: normalized.formattedPhone },
-        { phone: normalized.msg91Mobile },
-        { phone: `+${normalized.msg91Mobile}` },
-        { phone: normalized.national },
-      ],
+      phone: { in: phoneValues },
     },
+    select: { id: true, role: true, name: true, phone: true, company: true, passwordHash: true, googleId: true, isActive: true, status: true, statusReason: true },
   });
 }
 
@@ -183,8 +203,8 @@ export async function requestMobileOtp({ phone, country = 'India' }) {
   let generatedOtp = null;
 
   if (isPowersText) {
-    generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
-    const otpHash = crypto.createHash('sha256').update(generatedOtp).digest('hex');
+    generatedOtp = generateOtp();
+    const otpHash = hashOtp(generatedOtp);
     sessionToken = `otp_${otpHash}`;
     smsResult = await powerstextService.sendOtpSms({
       mobile: msg91Mobile,
@@ -309,8 +329,8 @@ export async function verifyMobileOtp({ phone, country = 'India', otp }) {
     // Development OTP bypass allowed only when non-production and configured
   } else if (verification.token && verification.token.startsWith('otp_')) {
     const expectedHash = verification.token.slice(4);
-    const candidateHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
-    if (candidateHash !== expectedHash) {
+    const candidateHash = hashOtp(cleanOtp);
+    if (!hashesMatch(candidateHash, expectedHash)) {
       await prisma.mobileVerification.update({
         where: { phone: formattedPhone },
         data: { attempts: { increment: 1 } },
@@ -398,8 +418,8 @@ export async function resendMobileOtp({ phone, country = 'India' }) {
   let generatedOtp = null;
 
   if (isPowersText) {
-    generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
-    const otpHash = crypto.createHash('sha256').update(generatedOtp).digest('hex');
+    generatedOtp = generateOtp();
+    const otpHash = hashOtp(generatedOtp);
     sessionToken = `otp_${otpHash}`;
     smsResult = await powerstextService.sendOtpSms({
       mobile: msg91Mobile,
@@ -443,7 +463,7 @@ export async function validateVerifiedMobile({ phone, country = 'India', verific
     throw error;
   }
 
-  if (verificationToken === 'verified' || verificationToken.startsWith('evt_test_')) {
+  if (process.env.NODE_ENV !== 'production' && (verificationToken === 'verified' || verificationToken.startsWith('evt_test_'))) {
     return true;
   }
 
@@ -470,10 +490,22 @@ export async function validateVerifiedMobile({ phone, country = 'India', verific
   }
 
   // Mark token as consumed (prevents OTP token replay for another account)
-  await prisma.mobileVerification.update({
-    where: { id: verification.id },
+  const consumed = await prisma.mobileVerification.updateMany({
+    where: {
+      id: verification.id,
+      token: verificationToken,
+      verified: true,
+      used: false,
+      expiresAt: { gt: new Date() },
+    },
     data: { used: true },
   });
+
+  if (consumed.count !== 1) {
+    const error = new Error('Mobile verification token is invalid, expired, or already used.');
+    error.statusCode = 403;
+    throw error;
+  }
 
   return true;
 }
@@ -528,12 +560,9 @@ export async function requestEmailLoginOtp({ email, role }) {
   }
 
   // Generate real cryptographically secure random 6-digit OTP (never fixed 123456 as generated real OTP)
-  let generatedOtp;
-  do {
-    generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
-  } while (generatedOtp === '123456');
+  const generatedOtp = generateOtp();
 
-  const otpHash = crypto.createHash('sha256').update(generatedOtp).digest('hex');
+  const otpHash = hashOtp(generatedOtp);
 
   const { sendLoginOtpEmail } = await import('./emailService.js');
   assertEmailSent(await sendLoginOtpEmail({ email: normalizedEmail, name: user.name, otp: generatedOtp }));
@@ -593,8 +622,8 @@ export function validateEmailLoginOtp({ email, otp, consume = false }) {
     throw error;
   }
 
-  const candidateHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
-  if (candidateHash !== session.otpHash) {
+  const candidateHash = hashOtp(cleanOtp);
+  if (!hashesMatch(candidateHash, session.otpHash)) {
     session.attempts += 1;
     throw authError(AUTH_MESSAGES.OTP_INVALID, 400, AUTH_ERROR_CODES.OTP_INVALID);
   }
@@ -652,11 +681,9 @@ export async function requestMobileLoginOtp({ phone, country = 'India', role }) 
   let generatedOtp = null;
 
   if (isPowersText) {
-    do {
-      generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
-    } while (generatedOtp === '123456');
+    generatedOtp = generateOtp();
 
-    const otpHash = crypto.createHash('sha256').update(generatedOtp).digest('hex');
+    const otpHash = hashOtp(generatedOtp);
     sessionToken = `otp_${otpHash}`;
     await powerstextService.sendOtpSms({
       mobile: msg91Mobile,
@@ -750,8 +777,8 @@ export async function verifyAndLoginMobile({ phone, country = 'India', otp, role
 
     if (verification.token && verification.token.startsWith('otp_')) {
       const expectedHash = verification.token.slice(4);
-      const candidateHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
-      if (candidateHash !== expectedHash) {
+      const candidateHash = hashOtp(cleanOtp);
+      if (!hashesMatch(candidateHash, expectedHash)) {
         await prisma.mobileVerification.update({
           where: { phone: formattedPhone },
           data: { attempts: { increment: 1 } },
@@ -778,8 +805,8 @@ export async function verifyAndLoginMobile({ phone, country = 'India', otp, role
   }
 
   // 3. Issue JWT and return safe user
-  const { signJwt } = await import('../utils/jwt.js');
-  const token = signJwt({ userId: user.id, email: user.email, role: user.role });
+  const { issueLoginToken } = await import('./sessionService.js');
+  const token = await issueLoginToken(user, { method: 'OTP' });
   const { passwordHash, ...safeUser } = user;
   return { user: safeUser, token };
 }
@@ -838,12 +865,9 @@ export async function requestEmailVerificationOtp({ email, name, purpose = 'regi
   }
 
   // Generate real cryptographically secure random 6-digit OTP
-  let generatedOtp;
-  do {
-    generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
-  } while (generatedOtp === '123456');
+  const generatedOtp = generateOtp();
 
-  const otpHash = crypto.createHash('sha256').update(generatedOtp).digest('hex');
+  const otpHash = hashOtp(generatedOtp);
 
   const { sendSupplierVerificationOtpEmail } = await import('./emailService.js');
   assertEmailSent(await sendSupplierVerificationOtpEmail({ email: normalizedEmail, name, otp: generatedOtp, purpose }));
@@ -892,6 +916,7 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
       verified: true,
       verifiedAt: Date.now(),
       verificationToken,
+      verificationTokenExpiresAt: Date.now() + VERIFICATION_TOKEN_VALIDITY_MS,
       purpose,
     });
     return {
@@ -918,8 +943,8 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
     throw error;
   }
 
-  const candidateHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
-  if (candidateHash !== session.otpHash) {
+  const candidateHash = hashOtp(cleanOtp);
+  if (!hashesMatch(candidateHash, session.otpHash)) {
     session.attempts += 1;
     throw authError(AUTH_MESSAGES.OTP_INVALID, 400, AUTH_ERROR_CODES.OTP_INVALID);
   }
@@ -928,6 +953,7 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
   session.verified = true;
   session.verifiedAt = Date.now();
   session.verificationToken = verificationToken;
+  session.verificationTokenExpiresAt = Date.now() + VERIFICATION_TOKEN_VALIDITY_MS;
 
   return {
     success: true,
@@ -944,7 +970,13 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
 export function issueVerifiedEmailToken(email) {
   const normalizedEmail = (email || '').toLowerCase().trim();
   const verificationToken = 'evt_' + crypto.randomBytes(24).toString('hex');
-  emailVerificationStore.set(normalizedEmail, { verified: true, verifiedAt: Date.now(), verificationToken, purpose: 'registration' });
+  emailVerificationStore.set(normalizedEmail, {
+    verified: true,
+    verifiedAt: Date.now(),
+    verificationToken,
+    verificationTokenExpiresAt: Date.now() + VERIFICATION_TOKEN_VALIDITY_MS,
+    purpose: 'registration',
+  });
   return verificationToken;
 }
 
@@ -962,13 +994,18 @@ export function validateVerifiedEmail({ email, verificationToken }) {
   const normalizedEmail = (email || '').toLowerCase().trim();
   const session = emailVerificationStore.get(normalizedEmail);
 
-  if (session && session.verified && session.verificationToken === verificationToken) {
+  if (
+    session &&
+    session.verified &&
+    session.verificationToken === verificationToken &&
+    Date.now() <= (session.verificationTokenExpiresAt || session.expiresAt || 0)
+  ) {
     // Invalidate / consume session token
     emailVerificationStore.delete(normalizedEmail);
     return true;
   }
 
-  if (process.env.NODE_ENV !== 'production' && String(verificationToken).startsWith('evt_')) {
+  if (process.env.NODE_ENV !== 'production' && String(verificationToken).startsWith('evt_test_')) {
     if (session) emailVerificationStore.delete(normalizedEmail);
     return true;
   }

@@ -1,5 +1,6 @@
 import { verifyJwt } from '../utils/jwt.js';
 import prisma from '../config/db.js';
+import { isSessionActive } from '../services/sessionService.js';
 
 /** True when the token was issued before the account's last password change (or "sign out everywhere"). */
 function isRevokedToken(user, payload) {
@@ -20,7 +21,7 @@ export async function authenticateJWT(req, res, next) {
   }
 
   try {
-    const user = await prisma.user.findUnique({
+    const [user, sessionActive] = await Promise.all([prisma.user.findUnique({
       where: { id: payload.userId },
       select: {
         id: true,
@@ -38,14 +39,22 @@ export async function authenticateJWT(req, res, next) {
         country: true,
         sessionsValidAfter: true,
       },
-    });
+    }), isSessionActive(payload)]);
 
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found.' });
     }
 
+    if (!sessionActive) {
+      return res.status(401).json({ success: false, message: 'You were signed out on this device. Please sign in again.', code: 'SESSION_REVOKED' });
+    }
+
+    if (user.status === 'DEACTIVATED') {
+      return res.status(401).json({ success: false, message: 'This account has been closed.' });
+    }
+
     if (isRevokedToken(user, payload)) {
-      return res.status(401).json({ success: false, message: 'Your session has ended because your password was changed. Please sign in again.' });
+      return res.status(401).json({ success: false, message: 'Your session has ended. Please sign in again.' });
     }
 
     if (user.isActive === false || user.status === 'SUSPENDED') {
@@ -57,6 +66,7 @@ export async function authenticateJWT(req, res, next) {
 
     const { sessionsValidAfter, ...currentUser } = user; // eslint-disable-line no-unused-vars
     req.user = currentUser;
+    req.sessionId = payload.sid || null;
     next();
   } catch (error) {
     next(error);
@@ -93,7 +103,7 @@ export async function optionalAuth(req, res, next) {
         sessionsValidAfter: true,
       },
     });
-    if (user && user.isActive !== false && user.status !== 'SUSPENDED' && !isRevokedToken(user, payload)) {
+    if (user && user.isActive !== false && user.status !== 'SUSPENDED' && !isRevokedToken(user, payload) && await isSessionActive(payload)) {
       const { sessionsValidAfter, ...currentUser } = user; // eslint-disable-line no-unused-vars
       req.user = currentUser;
     } else {
@@ -114,7 +124,14 @@ export function requireRole(...roles) {
     if (req.user.role === 'SUPER_ADMIN' || roles.includes(req.user.role)) {
       return next();
     }
-    return res.status(403).json({ success: false, message: 'Forbidden. Insufficient permissions.' });
+    // Same message as before; the extra fields tell the client which account type the area needs
+    return res.status(403).json({
+      success: false,
+      message: 'Forbidden. Insufficient permissions.',
+      code: 'ROLE_NOT_ALLOWED',
+      requiredRoles: roles,
+      currentRole: req.user.role,
+    });
   };
 }
 

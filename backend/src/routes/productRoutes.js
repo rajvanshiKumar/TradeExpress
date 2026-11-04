@@ -4,6 +4,7 @@ import * as productController from '../controllers/productController.js';
 const router = Router();
 
 router.get('/', productController.getProducts);
+router.get('/suggest', productController.getSuggestions);
 router.get('/id/:id', productController.getProductById);
 router.get('/:slug/suppliers', productController.getProductSuppliers);
 router.get('/:slug/compare-suppliers', productController.compareProductSuppliers);

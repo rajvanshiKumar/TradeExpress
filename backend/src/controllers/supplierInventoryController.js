@@ -1,4 +1,22 @@
 import * as inventoryService from '../services/inventoryService.js';
+import { getInventoryReconciliation } from '../services/inventoryLifecycleService.js';
+
+export async function getProductDetail(req, res, next) {
+  try {
+    const result = await inventoryService.getProductInventoryDetail(req.user, req.params.productId);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getReconciliation(req, res, next) {
+  try {
+    res.json({ success: true, data: await getInventoryReconciliation() });
+  } catch (error) {
+    next(error);
+  }
+}
 
 export async function listInventory(req, res, next) {
   try {

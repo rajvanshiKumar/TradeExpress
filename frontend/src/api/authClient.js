@@ -54,12 +54,14 @@ export async function authFetch(endpoint, options = {}) {
 
   const candidates = getAuthBaseCandidates();
   let lastNetworkError = null;
+  const requestSignal = options.signal || AbortSignal.timeout(12000);
 
   for (const candidate of candidates) {
     const url = `${candidate}${fullEndpoint}`;
     try {
       const response = await fetch(url, {
         ...options,
+        signal: requestSignal,
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
@@ -102,7 +104,7 @@ export async function authFetch(endpoint, options = {}) {
     }
   }
 
-  console.error('All authentication server endpoints failed to connect:', lastNetworkError);
+  console.error('All authentication server endpoints failed to connect.', lastNetworkError?.name || 'NetworkError');
   return {
     ok: false,
     status: 0,

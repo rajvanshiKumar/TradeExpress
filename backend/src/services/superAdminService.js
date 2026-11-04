@@ -7,6 +7,7 @@ import {
 } from './commissionTierService.js';
 import bcrypt from 'bcryptjs';
 import { logAuditAction } from './auditService.js';
+import { runOrderTransition } from './inventoryLifecycleService.js';
 import { validatePassword } from '../utils/passwordValidator.js';
 
 // ==========================================
@@ -356,6 +357,20 @@ export async function updateUserStatus({ userId, status, isActive, reason, req }
     throw error;
   }
 
+  // A deleted account has had its personal data removed; it is never reactivated
+  if (targetUser.status === 'DEACTIVATED') {
+    const error = new Error('This account has been deleted and cannot be reactivated.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const suspending = status === 'SUSPENDED' || isActive === false;
+  if (suspending && !String(reason || '').trim()) {
+    const error = new Error('A reason is required to suspend an account.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: {
@@ -390,42 +405,40 @@ export async function updateUserStatus({ userId, status, isActive, reason, req }
   return updatedUser;
 }
 
-export async function resetUserPassword({ userId, newPassword, req }) {
-  const passCheck = validatePassword(newPassword);
-  if (!passCheck.isValid) {
-    const error = new Error(passCheck.message);
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const targetUser = await prisma.user.findUnique({ where: { id: userId } });
+/**
+ * Sends the user a secure password-reset link and code to their registered email (the existing
+ * forgot-password flow). The Super Admin never sees or sets the user's password.
+ */
+export async function sendPasswordResetLink({ userId, req }) {
+  const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, role: true, status: true } });
   if (!targetUser) {
     const error = new Error('Target user does not exist.');
     error.statusCode = 404;
     throw error;
   }
-
-  if (targetUser.role === 'SUPER_ADMIN' && req.user.id !== userId) {
-    const error = new Error('Super Admin password cannot be reset by another user.');
+  if (targetUser.role === 'SUPER_ADMIN') {
+    const error = new Error('Super Admin passwords are changed by the Super Admin from Account Settings.');
     error.statusCode = 403;
     throw error;
   }
+  if (targetUser.status === 'DEACTIVATED') {
+    const error = new Error('This account has been deleted.');
+    error.statusCode = 409;
+    throw error;
+  }
 
-  const hash = await bcrypt.hash(newPassword, 10);
-  await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash: hash },
-  });
+  const { forgotPassword } = await import('./authService.js');
+  await forgotPassword(targetUser.email);
 
   await logAuditAction({
     req,
-    action: 'PASSWORD_RESET',
+    action: 'PASSWORD_RESET_LINK_SENT',
     resource: 'USERS',
     targetId: userId,
-    details: { targetEmail: targetUser.email, note: 'Admin-initiated password reset' },
+    details: { targetEmail: targetUser.email, note: 'Admin sent a password-reset link to the registered email' },
   });
 
-  return { success: true, message: 'Password reset successfully.' };
+  return { success: true, message: "A password-reset link has been sent to the user's registered email." };
 }
 
 // ==========================================
@@ -1237,6 +1250,13 @@ export async function processRefund({ orderId, amount, reason, req }) {
     }),
   ]);
 
+  // Refunded before it shipped: the held stock goes back on sale (no-op once shipped or already released)
+  await runOrderTransition(orderId, 'RELEASE', {
+    reason: 'ORDER_REFUNDED',
+    notes: `Refund issued for Order #${order.orderNumber} before dispatch; held stock released.`,
+    actor: { id: req?.user?.id || null, name: req?.user?.email || 'Super Admin' },
+  });
+
   await logAuditAction({
     req,
     action: 'REFUND_PROCESSED',
@@ -1404,6 +1424,14 @@ export async function resolveDispute({ disputeId, resolution, action, refundAmou
         ]
       : []),
   ]);
+
+  if (action === 'REFUND_BUYER') {
+    await runOrderTransition(dispute.orderId, 'RELEASE', {
+      reason: 'ORDER_REFUNDED',
+      notes: 'Dispute refunded before dispatch; held stock released.',
+      actor: { id: req?.user?.id || null, name: req?.user?.email || 'Super Admin' },
+    });
+  }
 
   await logAuditAction({
     req,

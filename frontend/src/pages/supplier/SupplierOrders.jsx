@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Package, Search, Check, XCircle, Truck, FileText, Upload, Download, ExternalLink } from 'lucide-react';
+import { Eye, Package, Search, Check, XCircle, Truck, FileText } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
-import Button, { IconButton } from '../../components/common/Button';
+import Button from '../../components/common/Button';
 import { StatusBadge } from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
@@ -22,6 +22,8 @@ import { companyOrderValue } from '../../utils/analytics';
 import { formatDate } from '../../utils/formatDate';
 import { apiPost, apiPut } from '../../services/apiClient';
 
+const PREPARATION_STATUSES = ['Pending', 'Confirmed', 'In Production', 'Packed'];
+
 function Orders({ company }) {
   const navigate = useNavigate();
   const { orders, loading, error, reload, updateOrderStatus } = useOrders();
@@ -36,14 +38,6 @@ function Orders({ company }) {
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectLoading, setRejectLoading] = useState(false);
 
-  // Dispatch modal
-  const [dispatchingOrder, setDispatchingOrder] = useState(null);
-  const [carrierName, setCarrierName] = useState('Delhivery Logistics');
-  const [trackingNumber, setTrackingNumber] = useState('');
-  const [invoiceUrl, setInvoiceUrl] = useState('');
-  const [ewayBillUrl, setEwayBillUrl] = useState('');
-  const [uploadingDoc, setUploadingDoc] = useState(false);
-  const [dispatchLoading, setDispatchLoading] = useState(false);
   const [invoiceOrder, setInvoiceOrder] = useState(null);
 
   const mine = orders.filter((order) => order.items.some((item) => item.companyId === company.id));
@@ -53,26 +47,6 @@ function Orders({ company }) {
     return !q || `${order.id} ${order.buyerName} ${order.buyerCompany}`.toLowerCase().includes(q);
   });
   const selected = mine.find((order) => order.id === openId) ?? null;
-
-  const handleFileUpload = async (e, setUrl) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingDoc(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await apiPost('upload', formData);
-      const url = res?.data?.url || res?.url;
-      if (url) {
-        setUrl(url);
-        showToast('Document uploaded successfully.');
-      }
-    } catch {
-      showToast('Document upload failed. Please try again.', 'error');
-    } finally {
-      setUploadingDoc(false);
-    }
-  };
 
   const handleAccept = async (order) => {
     try {
@@ -107,54 +81,18 @@ function Orders({ company }) {
     }
   };
 
-  const handleDispatchSubmit = async (e) => {
-    e.preventDefault();
-    if (!dispatchingOrder) return;
-    if (!carrierName.trim() || !trackingNumber.trim()) {
-      showToast('Please enter both carrier name and tracking / LR number.', 'error');
-      return;
-    }
-    setDispatchLoading(true);
-    try {
-      await apiPost(`supplier/orders/${dispatchingOrder.id}/dispatch`, {
-        carrierName: carrierName.trim(),
-        trackingNumber: trackingNumber.trim(),
-        invoiceUrl,
-        ewayBillUrl,
-      });
-      updateOrderStatus(dispatchingOrder.id, 'Shipped');
-      showToast(`Order ${dispatchingOrder.id} dispatched! Tracking number updated.`);
-      setDispatchingOrder(null);
-      setTrackingNumber('');
-      setInvoiceUrl('');
-      setEwayBillUrl('');
-    } catch {
-      updateOrderStatus(dispatchingOrder.id, 'Shipped');
-      setDispatchingOrder(null);
-      showToast(`Order ${dispatchingOrder.id} marked as Shipped.`);
-    } finally {
-      setDispatchLoading(false);
-    }
-  };
-
+  // Suppliers move an order through preparation only. Shipped and Delivered come from Transport & Delivery
+  // (dispatch and the buyer's delivery confirmation); cancelling goes through Reject.
   const changeStatus = async (order, next) => {
+    const backendStatusMap = { Confirmed: 'ORDER_CONFIRMED', Packed: 'PACKED' };
+    if (!backendStatusMap[next] || next === order.status) return;
     try {
-      const backendStatusMap = {
-        Pending: 'ORDER_PLACED',
-        Confirmed: 'ORDER_CONFIRMED',
-        Packed: 'PACKED',
-        Shipped: 'SHIPPED',
-        Delivered: 'DELIVERED',
-        Cancelled: 'CANCELLED',
-      };
-      if (backendStatusMap[next]) {
-        await apiPut(`supplier/orders/${order.id}/status`, { status: backendStatusMap[next] });
-      }
-    } catch {
-      // Fallback smoothly
+      await apiPut(`supplier/orders/${order.id}/status`, { status: backendStatusMap[next] });
+      updateOrderStatus(order.id, next);
+      showToast(`Order ${order.id} marked as ${next}.`);
+    } catch (err) {
+      showToast(err.message || 'The order status could not be updated.', 'error');
     }
-    updateOrderStatus(order.id, next);
-    showToast(`Order ${order.id} marked as ${next}.`);
   };
 
   return (
@@ -246,7 +184,7 @@ function Orders({ company }) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => navigate(`/supplier/shipping?orderId=${order.id}`)}
+                            onClick={() => navigate(`/supplier/transport?order=${order.id}`)}
                             className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
                           >
                             <Truck className="size-3.5" /> Arrange Delivery
@@ -255,13 +193,7 @@ function Orders({ company }) {
                       ) : order.status === 'Packed' ? (
                         <button
                           type="button"
-                          onClick={() => {
-                            navigate(`/supplier/shipping?orderId=${order.id}`);
-                            return;
-                            setTrackingNumber(order.trackingNumber || '');
-                            setInvoiceUrl(order.invoiceUrl || '');
-                            setEwayBillUrl(order.ewayBillUrl || '');
-                          }}
+                          onClick={() => navigate(`/supplier/transport?order=${order.id}`)}
                           className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-brand-700"
                         >
                           <Truck className="size-3.5" /> Arrange Delivery
@@ -271,14 +203,18 @@ function Orders({ company }) {
                       )}
                     </td>
                     <td>
-                      <div className="w-36">
-                        <CustomSelect
-                          value={order.status}
-                          onChange={(event) => changeStatus(order, event.target.value)}
-                          aria-label={`Status of order ${order.id}`}
-                          options={ORDER_STATUSES.map((item) => ({ value: item, label: item }))}
-                        />
-                      </div>
+                      {PREPARATION_STATUSES.includes(order.status) ? (
+                        <div className="w-36">
+                          <CustomSelect
+                            value={order.status}
+                            onChange={(event) => changeStatus(order, event.target.value)}
+                            aria-label={`Status of order ${order.id}`}
+                            options={[...new Set([order.status, 'Confirmed', 'Packed'])].map((item) => ({ value: item, label: item }))}
+                          />
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted">{['Shipped', 'Delivered'].includes(order.status) ? 'Updated by Transport & Delivery' : '—'}</span>
+                      )}
                     </td>
                     <td>
                       <div className="flex items-center gap-1.5">
@@ -335,80 +271,6 @@ function Orders({ company }) {
         </div>
       )}
 
-      {/* Dispatch & Logistics Modal */}
-      {dispatchingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl border border-navy-900/[0.08]">
-            <div className="flex items-center gap-2 border-b border-navy-900/[0.06] pb-3">
-              <Truck className="size-5 text-brand-600" />
-              <h3 className="text-lg font-bold text-ink">Dispatch & Shipping Details</h3>
-            </div>
-            <p className="mt-2 text-xs text-muted">
-              Order #{dispatchingOrder.id} · Enter logistics transporter details, consignment note (LR) number, and attach legal GST tax documents.
-            </p>
-
-            <form onSubmit={handleDispatchSubmit} className="mt-4 space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Input
-                  id="dispatch-carrier"
-                  label="Logistics Carrier / Courier"
-                  required
-                  placeholder="e.g. Delhivery, V-Trans, SafeExpress"
-                  value={carrierName}
-                  onChange={(e) => setCarrierName(e.target.value)}
-                />
-                <Input
-                  id="dispatch-tracking"
-                  label="LR / Consignment / Tracking #"
-                  required
-                  placeholder="e.g. LR-98765432"
-                  value={trackingNumber}
-                  onChange={(e) => setTrackingNumber(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1">
-                  GST Tax Invoice (PDF)
-                </label>
-                <input
-                  type="file"
-                  accept=".pdf,.png,.jpg"
-                  onChange={(e) => handleFileUpload(e, setInvoiceUrl)}
-                  className="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-navy-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
-                />
-                {invoiceUrl && (
-                  <p className="mt-1 text-xs text-emerald-600 font-medium truncate">Attached: {invoiceUrl}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1">
-                  E-Way Bill (PDF)
-                </label>
-                <input
-                  type="file"
-                  accept=".pdf,.png,.jpg"
-                  onChange={(e) => handleFileUpload(e, setEwayBillUrl)}
-                  className="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-navy-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
-                />
-                {ewayBillUrl && (
-                  <p className="mt-1 text-xs text-emerald-600 font-medium truncate">Attached: {ewayBillUrl}</p>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-navy-900/[0.06]">
-                <Button type="button" variant="outline" onClick={() => setDispatchingOrder(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={dispatchLoading || uploadingDoc}>
-                  {dispatchLoading ? 'Dispatching...' : 'Confirm Dispatch'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       <Modal open={Boolean(selected)} onClose={() => setOpenId(null)} title="Order details" size="lg">
         {selected ? <OrderDetails order={selected} companyId={company.id} /> : null}

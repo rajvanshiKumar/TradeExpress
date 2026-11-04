@@ -32,16 +32,7 @@ router.get('/financials', supplierDashboardController.getPayments);
 // 4. Analytics
 router.get('/analytics', supplierDashboardController.getAnalytics);
 
-// 5. Shipping & Logistics
-router.get('/shipping', supplierDashboardController.getShipping);
-router.post(
-  '/shipping/:orderId/dispatch',
-  validate([
-    body('carrierName').trim().notEmpty().withMessage('Carrier name is required.'),
-    body('trackingNumber').trim().notEmpty().withMessage('Tracking / AWB number is required.'),
-  ]),
-  supplierDashboardController.dispatchOrder
-);
+// 5. Shipping is handled by Transport & Delivery Management (/api/transport)
 
 // 6. Orders Workflow (Step 2: Supplier confirms or rejects)
 router.post('/orders/:orderId/accept', supplierDashboardController.acceptOrder);

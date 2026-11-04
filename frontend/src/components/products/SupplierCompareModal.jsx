@@ -24,7 +24,6 @@ import Button from '../common/Button';
 import Rating from '../common/Rating';
 import useCurrency from '../../hooks/useCurrency';
 import useCart from '../../hooks/useCart';
-import useNotifications from '../../hooks/useNotifications';
 import { apiGet, isApiConfigured } from '../../services/apiClient';
 import { formatNumber } from '../../utils/formatCurrency';
 import { quantityLabel } from '../../utils/units';
@@ -39,7 +38,6 @@ export default function SupplierCompareModal({
 }) {
   const { money } = useCurrency();
   const { addToCart } = useCart();
-  const { showToast } = useNotifications();
 
   const [loading, setLoading] = useState(false);
   const [apiData, setApiData] = useState(null);
@@ -155,7 +153,6 @@ export default function SupplierCompareModal({
       },
       supplier.moq
     );
-    showToast(`Added MOQ of ${supplier.moq} ${product.unit || 'units'} from ${supplier.companyName} to your cart.`, 'success');
   };
 
   return (

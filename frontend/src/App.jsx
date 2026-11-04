@@ -15,6 +15,7 @@ import { CartProvider } from './contexts/CartContext';
 import { InquiryProvider } from './contexts/InquiryContext';
 import { MessageProvider } from './contexts/MessageContext';
 import { OrderProvider } from './contexts/OrderContext';
+import PreferenceSync from './components/account/PreferenceSync';
 
 /**
  * Routed pages render inside their own error boundary, below every provider, so a failing page shows
@@ -35,7 +36,7 @@ function RoutedContent() {
 // (for example the cart needs the catalogue, and orders send notifications).
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <LanguageProvider>
         <AuthProvider>
           <NotificationProvider>
@@ -46,6 +47,7 @@ export default function App() {
                     <MessageProvider>
                       <OrderProvider>
                         <ScrollToTop />
+                        <PreferenceSync />
                         <RoutedContent />
                         <ToastViewport />
                         <BackToTop />

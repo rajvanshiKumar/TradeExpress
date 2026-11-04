@@ -1,5 +1,10 @@
 import prisma from '../config/db.js';
 import { createNotification } from './notificationService.js';
+import { availabilitySnapshot, publishInventoryChanges, transitionOrderInventory } from './inventoryLifecycleService.js';
+
+const ORDER_TX = { maxWait: 15000, timeout: 30000 };
+// Shipped / delivered come only from Transport & Delivery (dispatch and the buyer's delivery confirmation)
+const SUPPLIER_SETTABLE_STATUSES = ['ORDER_CONFIRMED', 'PROCESSING', 'PACKED'];
 
 /**
  * Builds where clause scoping to the authenticated supplier
@@ -460,7 +465,7 @@ export async function getSupplierPayments(supplierUser, { page = 1, limit = 20, 
     },
     include: {
       payments: true,
-      escrow: true,
+      escrowLedger: true, // the order's escrow record (relation name in the schema)
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -486,15 +491,15 @@ export async function getSupplierPayments(supplierUser, { page = 1, limit = 20, 
 
     const commRate = o.commissionRate !== null && o.commissionRate !== undefined
       ? Number(o.commissionRate)
-      : (o.escrow?.commissionRate ? Number(o.escrow.commissionRate) : (eligibleSubtotal <= 50000 ? 8.0 : eligibleSubtotal <= 200000 ? 6.0 : 4.0));
+      : (o.escrowLedger?.commissionRate ? Number(o.escrowLedger.commissionRate) : (eligibleSubtotal <= 50000 ? 8.0 : eligibleSubtotal <= 200000 ? 6.0 : 4.0));
 
     const commFee = o.commissionFee !== null && o.commissionFee !== undefined
       ? Number(o.commissionFee)
-      : (o.escrow?.commissionFee ? Number(o.escrow.commissionFee) : Math.round(eligibleSubtotal * (commRate / 100) * 100) / 100);
+      : (o.escrowLedger?.commissionFee ? Number(o.escrowLedger.commissionFee) : Math.round(eligibleSubtotal * (commRate / 100) * 100) / 100);
 
     const shippingFee = Number(o.shippingFee || 0);
     const tax = Number(o.tax || 0);
-    const refundedCommission = Number(o.escrow?.refundedCommission || 0);
+    const refundedCommission = Number(o.escrowLedger?.refundedCommission || 0);
 
     const isRefunded = o.orderStatus === 'REFUNDED' || o.paymentStatus === 'REFUNDED';
     const isCancelled = o.orderStatus === 'CANCELLED';
@@ -502,13 +507,13 @@ export async function getSupplierPayments(supplierUser, { page = 1, limit = 20, 
     // Refunds if any on this order
     const refundAmount = isRefunded
       ? gross
-      : o.escrow?.refundedCommission
-        ? Math.max(0, Math.round((Number(o.escrow.amountHeld) - Number(o.escrow.payoutAmount)) * 100) / 100)
+      : o.escrowLedger?.refundedCommission
+        ? Math.max(0, Math.round((Number(o.escrowLedger.amountHeld) - Number(o.escrowLedger.payoutAmount)) * 100) / 100)
         : 0;
 
     const netSupplier = Math.max(0, Math.round((gross - commFee - refundAmount) * 100) / 100);
 
-    const escrowStatus = o.escrow?.status || (o.paymentStatus === 'PAID' ? 'HELD' : 'PENDING');
+    const escrowStatus = o.escrowLedger?.status || (o.paymentStatus === 'PAID' ? 'HELD' : 'PENDING');
     const payoutStatus = isCancelled
       ? 'CANCELLED'
       : isRefunded
@@ -562,7 +567,7 @@ export async function getSupplierPayments(supplierUser, { page = 1, limit = 20, 
       estimatedNetPayable: Math.round(netSupplier * 100) / 100,
       escrowStatus,
       payoutStatus,
-      releasedAt: o.escrow?.releasedAt || null,
+      releasedAt: o.escrowLedger?.releasedAt || null,
     };
   });
 
@@ -664,125 +669,6 @@ export async function getSupplierAnalytics(supplierUser) {
 }
 
 /**
- * 6. Supplier Shipping Management & Dispatch
- */
-export async function getSupplierShipping(supplierUser) {
-  const orderScope = getSupplierOrderScopeWhere(supplierUser);
-
-  const orders = await prisma.order.findMany({
-    where: orderScope,
-    include: {
-      items: true,
-      statusHistory: { orderBy: { createdAt: 'desc' } },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  const awaitingDispatch = orders.filter((o) =>
-    ['ORDER_CONFIRMED', 'PROCESSING', 'PACKED'].includes(o.orderStatus)
-  );
-  const inTransit = orders.filter((o) =>
-    ['SHIPPED', 'OUT_FOR_DELIVERY'].includes(o.orderStatus)
-  );
-  const delivered = orders.filter((o) => o.orderStatus === 'DELIVERED');
-
-  return {
-    awaitingDispatch: awaitingDispatch.map(mapShippingOrder),
-    inTransit: inTransit.map(mapShippingOrder),
-    delivered: delivered.map(mapShippingOrder),
-  };
-}
-
-function mapShippingOrder(o) {
-  return {
-    id: o.id,
-    orderNumber: o.orderNumber,
-    buyerName: o.buyerName,
-    buyerPhone: o.buyerPhone,
-    buyerCompany: o.buyerCompany,
-    deliveryAddress: o.deliveryAddress,
-    orderStatus: o.orderStatus,
-    paymentStatus: o.paymentStatus,
-    paymentMethod: o.paymentMethod,
-    carrierName: o.carrierName || 'Self / Road Logistics',
-    trackingNumber: o.trackingNumber || 'Pending AWB',
-    dispatchDate: o.dispatchDate || null,
-    estimatedDelivery: o.estimatedDelivery || null,
-    items: o.items.map((i) => ({
-      productName: i.productName,
-      quantity: i.quantity,
-      unitPrice: Number(i.unitPrice),
-    })),
-    createdAt: o.createdAt,
-    statusHistory: o.statusHistory,
-  };
-}
-
-/**
- * 7. Dispatch Order & Update Carrier/Tracking
- */
-export async function dispatchOrderWithCarrier(supplierUser, orderId, { carrierName, trackingNumber, estimatedDeliveryDate, notes }) {
-  const orderScope = getSupplierOrderScopeWhere(supplierUser);
-  const order = await prisma.order.findFirst({
-    where: {
-      id: orderId,
-      ...orderScope,
-    },
-  });
-
-  if (!order) {
-    const error = new Error('Order not found or you are not authorized to dispatch this order.');
-    error.statusCode = 404;
-    throw error;
-  }
-
-  if (order.orderStatus === 'CANCELLED') {
-    const error = new Error('Cannot dispatch a cancelled order.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const updatedOrder = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      orderStatus: 'SHIPPED',
-      carrierName: carrierName.trim(),
-      trackingNumber: trackingNumber.trim(),
-      dispatchDate: new Date(),
-      estimatedDelivery: estimatedDeliveryDate ? new Date(estimatedDeliveryDate) : null,
-      statusHistory: {
-        create: {
-          status: 'SHIPPED',
-          notes: notes?.trim() || `Dispatched via ${carrierName.trim()}. Tracking / AWB: ${trackingNumber.trim()}`,
-          changedBy: supplierUser.name || 'Supplier Logistics',
-        },
-      },
-    },
-    include: {
-      items: true,
-      statusHistory: true,
-    },
-  });
-
-  // Notify buyer about the dispatch and tracking number
-  if (order.userId) {
-    try {
-      await createNotification({
-        userId: order.userId,
-        title: `Order #${order.orderNumber} Dispatched`,
-        message: `Your consignment has been dispatched via ${carrierName.trim()}. AWB / Tracking: ${trackingNumber.trim()}`,
-        type: 'ORDER_UPDATE',
-        link: `/order-tracking?order=${order.orderNumber}`,
-      });
-    } catch (notifErr) {
-      console.warn('Notification error (ignoring):', notifErr.message);
-    }
-  }
-
-  return updatedOrder;
-}
-
-/**
  * 8. Supplier Order Acceptance (Step 2 of Mandatory Workflow)
  */
 export async function acceptSupplierOrder(supplierUser, orderId) {
@@ -844,32 +730,44 @@ export async function rejectSupplierOrder(supplierUser, orderId, { rejectionReas
     throw error;
   }
 
-  // Release reserved stock safely
-  for (const item of order.items) {
-    await prisma.$executeRaw`
-      UPDATE products 
-      SET reservedStock = GREATEST(0, reservedStock - ${item.quantity})
-      WHERE id = ${item.productId}
-    `.catch(() => {});
+  if (['PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'REFUNDED'].includes(order.orderStatus)) {
+    const error = new Error(`Order is already "${order.orderStatus}" and cannot be rejected.`);
+    error.statusCode = 400;
+    throw error;
   }
 
-  const updatedOrder = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      orderStatus: 'CANCELLED',
-      statusHistory: {
-        create: {
-          status: 'CANCELLED',
-          notes: rejectionReason || 'Order rejected by supplier.',
-          changedBy: supplierUser.name || 'Supplier',
+  const stockBefore = await availabilitySnapshot(order.items.map((i) => i.productId));
+  let released = { touched: [] };
+
+  const updatedOrder = await prisma.$transaction(async (tx) => {
+    // Give the held stock back (once)
+    released = await transitionOrderInventory(tx, orderId, 'RELEASE', {
+      reason: 'ORDER_CANCELLED',
+      notes: `Supplier rejected Order #${order.orderNumber}: ${rejectionReason || 'Supplier capacity constraints'}`,
+      actor: { id: supplierUser.id, name: supplierUser.name || 'Supplier' },
+    });
+
+    return tx.order.update({
+      where: { id: orderId },
+      data: {
+        orderStatus: 'CANCELLED',
+        rejectionReason: rejectionReason || 'Rejected by supplier.',
+        statusHistory: {
+          create: {
+            status: 'CANCELLED',
+            notes: rejectionReason || 'Order rejected by supplier.',
+            changedBy: supplierUser.name || 'Supplier',
+          },
         },
       },
-    },
-    include: {
-      items: true,
-      statusHistory: { orderBy: { createdAt: 'desc' } },
-    },
-  });
+      include: {
+        items: true,
+        statusHistory: { orderBy: { createdAt: 'desc' } },
+      },
+    });
+  }, ORDER_TX);
+
+  publishInventoryChanges(released.touched, stockBefore);
 
   if (order.userId) {
     await createNotification({
@@ -891,6 +789,7 @@ export async function updateSupplierOrderStatus(supplierUser, orderId, { status,
   const orderScope = getSupplierOrderScopeWhere(supplierUser);
   const order = await prisma.order.findFirst({
     where: { id: orderId, ...orderScope },
+    include: { items: { select: { productId: true } } },
   });
 
   if (!order) {
@@ -899,23 +798,36 @@ export async function updateSupplierOrderStatus(supplierUser, orderId, { status,
     throw error;
   }
 
-  const updatedOrder = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      orderStatus: status,
-      statusHistory: {
-        create: {
-          status,
-          notes: notes || `Status updated to ${status} by supplier.`,
-          changedBy: supplierUser.name || 'Supplier',
+  if (!SUPPLIER_SETTABLE_STATUSES.includes(status)) {
+    const error = new Error(`Status ${status} cannot be set by a supplier.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  if (order.orderStatus === 'CANCELLED' || order.orderStatus === 'REFUNDED') {
+    const error = new Error(`Order is ${order.orderStatus.toLowerCase()} and can no longer be updated.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const updatedOrder = await prisma.$transaction(async (tx) => {
+    return tx.order.update({
+      where: { id: orderId },
+      data: {
+        orderStatus: status,
+        statusHistory: {
+          create: {
+            status,
+            notes: notes || `Status updated to ${status} by supplier.`,
+            changedBy: supplierUser.name || 'Supplier',
+          },
         },
       },
-    },
-    include: {
-      items: true,
-      statusHistory: { orderBy: { createdAt: 'desc' } },
-    },
-  });
+      include: {
+        items: true,
+        statusHistory: { orderBy: { createdAt: 'desc' } },
+      },
+    });
+  }, ORDER_TX);
 
   return updatedOrder;
 }

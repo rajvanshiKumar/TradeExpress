@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, LogOut, Pencil, RefreshCw } from 'lucide-react';
 import Breadcrumbs from '../../components/common/Breadcrumbs';
 import Button from '../../components/common/Button';
+import ConfirmDialog from '../../components/common/ConfirmDialog';
 import useAuth from '../../hooks/useAuth';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { getAccountSettings } from '../../services/accountApi';
@@ -10,7 +11,10 @@ import { ACCOUNT_CARDS, ACCOUNT_SECTION_TITLES, DASHBOARD_HOME } from '../../com
 import { AccountAvatar, AccountSkeleton } from '../../components/account/AccountUi';
 import AccountProfileSection from '../../components/account/AccountProfileSection';
 import { AccountConnectedSection, AccountMemberSection, AccountTaxSection } from '../../components/account/AccountInfoSections';
-import { AccountEmailSection, AccountPasswordSection } from '../../components/account/AccountVerificationFlows';
+import { AccountEmailSection, AccountPasswordSection, AccountPhoneSection } from '../../components/account/AccountVerificationFlows';
+import AccountDeleteSection from '../../components/account/AccountDeleteSection';
+import AccountSessionsSection from '../../components/account/AccountSessionsSection';
+import { AccountEmailPreferencesSection, AccountLanguageSection, AccountNotificationPreferencesSection, AccountPrivacySection } from '../../components/account/AccountPreferenceSections';
 
 const SECTION_COMPONENTS = {
   profile: AccountProfileSection,
@@ -19,6 +23,13 @@ const SECTION_COMPONENTS = {
   tax: AccountTaxSection,
   password: AccountPasswordSection,
   email: AccountEmailSection,
+  phone: AccountPhoneSection,
+  sessions: AccountSessionsSection,
+  privacy: AccountPrivacySection,
+  'email-preferences': AccountEmailPreferencesSection,
+  notifications: AccountNotificationPreferencesSection,
+  language: AccountLanguageSection,
+  delete: AccountDeleteSection,
 };
 
 const ROLE_BADGE = {
@@ -41,6 +52,7 @@ export default function AccountSettingsPage() {
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
 
   const visibleCards = ACCOUNT_CARDS.map((card) => ({ ...card, rows: card.rows.filter((row) => !row.roles || row.roles.includes(role)) }));
   const sectionRow = visibleCards.flatMap((card) => card.rows).find((row) => row.id === section);
@@ -70,6 +82,16 @@ export default function AccountSettingsPage() {
     setSettings(next);
     // Keep the header avatar and name in step with the saved profile
     updateProfile({ name: next.profile.name, avatarUrl: next.profile.avatarUrl });
+  };
+
+  // After a verified phone change: refresh the account and keep the local profile in step
+  const handlePhoneChanged = async (result) => {
+    if (result?.phone) updateProfile({ phone: result.phone });
+    try {
+      setSettings(await getAccountSettings());
+    } catch {
+      // The change succeeded; the page shows the new number after a refresh
+    }
   };
 
   // After a verified email change: refresh the account and keep the local profile in step
@@ -116,7 +138,7 @@ export default function AccountSettingsPage() {
           <Link to={basePath} className="inline-flex items-center gap-1.5 text-sm font-semibold text-success hover:underline">
             <ArrowLeft className="size-4" aria-hidden="true" /> Back to Account Settings
           </Link>
-          <SectionComponent settings={settings} role={role} onUpdated={handleUpdated} onEmailChanged={handleEmailChanged} />
+          <SectionComponent settings={settings} role={role} onUpdated={handleUpdated} onEmailChanged={handleEmailChanged} onPhoneChanged={handlePhoneChanged} />
         </div>
       ) : null}
 
@@ -137,8 +159,17 @@ export default function AccountSettingsPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button to={`${basePath}/profile`} variant="navy" size="sm" icon={Pencil}>Edit profile</Button>
-              <Button variant="outline" size="sm" icon={LogOut} onClick={signOut}>Sign out</Button>
+              <Button variant="outline" size="sm" icon={LogOut} onClick={() => setConfirmSignOut(true)}>Sign out</Button>
             </div>
+            <ConfirmDialog
+              open={confirmSignOut}
+              title="Sign out of TradeExpress?"
+              text="You will need to sign in again to view your orders, messages and account settings."
+              confirmLabel="Sign out"
+              cancelLabel="Stay signed in"
+              onConfirm={signOut}
+              onCancel={() => setConfirmSignOut(false)}
+            />
           </section>
 
           {/* Settings cards */}

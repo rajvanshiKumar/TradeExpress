@@ -7,6 +7,8 @@ import { fileURLToPath } from 'url';
 import routes from './routes/index.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import { ENV } from './config/env.js';
+import { corsOriginCallback } from './config/cors.js';
+import { requestContextMiddleware } from './utils/requestContext.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,20 +24,7 @@ app.use(
 );
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, or Postman)
-    if (!origin) return callback(null, true);
-    // Allow localhost frontend development, LAN IPs, and configured frontend URL
-    if (
-      ENV.NODE_ENV !== 'production' ||
-      origin === ENV.FRONTEND_URL ||
-      origin.includes('localhost') ||
-      origin.includes('127.0.0.1')
-    ) {
-      return callback(null, true);
-    }
-    callback(null, true); // Permissive in dev to avoid CORS blocking
-  },
+  origin: corsOriginCallback,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
   optionsSuccessStatus: 204,
@@ -69,7 +58,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Main API routes
-app.use('/api', routes);
+app.use('/api', requestContextMiddleware, routes);
 
 // 404 and global error handlers
 app.use(notFoundHandler);

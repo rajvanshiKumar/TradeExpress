@@ -8,13 +8,14 @@ import { broadcastNewMessage, broadcastMessagesRead } from '../services/socketSe
 export async function createOrGetConversation(req, res, next) {
   try {
     const buyerId = req.user.id;
-    const { supplierId, companyId, productId, rfqId, orderId, subject, initialMessage } = req.body;
+    const { supplierId, companyId, productId, productSlug, rfqId, orderId, subject, initialMessage } = req.body;
 
     const result = await messageService.createOrGetConversation({
       buyerId,
       supplierId,
       companyId,
       productId,
+      productSlug,
       rfqId,
       orderId,
       subject,

@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
-import { signJwt } from '../utils/jwt.js';
+import { issueLoginToken } from './sessionService.js';
 import { normalizeMobile, validateVerifiedMobile, validateVerifiedEmail, validateEmailLoginOtp, issueVerifiedEmailToken } from './otpService.js';
 import { resolveSignupGstin, resolveSignupPanAadhaar } from './verificationService.js';
 import { getVerifiedGoogleProfile } from './googleAuthService.js';
@@ -17,6 +17,72 @@ import {
 
 // Fields needed to decide whether an existing email belongs to a complete or resumable signup
 const SIGNUP_STATUS_SELECT = { id: true, role: true, name: true, phone: true, company: true, passwordHash: true, supplierCode: true };
+const AUTH_USER_SELECT = {
+  id: true,
+  email: true,
+  passwordHash: true,
+  name: true,
+  role: true,
+  adminRole: true,
+  adminPermissions: true,
+  isActive: true,
+  status: true,
+  statusReason: true,
+  company: true,
+  phone: true,
+  city: true,
+  state: true,
+  postalCode: true,
+  country: true,
+  supplierCode: true,
+  businessType: true,
+  businessTypeOther: true,
+  gstStatus: true,
+  gstin: true,
+  businessPhone: true,
+  yearEstablished: true,
+  companyDescription: true,
+  logoUrl: true,
+  businessImages: true,
+  businessAddress: true,
+  factoryAddress: true,
+  factoryAddressSame: true,
+  panAadhaarStatus: true,
+  panAadhaarLinked: true,
+  panAadhaarCheckedAt: true,
+  panAadhaarMaskedPan: true,
+  warehouseAddress: true,
+  warehouseState: true,
+  warehousePincode: true,
+  kycStatus: true,
+  kycRejectionReason: true,
+  isVerified: true,
+  isPhoneVerified: true,
+  createdAt: true,
+  updatedAt: true,
+  googleId: true,
+  avatarUrl: true,
+};
+const BUYER_AUTH_RESPONSE_SELECT = {
+  id: true,
+  email: true,
+  passwordHash: true,
+  name: true,
+  role: true,
+  isActive: true,
+  status: true,
+  company: true,
+  phone: true,
+  city: true,
+  state: true,
+  postalCode: true,
+  country: true,
+  kycStatus: true,
+  kycRejectionReason: true,
+  isVerified: true,
+  isPhoneVerified: true,
+  createdAt: true,
+};
 
 /** Maps a unique-constraint race on users.email to the same message as the pre-check. */
 function rethrowDuplicateEmail(error) {
@@ -53,14 +119,29 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
   const normalized = normalizeMobile(phone, country || 'India');
   const storedPhone = normalized.ok ? normalized.formattedPhone : phone;
 
-  // Verify that this mobile number was verified with OTP (temporarily disabled per user request, toggle via REQUIRE_MOBILE_OTP)
-  const requireMobileOtp = process.env.REQUIRE_MOBILE_OTP === 'true';
+  // Every public Buyer registration must prove both contact channels before account creation.
+  const requireMobileOtp = upperRole === 'BUYER' || process.env.REQUIRE_MOBILE_OTP === 'true';
   if (requireMobileOtp) {
+    if (!normalized.ok) {
+      const error = new Error('Enter a valid mobile number.');
+      error.statusCode = 400;
+      throw error;
+    }
     if (!verificationToken) {
       const error = new Error('Mobile verification is required. Please verify via OTP.');
       error.statusCode = 400;
       throw error;
     }
+  }
+  if (upperRole === 'BUYER') {
+    if (!emailVerificationToken) {
+      const error = new Error('Email verification is required. Please verify via OTP.');
+      error.statusCode = 403;
+      throw error;
+    }
+    validateVerifiedEmail({ email: normalizedEmail, verificationToken: emailVerificationToken });
+  }
+  if (requireMobileOtp) {
     await validateVerifiedMobile({ phone: storedPhone, country: country || 'India', verificationToken });
   }
 
@@ -116,7 +197,7 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
     },
   }).catch(rethrowDuplicateEmail);
 
-  const token = signJwt({ userId: user.id, email: user.email, role: user.role });
+  const token = await issueLoginToken(user, { method: 'SIGNUP' });
   return { user, token };
 }
 
@@ -162,7 +243,7 @@ export async function authenticateGoogle({ code, role }) {
         select: GOOGLE_USER_SELECT,
       });
     }
-    const token = signJwt({ userId: user.id, email: user.email, role: user.role });
+    const token = await issueLoginToken(user, { method: 'GOOGLE' });
     return { status: 'SIGNED_IN', isNewUser: false, user: publicGoogleUser(user), token };
   }
 
@@ -197,7 +278,7 @@ export async function authenticateGoogle({ code, role }) {
     .then(({ logAuditAction }) => logAuditAction({ action: 'BUYER_REGISTERED', resource: 'USERS', targetId: created.id, details: { method: 'GOOGLE' } }))
     .catch(() => {});
 
-  const token = signJwt({ userId: created.id, email: created.email, role: created.role });
+  const token = await issueLoginToken(created, { method: 'GOOGLE' });
   return { status: 'SIGNED_IN', isNewUser: true, user: publicGoogleUser(created), token };
 }
 
@@ -263,7 +344,13 @@ export async function registerBuyer({
   }
 
   const normalized = normalizeMobile(phone, country);
-  const storedPhone = normalized.ok ? normalized.formattedPhone : phone;
+  if (!normalized.ok) {
+    const error = new Error('Enter a valid mobile number.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const storedPhone = normalized.formattedPhone;
+  const phoneValues = [...new Set([storedPhone, normalized.msg91Mobile, `+${normalized.msg91Mobile}`, normalized.national])];
 
   // Run uniqueness checks concurrently
   const [existingEmail, existingPhone] = await Promise.all([
@@ -272,12 +359,7 @@ export async function registerBuyer({
       select: SIGNUP_STATUS_SELECT,
     }),
     prisma.user.findFirst({
-      where: {
-        OR: [
-          { phone: storedPhone },
-          ...(normalized.msg91Mobile ? [{ phone: normalized.msg91Mobile }, { phone: `+${normalized.msg91Mobile}` }] : []),
-        ],
-      },
+      where: { phone: { in: phoneValues } },
       select: { id: true },
     }),
   ]);
@@ -285,13 +367,10 @@ export async function registerBuyer({
   // An unfinished Buyer signup for this email is completed in place instead of creating a duplicate,
   // but only after the email address has been re-verified with OTP.
   let resumeUser = null;
-  let emailAlreadyValidated = false;
   if (existingEmail) {
     if (!canResumeSignup(existingEmail, 'BUYER')) {
       throw existingAccountError(existingEmail, 'BUYER');
     }
-    validateVerifiedEmail({ email: normalizedEmail, verificationToken: emailVerificationToken });
-    emailAlreadyValidated = true;
     resumeUser = existingEmail;
   }
 
@@ -301,48 +380,33 @@ export async function registerBuyer({
     throw error;
   }
 
-  // Password validation (or secure generated password for verified OTP / OAuth users)
-  let effectivePassword = password;
-  if (!effectivePassword) {
-    effectivePassword = `TradeExp_${crypto.randomBytes(16).toString('hex')}!Aa1`;
-  } else {
+  // Buyer signup does not ask for a password: buyers sign in with an email / mobile code or Google, and can set a
+  // password later in Account Settings. Without one, a long random password nobody knows is stored. A password that
+  // is supplied is still fully validated.
+  const passwordProvided = Boolean(password);
+  const effectivePassword = passwordProvided ? password : `TradeExp_${crypto.randomBytes(24).toString('hex')}!Aa1`;
+  if (passwordProvided) {
     const passCheck = validatePassword(effectivePassword);
     if (!passCheck.isValid) {
       const error = new Error(passCheck.message);
       error.statusCode = 400;
       throw error;
     }
-    if (confirmPassword && effectivePassword !== confirmPassword) {
+    if (!confirmPassword || effectivePassword !== confirmPassword) {
       const error = new Error('Password and confirm password do not match.');
       error.statusCode = 400;
       throw error;
     }
   }
 
-  // Token validations if tokens are provided
-  if (verificationToken) {
-    try {
-      await validateVerifiedMobile({ phone: storedPhone, country, verificationToken });
-    } catch {
-      if (process.env.NODE_ENV === 'production') {
-        const error = new Error('Mobile number verification token is invalid or expired.');
-        error.statusCode = 400;
-        throw error;
-      }
-    }
+  if (!verificationToken || !emailVerificationToken) {
+    const error = new Error('Please verify both your email address and mobile number before registering.');
+    error.statusCode = 403;
+    throw error;
   }
 
-  if (emailVerificationToken && !emailAlreadyValidated) {
-    try {
-      validateVerifiedEmail({ email: normalizedEmail, verificationToken: emailVerificationToken });
-    } catch {
-      if (process.env.NODE_ENV === 'production' && !isGoogleVerified) {
-        const error = new Error('Email verification token is invalid or expired.');
-        error.statusCode = 400;
-        throw error;
-      }
-    }
-  }
+  validateVerifiedEmail({ email: normalizedEmail, verificationToken: emailVerificationToken });
+  await validateVerifiedMobile({ phone: storedPhone, country, verificationToken });
 
   // Buyer Type
   const rawBuyerType = Array.isArray(buyerTypes) && buyerTypes.length > 0
@@ -428,13 +492,13 @@ export async function registerBuyer({
     aadhaarLast4: cleanAadhaarLast4,
     ...panAadhaar,
     status: 'ACTIVE',
-    isVerified: Boolean(emailVerificationToken || isGoogleVerified || true),
-    isPhoneVerified: Boolean(verificationToken || true),
+    isVerified: true,
+    isPhoneVerified: true,
     kycStatus: panAadhaar.panAadhaarLinked ? 'VERIFIED' : 'PENDING',
   };
   const user = resumeUser
-    ? await prisma.user.update({ where: { id: resumeUser.id }, data: buyerData })
-    : await prisma.user.create({ data: buyerData }).catch(rethrowDuplicateEmail);
+    ? await prisma.user.update({ where: { id: resumeUser.id }, data: buyerData, select: BUYER_AUTH_RESPONSE_SELECT })
+    : await prisma.user.create({ data: buyerData, select: BUYER_AUTH_RESPONSE_SELECT }).catch(rethrowDuplicateEmail);
 
   // Save a default address only when the buyer really entered one: the resolved city/state/PIN
   // defaults above are placeholders and must never appear in the address book.
@@ -484,7 +548,7 @@ export async function registerBuyer({
     .catch(() => {});
 
   // Generate JWT token
-  const token = signJwt({ userId: user.id, email: user.email, role: 'BUYER' });
+  const token = await issueLoginToken({ ...user, role: 'BUYER' }, { method: 'SIGNUP' });
 
   // Safe user output (redact passwordHash, mask sensitive PAN)
   const { passwordHash: _, ...safeUser } = user;
@@ -966,7 +1030,7 @@ export async function registerSupplier({
     )
     .catch(() => {});
 
-  const token = signJwt({ userId: user.id, email: user.email, role: user.role });
+  const token = await issueLoginToken(user, { method: 'SIGNUP' });
   return {
     user: {
       ...user,
@@ -979,11 +1043,9 @@ export async function registerSupplier({
   };
 }
 
-export async function loginUser({ email, password, role, otp, isAdminLogin = false }) {
-  const normalizedEmail = (email || '').toLowerCase().trim();
-  let user = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
-  });
+export async function loginUser({ email, password, role, otp, country = 'India', isAdminLogin = false }) {
+  const identifier = String(email || '').trim();
+  const normalizedEmail = identifier.toLowerCase();
 
   // Support common admin aliases if standard email not found and it is an admin login attempt
   const ADMIN_ALIASES = [
@@ -997,6 +1059,34 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
     'superadmin@tradeexpress.com',
     'krajvanshi244@gmail.com',
   ];
+  const isEmailIdentifier = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) || ADMIN_ALIASES.includes(normalizedEmail);
+  let loginViaMobile = false;
+  let user;
+  if (isEmailIdentifier) {
+    user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: AUTH_USER_SELECT,
+    });
+  } else {
+    const normalizedMobile = normalizeMobile(identifier, country);
+    if (!normalizedMobile.ok) {
+      const error = new Error('Enter a valid email address or Indian mobile number.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const phoneValues = [...new Set([
+      normalizedMobile.formattedPhone,
+      normalizedMobile.msg91Mobile,
+      `+${normalizedMobile.msg91Mobile}`,
+      normalizedMobile.national,
+    ])];
+    loginViaMobile = true;
+    user = await prisma.user.findFirst({
+      where: { phone: { in: phoneValues } },
+      select: AUTH_USER_SELECT,
+    });
+  }
+
   if (!user && (isAdminLogin || ADMIN_ALIASES.includes(normalizedEmail))) {
     user = await prisma.user.findFirst({
       where: {
@@ -1006,16 +1096,17 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
           { role: 'ADMIN' },
         ],
       },
+      select: AUTH_USER_SELECT,
     });
   }
 
   // Buyer/Supplier sign-in: existence, selected role and signup completion come before credentials
   if (!isAdminLogin && (!user || ['BUYER', 'SUPPLIER'].includes(user.role))) {
-    assertCanSignIn(user, { role, via: 'email' });
+    assertCanSignIn(user, { role, via: loginViaMobile ? 'mobile' : 'email' });
   }
 
   if (!user) {
-    const error = new Error('No account found with this email. Please sign up to create your TradeExpress account.');
+    const error = new Error(`No account found with this ${loginViaMobile ? 'mobile number' : 'email'}. Please sign up to create your TradeExpress account.`);
     error.statusCode = 401;
     throw error;
   }
@@ -1030,7 +1121,7 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
     }
   }
 
-  if (user.isActive === false || user.status === 'SUSPENDED') {
+  if (user.isActive === false || user.status === 'SUSPENDED' || user.status === 'DEACTIVATED') {
     const error = new Error('Your account is suspended. Reason: ' + (user.statusReason || 'Please contact platform administration.'));
     error.statusCode = 403;
     throw error;
@@ -1040,11 +1131,7 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
   // Primary B2B login uses registered email and password. Optional OTP authentication supported if provided.
   if (!isAdminLogin && ['BUYER', 'SUPPLIER'].includes(user.role)) {
     if (password) {
-      const trimmedPass = typeof password === 'string' ? password.trim() : '';
-      let matches = await bcrypt.compare(password, user.passwordHash);
-      if (!matches && trimmedPass) {
-        matches = await bcrypt.compare(trimmedPass, user.passwordHash);
-      }
+      const matches = typeof user.passwordHash === 'string' && await bcrypt.compare(password, user.passwordHash);
       if (!matches) {
         const error = new Error('Invalid email or password. Please try again.');
         error.statusCode = 401;
@@ -1052,6 +1139,11 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
       }
     } else if (otp) {
       // Validate and consume OTP upon successful OTP login
+      if (loginViaMobile) {
+        const error = new Error('Request a mobile verification code to sign in with an OTP.');
+        error.statusCode = 400;
+        throw error;
+      }
       validateEmailLoginOtp({ email: normalizedEmail, otp, consume: true });
     } else {
       const error = new Error('Password is required to sign in.');
@@ -1060,11 +1152,7 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
     }
   } else {
     // Admin or password-based login
-    const trimmedPass = typeof password === 'string' ? password.trim() : '';
-    let matches = password ? await bcrypt.compare(password, user.passwordHash) : false;
-    if (!matches && trimmedPass) {
-      matches = await bcrypt.compare(trimmedPass, user.passwordHash);
-    }
+    const matches = Boolean(password && typeof user.passwordHash === 'string' && await bcrypt.compare(password, user.passwordHash));
 
     // Admin accounts authenticate only with their stored password (no built-in or shared passwords)
 
@@ -1075,8 +1163,8 @@ export async function loginUser({ email, password, role, otp, isAdminLogin = fal
     }
   }
 
-  const token = signJwt({ userId: user.id, email: user.email, role: user.role });
-  const { passwordHash, ...safeUser } = user;
+  const token = await issueLoginToken(user, { method: isAdminLogin ? 'ADMIN' : (otp ? 'OTP' : 'PASSWORD') });
+  const { passwordHash, googleId, ...safeUser } = user; // eslint-disable-line no-unused-vars
   return { user: safeUser, token };
 }
 
@@ -1140,8 +1228,9 @@ export async function forgotPassword(email) {
   }
 
   // Generate 6-digit OTP and secure random token
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const token = `ts_rst_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
+  // Unpredictable code and link token (crypto, not Math.random)
+  const otp = String(crypto.randomInt(100000, 1000000));
+  const token = `ts_rst_${crypto.randomBytes(24).toString('hex')}`;
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
   // Invalidate any existing unused tokens for this user

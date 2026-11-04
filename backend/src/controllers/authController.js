@@ -1,3 +1,4 @@
+import { revokeCurrentSession } from '../services/sessionService.js';
 import * as authService from '../services/authService.js';
 import * as otpService from '../services/otpService.js';
 import * as addressService from '../services/addressService.js';
@@ -356,3 +357,13 @@ export async function getKyc(req, res, next) {
   }
 }
 
+
+/** Signs out the device making the request (its login token stops working immediately). */
+export async function logout(req, res, next) {
+  try {
+    await revokeCurrentSession(req.user.id);
+    res.json({ success: true, message: 'Signed out.' });
+  } catch (error) {
+    next(error);
+  }
+}

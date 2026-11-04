@@ -196,7 +196,7 @@ function Overview({ company, products }) {
         </Link>
 
         <Link
-          to="/supplier/shipping"
+          to="/supplier/transport"
           className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-navy-950 shadow-2xs hover:border-emerald-600 hover:text-emerald-800 transition-colors"
         >
           <div className="size-7 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center shrink-0">

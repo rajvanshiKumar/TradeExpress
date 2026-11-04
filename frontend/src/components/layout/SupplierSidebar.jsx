@@ -51,7 +51,7 @@ export const SUPPLIER_NAV_GROUPS = [
     items: [
       { id: 'orders', label: 'Purchase Orders', to: '/supplier/orders', icon: Package, badgeKey: 'orders' },
       { id: 'quotations', label: 'Quotations & RFQs', to: '/supplier/quotations', icon: ClipboardList, badgeKey: 'quotes' },
-      { id: 'shipping', label: 'Shipping & Logistics', to: '/supplier/shipping', icon: Truck },
+      { id: 'transport', label: 'Transport & Delivery Management', to: '/supplier/transport', icon: Truck },
     ],
   },
   {

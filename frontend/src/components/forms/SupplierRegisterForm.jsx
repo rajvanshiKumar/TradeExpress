@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import OtpSendError from './OtpSendError';
 import {
   Check,
   CheckCircle2,
@@ -366,6 +367,10 @@ export default function SupplierRegisterForm() {
         name: nameMissing,
         companyName: companyMissing,
       });
+      // Bring the first missing field into view so it is clear why no code was sent
+      const missing = document.getElementById(nameMissing ? 'supplier-signup-name' : 'supplier-signup-company');
+      missing?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      missing?.focus({ preventScroll: true });
       return;
     }
 
@@ -410,13 +415,10 @@ export default function SupplierRegisterForm() {
         setPhoneCooldown(data.cooldownRemaining);
         setPhoneOtpError(data.message);
       } else {
-        const msg = data.message || 'Unable to send mobile verification code.';
-        setPhoneOtpError(msg);
-        setErrors((prev) => ({ ...prev, phone: msg }));
+        setPhoneOtpError(data.message || 'Unable to send mobile verification code.');
       }
     } catch {
       setPhoneOtpError(SERVER_UNREACHABLE);
-      setErrors((prev) => ({ ...prev, phone: SERVER_UNREACHABLE }));
     } finally {
       setPhoneOtpSending(false);
     }
@@ -499,11 +501,9 @@ export default function SupplierRegisterForm() {
       } else {
         const msg = data.message || 'Unable to dispatch verification email.';
         setEmailOtpError(msg);
-        setErrors((prev) => ({ ...prev, email: msg }));
       }
     } catch {
       setEmailOtpError(SERVER_UNREACHABLE);
-      setErrors((prev) => ({ ...prev, email: SERVER_UNREACHABLE }));
     } finally {
       setEmailOtpSending(false);
     }
@@ -1367,6 +1367,7 @@ export default function SupplierRegisterForm() {
                   Full Name of Representative <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="supplier-signup-name"
                   type="text"
                   placeholder="e.g. Rajesh Kumar"
                   value={values.name}
@@ -1384,6 +1385,7 @@ export default function SupplierRegisterForm() {
                   Company Name / Legal Business Name <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="supplier-signup-company"
                   type="text"
                   placeholder="e.g. Apex Industrial Solutions Ltd."
                   value={values.companyName}
@@ -1464,6 +1466,7 @@ export default function SupplierRegisterForm() {
                   </div>
                 </div>
                 {errors.phone && <p className="mt-1 text-xs text-red-600">{errors.phone}</p>}
+                {!phoneOtpSent ? <OtpSendError message={phoneOtpError} role="supplier" /> : null}
 
                 {/* 6-box OTP row below the mobile input box */}
                 {!phoneVerified && phoneOtpSent && (
@@ -1532,6 +1535,7 @@ export default function SupplierRegisterForm() {
                   </div>
                 </div>
                 {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
+                {!emailOtpSent ? <OtpSendError message={emailOtpError} role="supplier" /> : null}
 
                 {/* 6-box OTP row below the email input box */}
                 {!emailVerified && emailOtpSent && (

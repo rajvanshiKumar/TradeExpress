@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -13,6 +14,16 @@ if (!fs.existsSync(uploadDir)) {
 
 export { uploadDir };
 
+/**
+ * Short tag identifying who uploaded a file, put at the start of its stored name. Only that user (or an admin) can
+ * delete it later. Anonymous uploads (supplier signup documents) get the "anon" tag and only admins can delete them.
+ */
+export function uploaderTag(userId) {
+  if (!userId) return 'anon';
+  const secret = process.env.JWT_SECRET || 'tradeexpress-upload-owner';
+  return `u${crypto.createHmac('sha256', secret).update(`upload-owner:${userId}`).digest('hex').slice(0, 12)}`;
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDir);
@@ -21,7 +32,7 @@ const storage = multer.diskStorage({
     const ext = path.extname(file.originalname).toLowerCase();
     const cleanName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 50);
     const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    cb(null, `${cleanName}_${uniqueSuffix}${ext}`);
+    cb(null, `${uploaderTag(req.user?.id)}-${cleanName}_${uniqueSuffix}${ext}`);
   },
 });
 

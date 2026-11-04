@@ -32,16 +32,6 @@ export async function fetchSupplierPayments(params = {}) {
   return res?.data || res;
 }
 
-export async function fetchSupplierShipping() {
-  const res = await apiClient.get('/supplier/shipping');
-  return res?.data || res;
-}
-
-export async function submitOrderDispatch(orderId, dispatchPayload) {
-  const res = await apiClient.post(`/supplier/shipping/${orderId}/dispatch`, dispatchPayload);
-  return res?.data || res;
-}
-
 export async function fetchSupplierAnalytics() {
   const res = await apiClient.get('/supplier/analytics');
   return res?.data || res;

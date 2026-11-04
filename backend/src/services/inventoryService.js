@@ -1,5 +1,5 @@
 import prisma from '../config/db.js';
-import { broadcastInventoryUpdate, broadcastProductStock } from './socketService.js';
+import { availableOf, INVENTORY_STATES, publishInventoryChanges } from './inventoryLifecycleService.js';
 
 export const ADJUSTMENT_REASONS = [
   'RESTOCK',
@@ -31,10 +31,9 @@ export async function verifySupplierProductOwnership(supplierUser, productId) {
     return product;
   }
 
-  const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
-  const isOwner =
-    (product.supplierId && product.supplierId === supplierUser.id) ||
-    (product.companyId && String(product.companyId) === String(companyId));
+  // Ownership is the product's supplier account only. (Matching on company fields let a supplier whose free-text
+  // company name equalled another catalogue's company id manage that catalogue.)
+  const isOwner = Boolean(product.supplierId) && product.supplierId === supplierUser.id;
 
   if (!isOwner) {
     const error = new Error('You do not have authorization to view or manage inventory for this product.');
@@ -49,13 +48,11 @@ export async function verifySupplierProductOwnership(supplierUser, productId) {
  * Lists supplier inventory with database-backed metrics, filters, sorting, and pagination.
  */
 export async function listSupplierInventory(supplierUser, query = {}) {
-  const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
-  const whereSupplier = {
-    OR: [
-      { supplierId: supplierUser.id },
-      ...(companyId ? [{ companyId: String(companyId) }] : []),
-    ],
-  };
+  // Suppliers see only their own products. Admins get platform-wide oversight (optionally one supplier's).
+  const isStaff = supplierUser.role === 'ADMIN' || supplierUser.role === 'SUPER_ADMIN';
+  const whereSupplier = isStaff
+    ? (query.supplierId ? { supplierId: String(query.supplierId) } : {})
+    : { supplierId: supplierUser.id };
 
   const {
     search = '',
@@ -99,6 +96,7 @@ export async function listSupplierInventory(supplierUser, query = {}) {
       name: true,
       stock: true,
       reservedStock: true,
+      committedStock: true,
       lowStockThreshold: true,
       price: true,
       status: true,
@@ -108,6 +106,7 @@ export async function listSupplierInventory(supplierUser, query = {}) {
   // Calculate live database metrics across the supplier's active catalog
   let totalPhysicalStock = 0;
   let totalReservedStock = 0;
+  let totalCommittedStock = 0;
   let totalAvailableStock = 0;
   let lowStockCount = 0;
   let outOfStockCount = 0;
@@ -115,11 +114,13 @@ export async function listSupplierInventory(supplierUser, query = {}) {
   const enrichedMetrics = allSupplierProducts.map((p) => {
     const physical = p.stock || 0;
     const reserved = p.reservedStock || 0;
-    const available = Math.max(0, physical - reserved);
-    const threshold = p.lowStockThreshold || 10;
+    const committed = p.committedStock || 0;
+    const available = availableOf(p);
+    const threshold = p.lowStockThreshold ?? 10;
 
     totalPhysicalStock += physical;
     totalReservedStock += reserved;
+    totalCommittedStock += committed;
     totalAvailableStock += available;
 
     if (available <= 0) {
@@ -132,6 +133,7 @@ export async function listSupplierInventory(supplierUser, query = {}) {
       ...p,
       physical,
       reserved,
+      committed,
       available,
       threshold,
     };
@@ -161,6 +163,9 @@ export async function listSupplierInventory(supplierUser, query = {}) {
     } else if (sortBy === 'reservedStock') {
       aVal = a.reserved;
       bVal = b.reserved;
+    } else if (sortBy === 'committedStock') {
+      aVal = a.committed;
+      bVal = b.committed;
     }
 
     if (typeof aVal === 'string') {
@@ -185,6 +190,14 @@ export async function listSupplierInventory(supplierUser, query = {}) {
 
   const fullProductMap = new Map(fullProducts.map((p) => [p.id, p]));
 
+  // Platform staff see which supplier owns each product
+  const supplierNames = new Map();
+  if (isStaff) {
+    const supplierIds = [...new Set(fullProducts.map((p) => p.supplierId).filter(Boolean))];
+    const suppliers = await prisma.user.findMany({ where: { id: { in: supplierIds } }, select: { id: true, name: true, company: true } });
+    for (const s of suppliers) supplierNames.set(s.id, s.company || s.name);
+  }
+
   const formattedItems = pagedSlice.map((item) => {
     const full = fullProductMap.get(item.id);
     const available = item.available;
@@ -206,8 +219,11 @@ export async function listSupplierInventory(supplierUser, query = {}) {
       price: Number(full?.price || 0),
       moq: full?.moq || 1,
       stock: item.physical, // Physical on-hand
-      reservedStock: item.reserved, // Allocated to orders
+      reservedStock: item.reserved, // Held for orders awaiting payment
+      committedStock: item.committed, // Paid / confirmed, not yet shipped
       availableStock: available, // Usable by buyers
+      supplierId: full?.supplierId || null,
+      ...(isStaff ? { supplierName: supplierNames.get(full?.supplierId) || null } : {}),
       lowStockThreshold: threshold,
       warehouseLocation: full?.warehouseLocation || null,
       stockStatus: computedStatus,
@@ -221,6 +237,7 @@ export async function listSupplierInventory(supplierUser, query = {}) {
       totalProducts: allSupplierProducts.length,
       totalPhysicalStock,
       totalReservedStock,
+      totalCommittedStock,
       totalAvailableStock,
       lowStockCount,
       outOfStockCount,
@@ -268,10 +285,11 @@ export async function adjustProductStock(supplierUser, productId, adjustmentPayl
 
   // Execute database transaction
   const result = await prisma.$transaction(async (tx) => {
-    // 1. Fetch current product state with row locking semantics
-    const product = await tx.product.findUnique({
-      where: { id: productId },
-    });
+    // 1. Lock the product row so order reservations cannot interleave with this adjustment
+    const [product] = await tx.$queryRaw`
+      SELECT id, sku, name, supplierId, stock, reservedStock, committedStock, lowStockThreshold
+      FROM products WHERE id = ${productId} FOR UPDATE
+    `;
 
     if (!product) {
       const error = new Error('Product not found.');
@@ -281,6 +299,8 @@ export async function adjustProductStock(supplierUser, productId, adjustmentPayl
 
     const previousStock = product.stock || 0;
     const reservedStock = product.reservedStock || 0;
+    const committedStock = product.committedStock || 0;
+    const heldStock = reservedStock + committedStock;
     let newStock = previousStock;
 
     if (adjustmentType === 'ADD') {
@@ -299,10 +319,10 @@ export async function adjustProductStock(supplierUser, productId, adjustmentPayl
       throw error;
     }
 
-    // Physical stock cannot be reduced below already reserved buyer commitments
-    if (newStock < reservedStock) {
+    // Physical stock cannot drop below what open orders already hold
+    if (newStock < heldStock) {
       const error = new Error(
-        `Cannot reduce stock to ${newStock} units because ${reservedStock} units are currently reserved for pending buyer orders. Minimum allowed physical stock is ${reservedStock}.`
+        `Cannot reduce stock to ${newStock} units because ${heldStock} units are held for open orders (${reservedStock} reserved, ${committedStock} committed). Minimum allowed on-hand stock is ${heldStock}.`
       );
       error.statusCode = 400;
       throw error;
@@ -336,12 +356,14 @@ export async function adjustProductStock(supplierUser, productId, adjustmentPayl
     const log = await tx.inventoryLog.create({
       data: {
         productId: product.id,
-        supplierId: supplierUser.id,
+        supplierId: product.supplierId || supplierUser.id,
         previousStock,
         newStock,
         changeAmount,
         previousReserved: reservedStock,
         newReserved: reservedStock,
+        previousCommitted: committedStock,
+        newCommitted: committedStock,
         reason: String(reason).trim(),
         notes: notes ? String(notes).trim() : `Manual stock ${adjustmentType.toLowerCase()} of ${parsedQty} units`,
         actorId: supplierUser.id,
@@ -349,28 +371,13 @@ export async function adjustProductStock(supplierUser, productId, adjustmentPayl
       },
     });
 
-    return { updatedProduct, log };
-  });
+    return { updatedProduct, log, availableBefore: availableOf(product) };
+  }, { maxWait: 15000, timeout: 30000 });
 
-  const availableStock = Math.max(0, result.updatedProduct.stock - result.updatedProduct.reservedStock);
+  const availableStock = availableOf(result.updatedProduct);
 
-  // Broadcast real-time authorized event to the supplier
-  broadcastInventoryUpdate(supplierUser.id, {
-    productId,
-    sku: result.updatedProduct.sku,
-    stock: result.updatedProduct.stock,
-    reservedStock: result.updatedProduct.reservedStock,
-    availableStock,
-    lowStockThreshold: result.updatedProduct.lowStockThreshold,
-    log: result.log,
-  });
-
-  // Broadcast public stock change to all active buyer portals
-  broadcastProductStock(productId, {
-    sku: result.updatedProduct.sku,
-    availableStock,
-    inStock: availableStock > 0,
-  });
+  // Live update to the product's supplier and admins, public availability to buyers, low-stock alert if crossed
+  publishInventoryChanges([result.updatedProduct], new Map([[productId, result.availableBefore]]));
 
   return {
     success: true,
@@ -381,6 +388,7 @@ export async function adjustProductStock(supplierUser, productId, adjustmentPayl
       name: result.updatedProduct.name,
       stock: result.updatedProduct.stock,
       reservedStock: result.updatedProduct.reservedStock,
+      committedStock: result.updatedProduct.committedStock,
       availableStock,
       lowStockThreshold: result.updatedProduct.lowStockThreshold,
       warehouseLocation: result.updatedProduct.warehouseLocation,
@@ -444,27 +452,88 @@ export async function updateInventorySettings(supplierUser, productId, settingsP
     data,
   });
 
-  const availableStock = Math.max(0, updated.stock - updated.reservedStock);
+  const availableStock = availableOf(updated);
 
-  // Broadcast update
-  broadcastInventoryUpdate(supplierUser.id, {
-    productId,
-    sku: updated.sku,
-    stock: updated.stock,
-    reservedStock: updated.reservedStock,
-    availableStock,
-    lowStockThreshold: updated.lowStockThreshold,
-    warehouseLocation: updated.warehouseLocation,
-  });
+  publishInventoryChanges([updated]);
 
   return {
     id: updated.id,
     sku: updated.sku,
     stock: updated.stock,
     reservedStock: updated.reservedStock,
+    committedStock: updated.committedStock,
     availableStock,
     lowStockThreshold: updated.lowStockThreshold,
     warehouseLocation: updated.warehouseLocation,
   };
 }
 
+
+/**
+ * One product's figures plus the open orders currently holding its stock (for the detail panel).
+ */
+export async function getProductInventoryDetail(supplierUser, productId) {
+  const product = await verifySupplierProductOwnership(supplierUser, productId);
+
+  const items = await prisma.orderItem.findMany({
+    where: {
+      productId,
+      order: { inventoryState: { in: [INVENTORY_STATES.RESERVED, INVENTORY_STATES.COMMITTED] } },
+    },
+    select: {
+      quantity: true,
+      order: {
+        select: {
+          id: true,
+          orderNumber: true,
+          inventoryState: true,
+          orderStatus: true,
+          paymentStatus: true,
+          paymentMethod: true,
+          buyerCompany: true,
+          buyerName: true,
+          reservationExpiresAt: true,
+          createdAt: true,
+        },
+      },
+    },
+    orderBy: { order: { createdAt: 'desc' } },
+    take: 100,
+  });
+
+  // An order can list the product on several lines; show one row per order
+  const byOrder = new Map();
+  for (const item of items) {
+    const row = byOrder.get(item.order.id) || { ...item.order, quantity: 0 };
+    row.quantity += item.quantity;
+    byOrder.set(item.order.id, row);
+  }
+
+  return {
+    product: {
+      id: product.id,
+      sku: product.sku,
+      name: product.name,
+      unit: product.unit,
+      supplierId: product.supplierId,
+      stock: product.stock,
+      reservedStock: product.reservedStock,
+      committedStock: product.committedStock,
+      availableStock: availableOf(product),
+      lowStockThreshold: product.lowStockThreshold,
+      warehouseLocation: product.warehouseLocation,
+    },
+    holds: [...byOrder.values()].map((o) => ({
+      orderId: o.id,
+      orderNumber: o.orderNumber,
+      state: o.inventoryState,
+      quantity: o.quantity,
+      orderStatus: o.orderStatus,
+      paymentStatus: o.paymentStatus,
+      paymentMethod: o.paymentMethod,
+      buyer: o.buyerCompany || o.buyerName,
+      reservationExpiresAt: o.reservationExpiresAt,
+      createdAt: o.createdAt,
+    })),
+  };
+}

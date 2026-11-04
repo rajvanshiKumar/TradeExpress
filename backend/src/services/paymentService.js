@@ -8,6 +8,10 @@ import {
 } from '../config/razorpay.js';
 import { ENV } from '../config/env.js';
 import { sendOrderConfirmationEmail } from './emailService.js';
+import { availabilitySnapshot, commitForPayment, publishInventoryChanges } from './inventoryLifecycleService.js';
+
+const PAYMENT_TX = { maxWait: 15000, timeout: 30000 };
+const STOCK_GONE_NOTE = 'Payment received after the stock reservation expired, and the stock is no longer available. A refund is required.';
 
 /**
  * Creates a Razorpay test order for an existing TradeExpress order.
@@ -219,14 +223,21 @@ export async function verifyPayment({
     statusNote = `Online payment of ₹${Number(order.total).toLocaleString('en-IN')} confirmed via Razorpay test gateway (Txn: ${transactionId}).`;
   }
 
-  // Transactionally update Order, Payment, and Status History
+  const stockBefore = await availabilitySnapshot(order.items.map((i) => i.productId));
+  let stock = { touched: [] };
+
+  // Transactionally update Order, Payment, Stock and Status History
   const updatedOrder = await prisma.$transaction(async (tx) => {
-    // 1. Update order
+    // 1. Move the held stock from reserved to committed (once, even if this payment is reported twice)
+    stock = await commitForPayment(tx, order.id, { id: 'RAZORPAY', name: 'Razorpay Gateway' });
+    const reopened = stock.restored && order.orderStatus === 'CANCELLED';
+
+    // 2. Update order
     const updated = await tx.order.update({
       where: { id: order.id },
       data: {
         paymentStatus: newPaymentStatus,
-        orderStatus: order.orderStatus === 'ORDER_PLACED' ? 'ORDER_CONFIRMED' : order.orderStatus,
+        orderStatus: order.orderStatus === 'ORDER_PLACED' || reopened ? 'ORDER_CONFIRMED' : order.orderStatus,
       },
       include: {
         items: true,
@@ -255,13 +266,15 @@ export async function verifyPayment({
       data: {
         orderId: order.id,
         status: updated.orderStatus,
-        notes: statusNote,
+        notes: stock.unavailable ? `${statusNote} ${STOCK_GONE_NOTE}` : statusNote,
         changedBy: 'Razorpay Gateway',
       },
     });
 
     return updated;
-  });
+  }, PAYMENT_TX);
+
+  publishInventoryChanges(stock.touched, stockBefore);
 
   console.log(`[TradeExpress Payment] Payment verified for order #${order.orderNumber} (Txn: ${transactionId})`);
 
@@ -367,12 +380,17 @@ export async function handleRazorpayWebhook({ rawBody, signature }) {
     }
 
     if (order && order.paymentStatus !== 'PAID') {
+      const items = await prisma.orderItem.findMany({ where: { orderId: order.id }, select: { productId: true } });
+      const stockBefore = await availabilitySnapshot(items.map((i) => i.productId));
+      let stock = { touched: [] };
       await prisma.$transaction(async (tx) => {
+        stock = await commitForPayment(tx, order.id, { id: 'RAZORPAY_WEBHOOK', name: 'Razorpay Webhook' });
+        const reopened = stock.restored && order.orderStatus === 'CANCELLED';
         await tx.order.update({
           where: { id: order.id },
           data: {
             paymentStatus: order.isPartialPayment ? 'PARTIALLY_PAID' : 'PAID',
-            orderStatus: order.orderStatus === 'ORDER_PLACED' ? 'ORDER_CONFIRMED' : order.orderStatus,
+            orderStatus: order.orderStatus === 'ORDER_PLACED' || reopened ? 'ORDER_CONFIRMED' : order.orderStatus,
           },
         });
         await tx.payment.create({
@@ -391,10 +409,34 @@ export async function handleRazorpayWebhook({ rawBody, signature }) {
           data: {
             orderId: order.id,
             status: 'ORDER_CONFIRMED',
-            notes: `Payment confirmed via Razorpay webhook (${event}: ${transactionId})`,
+            notes: `Payment confirmed via Razorpay webhook (${event}: ${transactionId})${stock.unavailable ? `. ${STOCK_GONE_NOTE}` : ''}`,
             changedBy: 'Razorpay Webhook',
           },
         });
+      }, PAYMENT_TX);
+      publishInventoryChanges(stock.touched, stockBefore);
+    }
+  } else if (event === 'payment.failed') {
+    // Record the failure; the reservation stays until it expires so the buyer can retry payment.
+    const paymentEntity = payload.payload?.payment?.entity;
+    const transactionId = paymentEntity?.id;
+    const orderIdNote = paymentEntity?.notes?.orderId;
+    if (!transactionId || !orderIdNote) return { received: true, ignored: true };
+    const already = await prisma.payment.findFirst({ where: { transactionId } });
+    if (already) return { received: true, duplicate: true };
+    const order = await prisma.order.findUnique({ where: { id: orderIdNote }, select: { id: true, paymentStatus: true } });
+    if (order) {
+      await prisma.payment.create({
+        data: {
+          orderId: order.id,
+          gateway: 'razorpay_webhook',
+          transactionId,
+          paymentOrderId: paymentEntity?.order_id || null,
+          amount: paymentEntity?.amount ? paymentEntity.amount / 100 : 0,
+          currency: 'INR',
+          status: 'FAILED',
+          rawResponse: { event, paymentId: transactionId, error: paymentEntity?.error_description || null },
+        },
       });
     }
   }

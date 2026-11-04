@@ -4,7 +4,6 @@ import useCollection from '../hooks/useCollection';
 import orderService from '../services/orderService';
 import { AuthContext } from './AuthContext';
 import { NotificationContext } from './NotificationContext';
-import { ProductContext } from './ProductContext';
 
 // Orders. Placing one stores the order in this browser; payment status is tracked separately.
 export { OrderContext };
@@ -12,7 +11,6 @@ export { OrderContext };
 export function OrderProvider({ children }) {
   const { items: orders, setItems, loading, error, reload } = useCollection(orderService.listOrders, orderService.saveOrders);
   const { addNotification } = useContext(NotificationContext);
-  const { products, updateProduct } = useContext(ProductContext);
   const { user } = useContext(AuthContext);
 
   const seenStorageKey = user?.id ? `tradesphere:v3:seen-orders:${user.id}` : 'tradesphere:v3:seen-orders:default';
@@ -86,17 +84,12 @@ export function OrderProvider({ children }) {
     const order = await orderService.createOrder(payload);
     setItems((previous) => [order, ...previous]);
 
-    // Reduce stock and let each supplier know.
-    const companyIds = new Set();
-    order.items.forEach((item) => {
-      const product = products.find((entry) => entry.id === item.productId);
-      if (product) updateProduct(product.id, { stock: Math.max(product.stock - item.quantity, 0), orderCount: (product.orderCount ?? 0) + 1 });
-      companyIds.add(item.companyId);
-    });
+    // Stock is reserved on the server and arrives through live stock updates; only notify each supplier here.
+    const companyIds = new Set(order.items.map((item) => item.companyId));
     companyIds.forEach((companyId) => addNotification({ audience: `company:${companyId}`, type: 'orders', title: 'New order', body: `${order.buyerName} placed order ${order.id}.`, link: '/supplier/orders' }));
     addNotification({ audience: order.buyerId, type: 'orders', title: 'Order placed', body: `Order ${order.id} has been placed.`, link: '/buyer/orders' });
     return order;
-  }, [setItems, products, updateProduct, addNotification]);
+  }, [setItems, addNotification]);
 
   const updateOrderStatus = useCallback((id, status) => {
     const order = orders.find((item) => item.id === id);

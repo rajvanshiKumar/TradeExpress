@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Eye,
   EyeOff,
-  LogIn,
   ShieldCheck,
   Mail,
   Lock,
@@ -70,7 +69,7 @@ const UNIQUE_DIAL_OPTIONS = (() => {
  */
 export default function LoginForm({ mode = "member", role = null, adminType = "admin" }) {
   const isAdmin = mode === "admin";
-  const { loginMobile, loginEmailOtp, loginAdmin, setAuthUser, isAdminConfigured } = useAuth();
+  const { login, loginMobile, loginEmailOtp, loginAdmin, setAuthUser, isAdminConfigured } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -97,6 +96,11 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
+  const submitLockRef = useRef(false);
+  const emailOtpRequestLockRef = useRef(false);
+  const mobileOtpRequestLockRef = useRef(false);
+  const emailOtpVerifyLockRef = useRef(false);
+  const mobileOtpVerifyLockRef = useRef(false);
   const [showPassword, setShowPassword] = useState(false);
 
   // Email OTP state
@@ -161,7 +165,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       setEmailCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
     return () => clearInterval(timer);
-  }, [emailCooldown]);
+  }, [emailCooldown > 0]);
 
   // Mobile OTP cooldown countdown timer
   useEffect(() => {
@@ -170,7 +174,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       setMobileCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
     return () => clearInterval(timer);
-  }, [mobileCooldown]);
+  }, [mobileCooldown > 0]);
 
   const handleChange = (field) => (event) => {
     const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
@@ -324,6 +328,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
 
   /** Sends 6-digit email OTP for Buyer & Supplier sign-in */
   const handleSendEmailOtp = async () => {
+    if (emailOtpRequestLockRef.current) return;
     const cleanEmail = normalizeEmail(values.email);
     if (!cleanEmail) {
       setErrors((prev) => ({ ...prev, email: "Email address is required." }));
@@ -334,6 +339,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       return;
     }
 
+    emailOtpRequestLockRef.current = true;
     setSendingEmailOtp(true);
     setFormError("");
     setErrors((prev) => ({ ...prev, email: "", emailOtp: "" }));
@@ -359,11 +365,13 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       setFormError(err?.message || "Unable to contact authentication server. Please check your connection.");
     } finally {
       setSendingEmailOtp(false);
+      emailOtpRequestLockRef.current = false;
     }
   };
 
   /** Sends real SMS OTP to the entered mobile number */
   const handleSendMobileOtp = async () => {
+    if (mobileOtpRequestLockRef.current) return;
     const rawPhone = values.phone.trim();
     if (!rawPhone) {
       setErrors((prev) => ({ ...prev, phone: "Mobile number is required." }));
@@ -378,6 +386,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       return;
     }
 
+    mobileOtpRequestLockRef.current = true;
     setSendingMobileOtp(true);
     setFormError("");
     setErrors((prev) => ({ ...prev, phone: "", mobileOtp: "" }));
@@ -404,6 +413,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       setFormError(err?.message || "Unable to contact authentication server. Please check your connection.");
     } finally {
       setSendingMobileOtp(false);
+      mobileOtpRequestLockRef.current = false;
     }
   };
 
@@ -427,6 +437,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
 
   /** Fast verification and sign-in via Email OTP */
   const handleVerifyEmailOtp = async () => {
+    if (emailOtpVerifyLockRef.current) return;
     const cleanEmail = normalizeEmail(values.email);
     const otpCode = emailOtpDigits.join("").trim();
     if (!cleanEmail) {
@@ -438,16 +449,25 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       return;
     }
 
+    emailOtpVerifyLockRef.current = true;
     setBusy(true);
     setFormError("");
     setErrors({});
 
-    const result = await loginEmailOtp({
-      email: cleanEmail,
-      otp: otpCode,
-      role,
-    });
-    setBusy(false);
+    let result;
+    try {
+      result = await loginEmailOtp({
+        email: cleanEmail,
+        otp: otpCode,
+        role,
+      });
+    } catch (error) {
+      setFormError(error?.message || "Unable to contact authentication server. Please try again.");
+      return;
+    } finally {
+      emailOtpVerifyLockRef.current = false;
+      setBusy(false);
+    }
 
     if (!result.ok) {
       setFormError(result.error || "Invalid or expired verification code. Please try again.");
@@ -459,6 +479,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
 
   /** Fast verification and sign-in via Mobile OTP */
   const handleVerifyMobileOtp = async () => {
+    if (mobileOtpVerifyLockRef.current) return;
     const rawPhone = values.phone.trim();
     const otpCode = mobileOtpDigits.join("").trim();
     if (!rawPhone) {
@@ -470,17 +491,26 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       return;
     }
 
+    mobileOtpVerifyLockRef.current = true;
     setBusy(true);
     setFormError("");
     setErrors({});
 
-    const result = await loginMobile({
-      phone: rawPhone,
-      country: values.country,
-      otp: otpCode,
-      role,
-    });
-    setBusy(false);
+    let result;
+    try {
+      result = await loginMobile({
+        phone: rawPhone,
+        country: values.country,
+        otp: otpCode,
+        role,
+      });
+    } catch (error) {
+      setFormError(error?.message || "Unable to contact authentication server. Please try again.");
+      return;
+    } finally {
+      mobileOtpVerifyLockRef.current = false;
+      setBusy(false);
+    }
 
     if (!result.ok) {
       setFormError(result.error || "Mobile sign-in failed. Please verify your OTP code.");
@@ -535,25 +565,23 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
   /** Master submit router */
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (busy) return;
+    if (busy || submitLockRef.current) return;
+    submitLockRef.current = true;
     setFormError("");
-
-    if (isAdmin) {
-      return handleAdminLogin();
-    }
-
-    if (loginMethod === "email") {
-      if (!emailOtpSent) {
-        return handleSendEmailOtp();
+    try {
+      if (isAdmin) {
+        await handleAdminLogin();
+      } else if (loginMethod === "email") {
+        if (!emailOtpSent) await handleSendEmailOtp();
+        else await handleVerifyEmailOtp();
+      } else if (loginMethod === "mobile") {
+        if (!mobileOtpSent) await handleSendMobileOtp();
+        else await handleVerifyMobileOtp();
       }
-      return handleVerifyEmailOtp();
-    }
-
-    if (loginMethod === "mobile") {
-      if (!mobileOtpSent) {
-        return handleSendMobileOtp();
-      }
-      return handleVerifyMobileOtp();
+    } catch (error) {
+      setFormError(error?.message || "Unable to complete sign-in. Please try again.");
+    } finally {
+      submitLockRef.current = false;
     }
   };
 
@@ -595,10 +623,10 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
         </p>
       ) : null}
 
-      {/* Login Method Switcher for Public Members (Email OTP vs Mobile OTP) */}
+      {/* Login Method Switcher for Public Members */}
       {!isAdmin ? (
         <div className="mb-4">
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 border border-slate-200">
+          <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200">
             <button
               type="button"
               onClick={() => {
@@ -1081,7 +1109,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
             }
             className="!bg-emerald-700 hover:!bg-emerald-800 !text-white font-bold py-3 rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer"
           >
-            {busy ? "Verifying & logging in..." : "Verify & Login"}
+            {busy ? "Signing in..." : "Verify & Login"}
           </Button>
         </div>
       ) : null}

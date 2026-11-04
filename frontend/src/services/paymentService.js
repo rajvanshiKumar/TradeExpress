@@ -5,7 +5,6 @@
 // on the server using timing-safe HMAC SHA-256 before an order is confirmed as PAID.
 
 import { apiPost, isApiConfigured } from './apiClient';
-import orderService from './orderService';
 
 export const isPaymentProviderConfigured = true;
 
@@ -33,49 +32,15 @@ export function loadRazorpaySdk() {
 /**
  * Starts an online payment in Razorpay Test/Sandbox Mode.
  * Returns:
- *   { status: 'paid', reference, order } on verified success
+ *   { status: 'paid', reference, order } only after the server verified the gateway signature
  *   { status: 'cancelled' } if aborted or dismissed by user
- *   { status: 'failed', message } on error
+ *   { status: 'failed', message } on any error. A payment is never reported as paid without that verification.
  */
 export async function startPayment({ order, orderId, amount, method, buyerInfo, signal } = {}) {
   const targetOrderId = order?.backendId || order?.orderNumber || order?.id || orderId;
 
-  // 1. Standalone/Demo Sandbox Mode:
-  // When running without an external backend API (e.g. Render/Vercel static hosting or offline prototype),
-  // seamlessly complete the sandbox payment with a generated test transaction reference.
   if (!isApiConfigured) {
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    if (signal?.aborted) {
-      return { status: 'cancelled' };
-    }
-
-    const methodPrefix = (method || 'ONLINE').toUpperCase().replace(/[^A-Z]/g, '') || 'ONLINE';
-    const txnId = `pay_test_${methodPrefix}_${Date.now().toString(36).toUpperCase()}`;
-
-    const paidOrder = {
-      ...(order || {}),
-      id: targetOrderId || `TS-O-${Date.now().toString(36).toUpperCase()}`,
-      orderNumber: order?.orderNumber || targetOrderId || `TS-O-${Date.now().toString(36).toUpperCase()}`,
-      paymentStatus: 'paid',
-      status: 'Confirmed',
-      paymentMethod: method || order?.paymentMethod || 'online',
-      transactionId: txnId,
-      paidAt: new Date().toISOString(),
-    };
-
-    try {
-      if (typeof orderService?.saveOrder === 'function') {
-        await orderService.saveOrder(paidOrder);
-      }
-    } catch {
-      // Ignore local storage error
-    }
-
-    return {
-      status: 'paid',
-      reference: txnId,
-      order: paidOrder,
-    };
+    return { status: 'failed', message: 'Online payment is not available right now. Please try again later or choose Cash on Delivery.' };
   }
 
   if (!targetOrderId) {
@@ -89,30 +54,7 @@ export async function startPayment({ order, orderId, amount, method, buyerInfo, 
     // 2. Initiate Razorpay test order on backend (server calculates trusted payable amount)
     const createRes = await apiPost('payments/create-order', { orderId: targetOrderId }, { signal });
     if (!createRes.success || !createRes.data) {
-      // Graceful fallback to sandbox payment simulation if backend order creation fails
-      console.warn('[TradeExpress] Backend could not initiate gateway order, completing via sandbox simulation:', createRes.message);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      if (signal?.aborted) {
-        return { status: 'cancelled' };
-      }
-      const txnId = `pay_test_sandbox_${Date.now().toString(36).toUpperCase()}`;
-      const paidOrder = {
-        ...(order || {}),
-        paymentStatus: 'paid',
-        status: 'Confirmed',
-        transactionId: txnId,
-        paidAt: new Date().toISOString(),
-      };
-      try {
-        if (typeof orderService?.saveOrder === 'function') {
-          await orderService.saveOrder(paidOrder);
-        }
-      } catch {}
-      return {
-        status: 'paid',
-        reference: txnId,
-        order: paidOrder,
-      };
+      return { status: 'failed', message: createRes.message || 'The payment could not be started. You have not been charged.' };
     }
 
     const paymentData = createRes.data;
@@ -241,35 +183,11 @@ export async function startPayment({ order, orderId, amount, method, buyerInfo, 
       return { status: 'cancelled' };
     }
 
-    // If backend API could not be reached (offline or network failure), fallback to sandbox simulation
-    console.warn('[TradeExpress] Gateway API communication failure, completing via sandbox simulation:', error.message);
-    await new Promise((r) => setTimeout(r, 1000));
-    if (signal?.aborted) {
-      return { status: 'cancelled' };
-    }
-
-    const txnId = `pay_test_offline_${Date.now().toString(36).toUpperCase()}`;
-    const paidOrder = {
-      ...(order || {}),
-      paymentStatus: 'paid',
-      status: 'Confirmed',
-      paymentMethod: method || order?.paymentMethod || 'online',
-      transactionId: txnId,
-      paidAt: new Date().toISOString(),
-    };
-
-    try {
-      if (typeof orderService?.saveOrder === 'function') {
-        await orderService.saveOrder(paidOrder);
-      }
-    } catch {
-      // Ignore local storage error
-    }
-
     return {
-      status: 'paid',
-      reference: txnId,
-      order: paidOrder,
+      status: 'failed',
+      message: error.status === 0
+        ? 'We could not reach the payment service. You have not been charged; please check your connection and try again.'
+        : (error.message || 'The payment could not be completed. You have not been charged.'),
     };
   }
 }

@@ -1,6 +1,6 @@
 import prisma from '../config/db.js';
 import { createNotification } from './notificationService.js';
-import { broadcastInventoryUpdate, broadcastProductStock } from './socketService.js';
+import { availabilitySnapshot, publishInventoryChanges, transitionOrderInventory } from './inventoryLifecycleService.js';
 
 export async function getSupplierOrders(supplierUser) {
   const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
@@ -51,9 +51,25 @@ export async function getSupplierOrders(supplierUser) {
   }));
 }
 
-export async function acceptSupplierOrder(supplierUser, orderId) {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
+const ORDER_TX = { maxWait: 15000, timeout: 30000 };
+
+/**
+ * Loads an order the supplier is allowed to act on: their own orders (or ones containing their products).
+ * Admins may act on any order.
+ */
+async function findSupplierOrder(supplierUser, orderId, include) {
+  const isStaff = supplierUser.role === 'ADMIN' || supplierUser.role === 'SUPER_ADMIN';
+  const order = await prisma.order.findFirst({
+    where: isStaff
+      ? { id: orderId }
+      : {
+          id: orderId,
+          OR: [
+            { supplierId: supplierUser.id },
+            { items: { some: { product: { supplierId: supplierUser.id } } } },
+          ],
+        },
+    include,
   });
 
   if (!order) {
@@ -61,6 +77,15 @@ export async function acceptSupplierOrder(supplierUser, orderId) {
     error.statusCode = 404;
     throw error;
   }
+  return order;
+}
+
+function supplierActor(supplierUser) {
+  return { id: supplierUser.id, name: supplierUser.name || 'Supplier' };
+}
+
+export async function acceptSupplierOrder(supplierUser, orderId) {
+  const order = await findSupplierOrder(supplierUser, orderId);
 
   if (order.orderStatus !== 'ORDER_PLACED') {
     const error = new Error(`Order cannot be accepted in "${order.orderStatus}" state.`);
@@ -70,43 +95,9 @@ export async function acceptSupplierOrder(supplierUser, orderId) {
 
   const supplierInvoiceSeries = `TS-INV-${(order.supplierCompanyId || 'SUP').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()}-${Date.now().toString().slice(-6)}`;
 
+  // Accepting does not move stock: it stays reserved until payment (or is already committed for COD),
+  // and leaves on hand when the order ships.
   const updated = await prisma.$transaction(async (tx) => {
-    // Fulfill inventory commitment from physical stock and release reserved stock
-    for (const item of order.items || []) {
-      if (item.productId) {
-        await tx.$executeRaw`
-          UPDATE products
-          SET stock = GREATEST(0, stock - ${item.quantity}),
-              reservedStock = GREATEST(0, reservedStock - ${item.quantity})
-          WHERE id = ${item.productId}
-        `;
-
-        const current = await tx.product.findUnique({
-          where: { id: item.productId },
-          select: { id: true, stock: true, reservedStock: true, supplierId: true, sku: true },
-        });
-
-        if (current) {
-          await tx.inventoryLog.create({
-            data: {
-              productId: item.productId,
-              supplierId: current.supplierId || supplierUser.id,
-              previousStock: current.stock + item.quantity,
-              newStock: current.stock,
-              changeAmount: -item.quantity,
-              previousReserved: current.reservedStock + item.quantity,
-              newReserved: current.reservedStock,
-              reason: 'ORDER_FULFILLED',
-              notes: `Fulfilled & dispatched ${item.quantity} unit(s) for Order #${order.orderNumber}. Carrier: ${carrierName || 'Freight'}. AWB: ${trackingNumber || 'N/A'}`,
-              orderId: order.orderNumber,
-              actorId: supplierUser.id,
-              actorName: supplierUser.name || 'Supplier',
-            },
-          });
-        }
-      }
-    }
-
     const res = await tx.order.update({
       where: { id: orderId },
       data: {
@@ -142,59 +133,25 @@ export async function acceptSupplierOrder(supplierUser, orderId) {
 }
 
 export async function rejectSupplierOrder(supplierUser, orderId, reason = '') {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { items: true },
-  });
-
-  if (!order) {
-    const error = new Error('Order not found.');
-    error.statusCode = 404;
-    throw error;
-  }
+  const order = await findSupplierOrder(supplierUser, orderId, { items: true });
 
   // Supplier can only reject before Confirmed
-  if (order.orderStatus === 'ORDER_CONFIRMED' || order.orderStatus === 'PROCESSING' || order.orderStatus === 'PACKED' || order.orderStatus === 'SHIPPED') {
+  if (['ORDER_CONFIRMED', 'PROCESSING', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'REFUNDED'].includes(order.orderStatus)) {
     const error = new Error('Order has already been confirmed/processed and cannot be rejected. Please contact support or request cancellation.');
     error.statusCode = 400;
     throw error;
   }
 
+  const stockBefore = await availabilitySnapshot(order.items.map((i) => i.productId));
+  let released = { touched: [] };
+
   const updated = await prisma.$transaction(async (tx) => {
-    // Release reserved inventory
-    for (const item of order.items) {
-      if (item.productId) {
-        await tx.$executeRaw`
-          UPDATE products
-          SET reservedStock = GREATEST(0, reservedStock - ${item.quantity})
-          WHERE id = ${item.productId}
-        `;
-
-        const current = await tx.product.findUnique({
-          where: { id: item.productId },
-          select: { id: true, stock: true, reservedStock: true, supplierId: true, sku: true },
-        });
-
-        if (current) {
-          await tx.inventoryLog.create({
-            data: {
-              productId: item.productId,
-              supplierId: current.supplierId || supplierUser.id,
-              previousStock: current.stock,
-              newStock: current.stock,
-              changeAmount: 0,
-              previousReserved: current.reservedStock + item.quantity,
-              newReserved: current.reservedStock,
-              reason: 'ORDER_CANCELLED',
-              notes: `Released ${item.quantity} reserved unit(s) due to Supplier rejection: ${reason || 'Capacity constraints'}`,
-              orderId: order.orderNumber,
-              actorId: supplierUser.id,
-              actorName: supplierUser.name || 'Supplier',
-            },
-          });
-        }
-      }
-    }
+    // Give the held stock back (once)
+    released = await transitionOrderInventory(tx, orderId, 'RELEASE', {
+      reason: 'ORDER_CANCELLED',
+      notes: `Supplier rejected Order #${order.orderNumber}: ${reason || 'Capacity constraints'}`,
+      actor: supplierActor(supplierUser),
+    });
 
     const res = await tx.order.update({
       where: { id: orderId },
@@ -215,7 +172,9 @@ export async function rejectSupplierOrder(supplierUser, orderId, reason = '') {
     });
 
     return res;
-  });
+  }, ORDER_TX);
+
+  publishInventoryChanges(released.touched, stockBefore);
 
   if (order.userId) {
     createNotification({
@@ -231,19 +190,17 @@ export async function rejectSupplierOrder(supplierUser, orderId, reason = '') {
 }
 
 export async function updateSupplierOrderStatus(supplierUser, orderId, { status, notes = '' }) {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-  });
+  const order = await findSupplierOrder(supplierUser, orderId, { items: { select: { productId: true } } });
 
-  if (!order) {
-    const error = new Error('Order not found.');
-    error.statusCode = 404;
+  // Shipped / delivered come only from Transport & Delivery (dispatch and the buyer's delivery confirmation)
+  const ALLOWED_STATUSES = ['ORDER_CONFIRMED', 'PROCESSING', 'PACKED'];
+  if (!ALLOWED_STATUSES.includes(status)) {
+    const error = new Error(`Status ${status} cannot be set here. Shipping and delivery are recorded in Transport & Delivery Management.`);
+    error.statusCode = 400;
     throw error;
   }
-
-  const ALLOWED_STATUSES = ['ORDER_CONFIRMED', 'PROCESSING', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
-  if (!ALLOWED_STATUSES.includes(status)) {
-    const error = new Error(`Status ${status} is not allowed via supplier flow.`);
+  if (['CANCELLED', 'REFUNDED'].includes(order.orderStatus)) {
+    const error = new Error(`Order is ${order.orderStatus.toLowerCase()} and can no longer be updated.`);
     error.statusCode = 400;
     throw error;
   }
@@ -251,10 +208,7 @@ export async function updateSupplierOrderStatus(supplierUser, orderId, { status,
   const updated = await prisma.$transaction(async (tx) => {
     const res = await tx.order.update({
       where: { id: orderId },
-      data: {
-        orderStatus: status,
-        ...(status === 'DELIVERED' ? { deliveryAcceptedAt: new Date() } : {}),
-      },
+      data: { orderStatus: status },
       include: { items: true, statusHistory: { orderBy: { createdAt: 'desc' } } },
     });
 
@@ -268,7 +222,7 @@ export async function updateSupplierOrderStatus(supplierUser, orderId, { status,
     });
 
     return res;
-  });
+  }, ORDER_TX);
 
   if (order.userId) {
     createNotification({
@@ -283,48 +237,3 @@ export async function updateSupplierOrderStatus(supplierUser, orderId, { status,
   return updated;
 }
 
-export async function dispatchSupplierOrder(supplierUser, orderId, { carrierName, trackingNumber, invoiceUrl, ewayBillUrl }) {
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) {
-    const error = new Error('Order not found.');
-    error.statusCode = 404;
-    throw error;
-  }
-
-  const updated = await prisma.$transaction(async (tx) => {
-    const res = await tx.order.update({
-      where: { id: orderId },
-      data: {
-        orderStatus: 'SHIPPED',
-        carrierName: carrierName || order.carrierName || 'Freight Carrier',
-        trackingNumber: trackingNumber || order.trackingNumber,
-        invoiceUrl: invoiceUrl || order.invoiceUrl,
-        ewayBillUrl: ewayBillUrl || order.ewayBillUrl,
-      },
-      include: { items: true, statusHistory: { orderBy: { createdAt: 'desc' } } },
-    });
-
-    await tx.orderStatusHistory.create({
-      data: {
-        orderId,
-        status: 'SHIPPED',
-        notes: `Dispatched with ${carrierName || 'carrier'}. Tracking/LR: ${trackingNumber || 'N/A'}. Invoice & E-Way Bill uploaded.`,
-        changedBy: 'Supplier',
-      },
-    });
-
-    return res;
-  });
-
-  if (order.userId) {
-    createNotification({
-      userId: order.userId,
-      title: `Shipment Dispatched: #${order.orderNumber}`,
-      message: `Order #${order.orderNumber} has been dispatched with ${carrierName || 'Carrier'}. Tracking Number: ${trackingNumber || 'N/A'}.`,
-      type: 'ORDER',
-      link: `/track/${order.orderNumber}`,
-    }).catch(() => {});
-  }
-
-  return updated;
-}

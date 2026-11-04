@@ -1,11 +1,4 @@
 import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const logPath = path.join(__dirname, '../../sms-debug.log');
 
 /**
  * Dispatches an SMS OTP via PowersText HTTP TokenKey API.
@@ -54,7 +47,6 @@ export const sendOtpSms = async ({ mobile, otp, expiryMinutes = 10 }) => {
   }
 
   const mobileEnding = cleanMobile.slice(-4);
-  console.log(`[SMS GATEWAY] Dispatching live OTP SMS to: ...${mobileEnding} (${cleanMobile})`);
 
   try {
     const response = await axios.get(smsApiUrl, {
@@ -66,19 +58,11 @@ export const sendOtpSms = async ({ mobile, otp, expiryMinutes = 10 }) => {
         message: message,
         templateid: smsTemplateId,
       },
-      timeout: 15000,
+      timeout: 8000,
     });
 
     const data = response.data;
     const dataStr = (typeof data === 'object' ? JSON.stringify(data) : String(data || '')).toLowerCase();
-
-    // Append to debug log
-    try {
-      const logLine = `[${new Date().toISOString()}] inputMobile=${mobile} cleanMobile=${cleanMobile} data=${JSON.stringify(data)}\n`;
-      fs.appendFileSync(logPath, logLine);
-    } catch {
-      // Ignore
-    }
 
     // Check for success condition from PowersText gateway
     const isSuccess =
@@ -91,22 +75,15 @@ export const sendOtpSms = async ({ mobile, otp, expiryMinutes = 10 }) => {
     }
 
     // Provider rejected request
-    const desc = data?.Description || (typeof data === 'string' ? data : 'Invalid mobile number or carrier rejection');
-    console.error(`[SMS GATEWAY REJECTION] Powerstext rejected SMS to ...${mobileEnding}:`, data);
+    console.warn(`[SMS GATEWAY REJECTION] SMS provider rejected delivery to ...${mobileEnding}.`);
 
-    const err = new Error(`SMS delivery rejected by carrier: ${desc}. Please check that you entered a valid 10-digit mobile number.`);
-    err.statusCode = 400;
+    const err = new Error('The SMS provider could not deliver the verification code. Check the number or try again shortly.');
+    err.statusCode = response.status >= 400 && response.status < 500 ? 400 : 502;
     throw err;
   } catch (error) {
     if (error.statusCode) throw error;
 
-    console.error('[SMS GATEWAY FAILURE]', error.message);
-    try {
-      const logLine = `[${new Date().toISOString()}] ERROR inputMobile=${mobile} cleanMobile=${cleanMobile} error=${error.message}\n`;
-      fs.appendFileSync(logPath, logLine);
-    } catch {
-      // Ignore
-    }
+    console.error('[SMS GATEWAY FAILURE] Provider request failed.', error.code || 'UNKNOWN');
 
     const err = new Error('SMS gateway timed out or failed to reach carrier network. Please try again.');
     err.statusCode = 502;

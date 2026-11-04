@@ -1,12 +1,27 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+const jwtSecret = process.env.JWT_SECRET?.trim();
+const jwtSecretLooksLikePlaceholder = /^(your|replace|change|example|placeholder)|secret|password|default/i.test(jwtSecret || '');
+if (!jwtSecret || Buffer.byteLength(jwtSecret, 'utf8') < 32 || new Set(jwtSecret).size < 12 || jwtSecretLooksLikePlaceholder) {
+  throw new Error(
+    'Invalid JWT_SECRET. Set a random secret with at least 32 UTF-8 bytes and 12 distinct characters. ' +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64url\'))"'
+  );
+}
+
+const configuredFrontendOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 export const ENV = {
   PORT: process.env.PORT || 5000,
   NODE_ENV: process.env.NODE_ENV || 'development',
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+  CORS_ORIGINS: configuredFrontendOrigins,
   DATABASE_URL: process.env.DATABASE_URL,
-  JWT_SECRET: process.env.JWT_SECRET || 'tradesphere_default_secret_jwt_2026',
+  JWT_SECRET: jwtSecret,
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   RAZORPAY_KEY_ID: (process.env.RAZORPAY_KEY_ID || '').trim(),
   RAZORPAY_KEY_SECRET: (process.env.RAZORPAY_KEY_SECRET || '').trim(),

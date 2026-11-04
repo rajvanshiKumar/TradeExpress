@@ -291,7 +291,7 @@ function Verification({ company }) {
         </div>
       </Section>
 
-      <section className="ts-card overflow-hidden" aria-labelledby="documents-title">
+      <section className="ts-card" aria-labelledby="documents-title">
         <div className="border-b border-navy-900/[0.06] p-5 sm:p-6">
           <h2 id="documents-title" className="text-base font-bold text-ink">Supporting business documents</h2>
           <p className="mt-1 text-xs text-muted">GST certificate, registration certificate, cancelled cheque or IEC. Documents uploaded at signup appear here.</p>
@@ -325,7 +325,7 @@ function Verification({ company }) {
         )}
 
         {!profileLocked ? (
-          <form onSubmit={addDocument} noValidate className="grid grid-cols-1 gap-4 border-t border-navy-900/[0.06] bg-ivory/60 p-5 sm:grid-cols-[1.2fr_1fr_1.2fr_auto] sm:items-end sm:p-6">
+          <form onSubmit={addDocument} noValidate className="grid grid-cols-1 gap-4 rounded-b-[inherit] border-t border-navy-900/[0.06] bg-ivory/60 p-5 sm:grid-cols-[1.2fr_1fr_1.2fr_auto] sm:items-end sm:p-6">
             <Select id="doc-type" label="Document type" options={DOCUMENT_TYPES} value={draftDoc.type} onChange={(e) => setDraftDoc((prev) => ({ ...prev, type: e.target.value }))} />
             <Input id="doc-reference" label="Document number" placeholder="e.g. Certificate No." value={draftDoc.reference} onChange={(e) => setDraftDoc((prev) => ({ ...prev, reference: e.target.value }))} error={errors.reference} />
             <div>

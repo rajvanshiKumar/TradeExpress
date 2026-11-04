@@ -15,18 +15,10 @@ router.patch(
   '/:orderId/status',
   validate([
     body('status')
-      .isIn(['ORDER_CONFIRMED', 'PROCESSING', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'])
-      .withMessage('Valid status required.'),
+      .isIn(['ORDER_CONFIRMED', 'PROCESSING', 'PACKED'])
+      .withMessage('Suppliers can set Confirmed, Processing or Packed. Shipping and delivery are recorded in Transport & Delivery.'),
   ]),
   supplierOrderController.updateStatus
-);
-router.post(
-  '/:orderId/dispatch',
-  validate([
-    body('carrierName').trim().notEmpty().withMessage('Carrier name is required.'),
-    body('trackingNumber').trim().notEmpty().withMessage('Tracking / LR number is required.'),
-  ]),
-  supplierOrderController.dispatchOrder
 );
 
 export default router;

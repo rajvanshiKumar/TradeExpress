@@ -69,7 +69,6 @@ export default function BuyerOrders() {
   };
 
   const handleReorder = (order) => {
-    let count = 0;
     for (const item of order.items) {
       const prod = getProduct(item.productId || item.id) || {
         id: item.productId || item.id,
@@ -80,9 +79,7 @@ export default function BuyerOrders() {
         priceTiers: [{ min: 1, price: item.unitPrice }],
       };
       addToCart(prod, item.quantity, item.variant || null);
-      count++;
     }
-    showToast(`Added ${count} product(s) from order ${order.id} to your cart.`, 'success');
     navigate('/cart');
   };
 
@@ -152,7 +149,7 @@ export default function BuyerOrders() {
       </div>
 
       <Modal open={Boolean(selected)} onClose={() => open('')} title="Order details" size="lg">
-        {selected ? <OrderDetails order={selected} /> : null}
+        {selected ? <OrderDetails order={selected} trackDelivery highlightShipment={searchParams.get('shipment') || ''} /> : null}
       </Modal>
       <ConfirmDialog open={Boolean(cancelId)} onCancel={() => setCancelId(null)} onConfirm={cancel} title="Cancel this order?" text={`Order ${cancelId} will be marked as cancelled.`} confirmLabel="Cancel order" cancelLabel="Keep order" />
       <TaxInvoiceModal

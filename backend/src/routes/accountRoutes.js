@@ -49,5 +49,17 @@ router.post('/verification/verify', sensitiveLimiter, accountController.verifyVe
 router.post('/password/change', sensitiveLimiter, accountController.changePassword);
 router.post('/email/request-change', sensitiveLimiter, accountController.requestEmailChange);
 router.post('/email/verify-new', sensitiveLimiter, accountController.verifyNewEmail);
+router.post('/phone/change', sensitiveLimiter, accountController.changePhone);
+
+router.get('/preferences', accountController.getPreferences);
+router.patch('/preferences', accountWriteLimiter, accountController.updatePreferences);
+router.get('/data-export', sensitiveLimiter, accountController.exportData);
+
+router.get('/sessions', accountController.listSessions);
+router.post('/sessions/revoke-others', sensitiveLimiter, accountController.revokeOtherSessions);
+router.post('/sessions/:id/revoke', accountWriteLimiter, accountController.revokeSession);
+
+router.get('/delete/status', accountController.getDeletionStatus);
+router.post('/delete', sensitiveLimiter, requireRole('BUYER', 'SUPPLIER'), accountController.deleteAccount);
 
 export default router;

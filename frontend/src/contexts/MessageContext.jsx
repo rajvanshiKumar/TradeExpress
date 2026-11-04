@@ -167,6 +167,7 @@ export function MessageProvider({ children }) {
           companyId: company?.id || null,
           supplierId: product?.supplierId || company?.supplierId || null,
           productId: product?.id || null,
+          productSlug: product?.slug || null,
           subject: subject || (product ? product.name : `Inquiry for ${company?.name || 'Supplier'}`),
           initialMessage,
         });

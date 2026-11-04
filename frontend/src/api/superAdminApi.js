@@ -87,11 +87,12 @@ export const superAdminApi = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
-  resetUserPassword: (id, newPassword) =>
-    request(`/users/${id}/reset-password`, {
-      method: 'POST',
-      body: JSON.stringify({ newPassword }),
-    }),
+  // Emails the user a secure reset link; the Super Admin never sets another user's password
+  sendPasswordResetLink: (id) =>
+    request(`/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({}) }),
+  getUserDeletionCheck: (id) => request(`/users/${id}/deletion-check`),
+  deleteUser: (id, payload) =>
+    request(`/users/${id}/delete`, { method: 'POST', body: JSON.stringify(payload) }),
   getExportUsersCsvUrl: (params = {}) => {
     return `${API_BASE}/super-admin/users/export/csv${buildQueryString(params)}`;
   },

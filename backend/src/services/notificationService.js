@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { wantsNotification } from './preferencesService.js';
 
 /**
  * Create an in-app notification for a user
@@ -16,6 +17,8 @@ export async function createNotification({
   }
 
   try {
+    // Respect the user's Notification Preferences (account, security and dispute alerts are never muted)
+    if (!(await wantsNotification(userId, type))) return null;
     const notification = await prisma.notification.create({
       data: {
         userId,

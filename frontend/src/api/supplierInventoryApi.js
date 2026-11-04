@@ -10,6 +10,7 @@ export async function fetchSupplierInventory(params = {}) {
   if (params.stockStatus && params.stockStatus !== 'all') searchParams.set('stockStatus', params.stockStatus);
   if (params.sortBy) searchParams.set('sortBy', params.sortBy);
   if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+  if (params.supplierId) searchParams.set('supplierId', params.supplierId);
   if (params.page) searchParams.set('page', params.page);
   if (params.limit) searchParams.set('limit', params.limit);
 
@@ -42,3 +43,15 @@ export async function updateSupplierInventorySettings(productId, settingsPayload
   return res.data;
 }
 
+
+/** Product figures plus the open orders holding its stock. */
+export async function fetchProductInventoryDetail(productId) {
+  const res = await apiGet(`supplier/inventory/${encodeURIComponent(productId)}/detail`);
+  return res.data;
+}
+
+/** Super Admin: stored reserved/committed figures compared with open orders. */
+export async function fetchInventoryReconciliation() {
+  const res = await apiGet('supplier/inventory/reconciliation');
+  return res.data;
+}

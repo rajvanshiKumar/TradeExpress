@@ -62,11 +62,12 @@ export async function sendOtp(mobile) {
         otp_expiry: otpExpiry,
         otp_length: otpLength,
       }),
+      signal: AbortSignal.timeout(8000),
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => null);
 
-    if (data.type === 'success') {
+    if (response.ok && data?.type === 'success') {
       return {
         success: true,
         message: 'OTP sent successfully.',
@@ -74,14 +75,13 @@ export async function sendOtp(mobile) {
       };
     }
 
-    const providerMessage = data.message || 'Unable to deliver OTP at this time.';
-    console.warn('[TradeExpress MSG91] Send OTP failed with message:', providerMessage);
-    const error = new Error(providerMessage);
-    error.statusCode = response.status >= 400 && response.status < 500 ? response.status : 400;
+    console.warn('[TradeExpress MSG91] Send OTP was rejected by the provider.');
+    const error = new Error('The SMS provider could not deliver the verification code. Please try again shortly.');
+    error.statusCode = response.status === 429 ? 429 : response.status >= 400 && response.status < 500 ? 400 : 502;
     throw error;
   } catch (err) {
     if (err.statusCode) throw err;
-    console.error('[TradeExpress MSG91] Network error calling MSG91 sendOtp:', err.message);
+    console.error('[TradeExpress MSG91] Network error calling MSG91 sendOtp.', err.code || err.name || 'UNKNOWN');
     const error = new Error('Failed to send OTP via SMS gateway. Please try again.');
     error.statusCode = 502;
     throw error;
@@ -114,24 +114,24 @@ export async function verifyOtp(mobile, otp) {
         authkey: authKey,
         Accept: 'application/json',
       },
+      signal: AbortSignal.timeout(8000),
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => null);
 
-    if (data.type === 'success') {
+    if (response.ok && data?.type === 'success') {
       return {
         success: true,
         message: 'OTP verified successfully.',
       };
     }
 
-    const providerMessage = data.message || 'Invalid or expired OTP.';
-    const error = new Error(providerMessage);
-    error.statusCode = 400;
+    const error = new Error(response.status >= 500 ? 'OTP verification is temporarily unavailable.' : 'Invalid or expired OTP.');
+    error.statusCode = response.status >= 500 ? 502 : 400;
     throw error;
   } catch (err) {
     if (err.statusCode) throw err;
-    console.error('[TradeExpress MSG91] Network error calling MSG91 verifyOtp:', err.message);
+    console.error('[TradeExpress MSG91] Network error calling MSG91 verifyOtp.', err.code || err.name || 'UNKNOWN');
     const error = new Error('Failed to verify OTP with SMS gateway. Please try again.');
     error.statusCode = 502;
     throw error;
@@ -163,24 +163,24 @@ export async function resendOtp(mobile, retrytype = 'text') {
         authkey: authKey,
         Accept: 'application/json',
       },
+      signal: AbortSignal.timeout(8000),
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => null);
 
-    if (data.type === 'success') {
+    if (response.ok && data?.type === 'success') {
       return {
         success: true,
         message: 'OTP resent successfully.',
       };
     }
 
-    const providerMessage = data.message || 'Unable to resend OTP at this time.';
-    const error = new Error(providerMessage);
-    error.statusCode = 400;
+    const error = new Error(response.status >= 500 ? 'OTP resend is temporarily unavailable.' : 'The SMS provider could not resend the verification code.');
+    error.statusCode = response.status === 429 ? 429 : response.status >= 500 ? 502 : 400;
     throw error;
   } catch (err) {
     if (err.statusCode) throw err;
-    console.error('[TradeExpress MSG91] Network error calling MSG91 resendOtp:', err.message);
+    console.error('[TradeExpress MSG91] Network error calling MSG91 resendOtp.', err.code || err.name || 'UNKNOWN');
     const error = new Error('Failed to resend OTP via SMS gateway.');
     error.statusCode = 502;
     throw error;

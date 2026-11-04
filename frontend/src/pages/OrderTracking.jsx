@@ -29,8 +29,8 @@ import { TableSkeleton } from '../components/common/Skeleton';
 import { StatusBadge } from '../components/common/Badge';
 import CustomSelect from '../components/common/CustomSelect';
 import { printTaxInvoice } from '../utils/taxInvoiceGenerator.js';
-import { apiGet, apiPost, isApiConfigured } from '../services/apiClient';
-import orderService from '../services/orderService';
+import { apiGet, apiPost } from '../services/apiClient';
+import PublicTracking, { ShipmentCards } from '../components/transport/PublicTracking';
 import useCurrency from '../hooks/useCurrency';
 import useNotifications from '../hooks/useNotifications';
 import useDocumentTitle from '../hooks/useDocumentTitle';
@@ -58,6 +58,10 @@ export default function OrderTracking() {
   const [tracking, setTracking] = useState(null);
   const [loading, setLoading] = useState(Boolean(initialQuery));
   const [error, setError] = useState('');
+  // Without a sign-in, tracking needs the order's email address
+  const [needsEmail, setNeedsEmail] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [activeEmail, setActiveEmail] = useState('');
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const { money } = useCurrency();
@@ -229,76 +233,22 @@ export default function OrderTracking() {
 
     async function fetchTracking() {
       try {
-        if (isApiConfigured) {
-          try {
-            const res = await apiGet(`tracking/${encodeURIComponent(activeNumber)}`);
-            if (isMounted && res.success && res.data) {
-              setTracking(res.data);
-              setLoading(false);
-              return;
-            }
-          } catch (apiErr) {
-            console.warn('[TradeExpress Tracking] API tracking fetch failed, checking local:', apiErr.message);
-          }
-        }
-
-        // Fallback to local order lookup
-        const localOrder = await orderService.getOrder(activeNumber);
-        if (isMounted) {
-          if (localOrder) {
-            // Build fallback tracking shape
-            const TRACKING_STEPS = [
-              { key: 'ORDER_PLACED', label: 'Order Placed', description: 'Order received and logged in system.' },
-              { key: 'ORDER_CONFIRMED', label: 'Order Confirmed', description: 'Payment or COD verified and order confirmed.' },
-              { key: 'PROCESSING', label: 'Processing', description: 'Items picked and prepared for dispatch at supplier warehouse.' },
-              { key: 'SHIPPED', label: 'Shipped', description: 'Package dispatched with freight carrier.' },
-              { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', description: 'Shipment with local courier for final delivery.' },
-              { key: 'DELIVERED', label: 'Delivered', description: 'Goods delivered and accepted at destination.' },
-            ];
-
-            const isConfirmed = localOrder.status === 'Confirmed' || localOrder.paymentStatus === 'paid' || localOrder.paymentStatus === 'cod';
-            const timeline = TRACKING_STEPS.map((s, idx) => ({
-              step: idx + 1,
-              statusKey: s.key,
-              label: s.label,
-              description: s.description,
-              isCompleted: idx === 0 || (idx === 1 && isConfirmed),
-              isCurrent: isConfirmed ? idx === 1 : idx === 0,
-              timestamp: idx === 0 ? localOrder.createdAt : null,
-              notes: idx === 0 ? 'Order submitted by buyer.' : (isConfirmed ? 'Order verified.' : null),
-            }));
-
-            setTracking({
-              orderNumber: localOrder.orderNumber || localOrder.id,
-              orderId: localOrder.backendId || localOrder.id,
-              orderDate: localOrder.createdAt,
-              orderStatus: isConfirmed ? 'ORDER_CONFIRMED' : 'ORDER_PLACED',
-              paymentStatus: localOrder.paymentStatus?.toUpperCase() || 'PENDING',
-              paymentMethod: localOrder.paymentMethod,
-              shippingMethod: localOrder.shippingMethod,
-              shippingEta: localOrder.shippingEta || '5–7 business days',
-              deliveryAddress: localOrder.address,
-              isCancelled: localOrder.status === 'Cancelled',
-              isRefunded: localOrder.status === 'Refunded',
-              timeline,
-              items: localOrder.items || [],
-              totals: {
-                subtotal: localOrder.totals.subtotal,
-                shippingFee: localOrder.totals.shipping,
-                tax: localOrder.totals.tax,
-                total: localOrder.totals.total,
-              },
-            });
-          } else {
-            setError(`No order could be found matching reference "${activeNumber}". Please verify your order number and try again.`);
-          }
-          setLoading(false);
-        }
+        const query = activeEmail ? `?email=${encodeURIComponent(activeEmail)}` : '';
+        const res = await apiGet(`tracking/${encodeURIComponent(activeNumber)}${query}`);
+        if (!isMounted) return;
+        setTracking(res.data);
+        setNeedsEmail(false);
       } catch (err) {
-        if (isMounted) {
+        if (!isMounted) return;
+        setTracking(null);
+        if (err.data?.code === 'TRACKING_EMAIL_REQUIRED') {
+          setNeedsEmail(true);
+        } else {
+          setNeedsEmail(Boolean(activeEmail));
           setError(err.message || 'Unable to load tracking details at this time.');
-          setLoading(false);
         }
+      } finally {
+        if (isMounted) setLoading(false);
       }
     }
 
@@ -307,14 +257,21 @@ export default function OrderTracking() {
     return () => {
       isMounted = false;
     };
-  }, [activeNumber]);
+  }, [activeNumber, activeEmail]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     const clean = inputNumber.trim();
     if (clean) {
+      setActiveEmail('');
       setActiveNumber(clean);
     }
+  };
+
+  const handleEmail = (e) => {
+    e.preventDefault();
+    const clean = emailInput.trim();
+    if (clean) setActiveEmail(clean);
   };
 
   return (
@@ -350,6 +307,18 @@ export default function OrderTracking() {
           </form>
         </section>
 
+        {needsEmail && !loading ? (
+          <section aria-label="Confirm order email" className="mx-auto mb-8 max-w-2xl rounded-2xl border bg-white p-5 shadow-sm">
+            <h2 className="text-base font-bold text-navy-950">Confirm it's your order</h2>
+            <p className="mt-1 text-sm text-muted">Sign in to the account that placed order {activeNumber}, or enter the email address used for the order to see its delivery progress.</p>
+            <form onSubmit={handleEmail} className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input type="email" required value={emailInput} onChange={(e) => setEmailInput(e.target.value)} placeholder="Email used for the order" aria-label="Email used for the order" className="ts-input flex-1" />
+              <Button type="submit" variant="navy">Show tracking</Button>
+              <Button to={`/login?redirect=${encodeURIComponent(`/track/${activeNumber}`)}`} variant="outline">Sign in</Button>
+            </form>
+          </section>
+        ) : null}
+
         {loading ? (
           <div className="mx-auto max-w-3xl ts-card p-6">
             <TableSkeleton rows={5} />
@@ -368,6 +337,8 @@ export default function OrderTracking() {
               </Button>
             </div>
           </div>
+        ) : tracking?.access === 'public' ? (
+          <PublicTracking tracking={tracking} />
         ) : tracking ? (
           <div className="mx-auto max-w-4xl space-y-8">
             {/* Order Status Banner */}
@@ -674,6 +645,12 @@ export default function OrderTracking() {
                 )}
               </div>
             )}
+
+            {/* Shipments (each truck separately) */}
+            <section aria-labelledby="shipments-heading" className="ts-card p-6 sm:p-8">
+              <h2 id="shipments-heading" className="mb-4 text-lg font-bold text-navy-950">Shipments</h2>
+              <ShipmentCards shipments={tracking.shipments || []} />
+            </section>
 
             {/* Progress Timeline */}
             <section aria-labelledby="timeline-heading" className="ts-card p-6 sm:p-8">

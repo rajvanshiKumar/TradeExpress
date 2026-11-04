@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import OtpSendError from './OtpSendError';
 import {
   Check,
   CheckCircle2,
@@ -9,9 +10,6 @@ import {
   Mail,
   Phone,
   ShieldCheck,
-  Lock,
-  Eye,
-  EyeOff,
   RefreshCw,
   AlertCircle,
   BadgeCheck,
@@ -23,7 +21,6 @@ import {
 } from 'lucide-react';
 
 import CustomSelect from '../common/CustomSelect';
-import PasswordValidationIndicator from '../common/PasswordValidationIndicator';
 import useAuth from '../../hooks/useAuth';
 import useNotifications from '../../hooks/useNotifications';
 import {
@@ -32,7 +29,6 @@ import {
   COUNTRY_PHONE_RULES,
 } from '../../utils/constants';
 import { normalizeEmail, parseMobile, mobileExample } from '../../utils/validators';
-import { validatePassword } from '../../utils/passwordRules';
 import { GoogleSignInCancelled, isGoogleSignInConfigured, signInWithGoogle } from '../../services/googleAuth';
 
 const COUNTRY_DIAL_OPTIONS = COUNTRIES.map((c) => ({
@@ -72,8 +68,6 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const [values, setValues] = useState({
     name: '',
     email: '',
-    password: '',
-    confirmPassword: '',
     phone: '',
     countryCode: 'India',
     companyName: '',
@@ -85,8 +79,6 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
   const [errors, setErrors] = useState({});
   const [highlightedFields, setHighlightedFields] = useState({ name: false, companyName: false });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Step 1: Email OTP Verification State
   const [emailOtp, setEmailOtp] = useState('');
@@ -129,19 +121,24 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const phoneOtpInputsRef = useRef([]);
   // OTP Inputs Reference for Step 1 (6 boxes)
   const emailOtpInputsRef = useRef([]);
+  const submitLockRef = useRef(false);
+  const emailOtpLockRef = useRef(false);
+  const phoneOtpLockRef = useRef(false);
+  const emailVerifyLockRef = useRef(false);
+  const phoneVerifyLockRef = useRef(false);
 
   // Countdown timers for OTP cooldowns
   useEffect(() => {
     if (emailCooldown <= 0) return;
-    const timer = setInterval(() => setEmailCooldown((prev) => prev - 1), 1000);
+    const timer = setInterval(() => setEmailCooldown((prev) => Math.max(0, prev - 1)), 1000);
     return () => clearInterval(timer);
-  }, [emailCooldown]);
+  }, [emailCooldown > 0]);
 
   useEffect(() => {
     if (phoneCooldown <= 0) return;
-    const timer = setInterval(() => setPhoneCooldown((prev) => prev - 1), 1000);
+    const timer = setInterval(() => setPhoneCooldown((prev) => Math.max(0, prev - 1)), 1000);
     return () => clearInterval(timer);
-  }, [phoneCooldown]);
+  }, [phoneCooldown > 0]);
 
   // Handle Input Changes
   const handleChange = (field) => (e) => {
@@ -175,6 +172,12 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       if (digits.length > 10) {
         setErrors((prev) => ({ ...prev, phone: 'Please enter a valid mobile number (e.g. 98765 43210).' }));
       }
+    } else if (field === 'countryCode') {
+      setPhoneVerified(false);
+      setPhoneOtpSent(false);
+      setPhoneOtp('');
+      setPhoneOtpError('');
+      setPhoneToken('');
     } else if (field === 'aadhaarNumber') {
       val = String(val || '').replace(/\D/g, '').slice(0, 12);
       setPanAadhaarLinked(false);
@@ -186,6 +189,15 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     }
 
     setValues((prev) => ({ ...prev, [field]: val }));
+
+    const text = String(val ?? '');
+    let fieldError = '';
+    if (field === 'name' && text.trim() && text.trim().length < 2) fieldError = 'Full name must be at least 2 characters.';
+    // The email is only checked when Verify is clicked, so typing never shows a red message
+    if (field === 'phone' && text && !parseMobile(text, values.countryCode || 'India').ok) fieldError = 'Please enter a valid Indian mobile number (e.g. 98765 43210).';
+    if (['name', 'email', 'phone'].includes(field)) {
+      setErrors((prev) => ({ ...prev, [field]: fieldError }));
+    }
 
     if (errors[field]) {
       setErrors((prev) => {
@@ -215,12 +227,19 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   // STEP 1: EMAIL OTP & GOOGLE OAUTH
   // ============================================================
   const handleSendEmailOtp = async () => {
+    if (emailOtpLockRef.current) return;
     const cleanEmail = normalizeEmail(values.email);
     if (!cleanEmail || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(cleanEmail)) {
       setErrors((prev) => ({ ...prev, email: 'Enter a valid business email address.' }));
       return;
     }
 
+    if (!values.name.trim() || values.name.trim().length < 2) {
+      setErrors((prev) => ({ ...prev, name: 'Full name is required (minimum 2 characters).' }));
+      return;
+    }
+
+    emailOtpLockRef.current = true;
     setEmailOtpSending(true);
     setEmailOtpError('');
 
@@ -251,16 +270,19 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       setEmailOtpError(SERVER_UNREACHABLE);
     } finally {
       setEmailOtpSending(false);
+      emailOtpLockRef.current = false;
     }
   };
 
   const handleVerifyEmailOtp = async () => {
+    if (emailVerifyLockRef.current) return;
     const cleanOtp = String(emailOtp || '').trim();
     if (cleanOtp.length < 6) {
       setEmailOtpError('Enter the complete 6-digit verification code.');
       return;
     }
 
+    emailVerifyLockRef.current = true;
     setEmailVerifying(true);
     setEmailOtpError('');
 
@@ -274,9 +296,9 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
+      if (res.ok && data.success && data.verificationToken) {
         setEmailVerified(true);
-        setEmailToken(data.verificationToken || `evt_${Date.now()}`);
+        setEmailToken(data.verificationToken);
         setEmailOtpSent(false);
         // Automatically redirect to Step 2 upon successful email verification
         setTimeout(() => {
@@ -290,6 +312,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       setEmailOtpError(SERVER_UNREACHABLE);
     } finally {
       setEmailVerifying(false);
+      emailVerifyLockRef.current = false;
     }
   };
 
@@ -314,6 +337,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   // STEP 2: PHONE OTP VERIFICATION
   // ============================================================
   const handleSendPhoneOtp = async () => {
+    if (phoneOtpLockRef.current) return;
     const nameMissing = !values.name || !values.name.trim();
     if (nameMissing) {
       setHighlightedFields((prev) => ({ ...prev, name: true }));
@@ -335,6 +359,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       return;
     }
 
+    phoneOtpLockRef.current = true;
     setPhoneOtpSending(true);
     setPhoneOtpError('');
 
@@ -367,16 +392,19 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       setPhoneOtpError(SERVER_UNREACHABLE);
     } finally {
       setPhoneOtpSending(false);
+      phoneOtpLockRef.current = false;
     }
   };
 
   const handleVerifyPhoneOtp = async () => {
+    if (phoneVerifyLockRef.current) return;
     const cleanOtp = String(phoneOtp || '').trim();
     if (cleanOtp.length < 6) {
       setPhoneOtpError('Please enter all 6 digits of the verification code.');
       return;
     }
 
+    phoneVerifyLockRef.current = true;
     setPhoneVerifying(true);
     setPhoneOtpError('');
 
@@ -394,9 +422,9 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
+      if (res.ok && data.success && (data.data?.verificationToken || data.verificationToken)) {
         setPhoneVerified(true);
-        setPhoneToken(data.data?.verificationToken || data.verificationToken || `pvt_${Date.now()}`);
+        setPhoneToken(data.data?.verificationToken || data.verificationToken);
         setPhoneOtpSent(false);
         // Automatically redirect to Step 3 upon successful mobile verification
         setTimeout(() => {
@@ -410,6 +438,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       setPhoneOtpError(SERVER_UNREACHABLE);
     } finally {
       setPhoneVerifying(false);
+      phoneVerifyLockRef.current = false;
     }
   };
 
@@ -595,11 +624,6 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       stepErrors.email = 'Please verify your email address to proceed.';
     }
 
-    // Retained for password policy validation when set
-    if (values.password && !validatePassword(values.password).isValid) {
-      stepErrors.password = 'Password does not meet complexity requirements.';
-    }
-
     setErrors(stepErrors);
     return Object.keys(stepErrors).length === 0;
   };
@@ -651,7 +675,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   // ============================================================
   const handleSubmit = async (e) => {
     e?.preventDefault();
-    if (busy) return;
+    if (busy || submitLockRef.current) return;
 
     if (!validateStep1()) {
       setCurrentStep(1);
@@ -666,6 +690,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       return;
     }
 
+    submitLockRef.current = true;
     setBusy(true);
     setFormError('');
 
@@ -678,8 +703,6 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       company: values.companyName?.trim() || `${values.name.trim()}'s Business`,
       companyName: values.companyName?.trim() || `${values.name.trim()}'s Business`,
       email: normalizeEmail(values.email),
-      password: values.password,
-      confirmPassword: values.confirmPassword,
       phone: parsedPhone.international || values.phone.trim(),
       country: values.countryCode || 'India',
       pan: rawPan,
@@ -690,8 +713,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       panAadhaarStatus: panAadhaarLinked ? 'LINKED' : 'NOT_STARTED',
       panAadhaarLinked,
       panAadhaarToken,
-      verificationToken: phoneToken || `pvt_${Date.now()}`,
-      emailVerificationToken: emailToken || `evt_${Date.now()}`,
+      verificationToken: phoneToken,
+      emailVerificationToken: emailToken,
       agree: true,
       agreeTerms: true,
     };
@@ -721,24 +744,23 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           name: payload.name,
           email: payload.email,
         });
-        setBusy(false);
         window.scrollTo({ top: 80, behavior: 'smooth' });
         return;
       }
 
       if (res.status >= 400 && res.status < 500 && data.message) {
         setFormError(data.message || 'Buyer registration failed. Please review your details.');
-        setBusy(false);
         return;
       }
 
       // 5xx: the account was not created, so never show a success screen
       setFormError(data.message || 'We could not complete your registration. Please try again.');
-      setBusy(false);
     } catch {
       // No response: retrying is safe because a completed registration is reported as an existing account
       setFormError(SERVER_UNREACHABLE);
+    } finally {
       setBusy(false);
+      submitLockRef.current = false;
     }
   };
 
@@ -1048,6 +1070,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
               </div>
             </div>
             {errors.email && <p className="mt-1 text-xs text-red-600 font-medium">{errors.email}</p>}
+            {!emailOtpSent ? <OtpSendError message={emailOtpError} role="buyer" /> : null}
 
             {/* Inline Email OTP Verification Box (Appears when Verify is clicked) */}
             {emailOtpSent && !emailVerified && (
@@ -1173,12 +1196,6 @@ export default function BuyerRegisterForm({ onRoleChange }) {
             </div>
           )}
 
-          {/* Retained for architectural consistency & security test requirements */}
-          <div className="hidden" aria-hidden="true" style={{ display: 'none' }}>
-            <PasswordValidationIndicator password={values.password} />
-            <input type="password" autoComplete="new-password" value={values.confirmPassword} onChange={() => {}} />
-            {validatePassword && Boolean(showPassword || showConfirmPassword)}
-          </div>
         </div>
       )}
 
@@ -1253,6 +1270,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                 </div>
               </div>
               {errors.phone && <p className="mt-1 text-xs text-red-600 font-medium">{errors.phone}</p>}
+              {!phoneOtpSent ? <OtpSendError message={phoneOtpError} role="buyer" /> : null}
             </div>
 
             {/* OTP VERIFICATION SECTION: DISPLAYED DIRECTLY BELOW PHONE NUMBER, INSIDE SAME COMBINED BOX */}

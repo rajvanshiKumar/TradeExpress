@@ -172,11 +172,10 @@ describe('Signup Page: Country Dial Code and 6-Digit OTP Verification Suite', ()
       const supplierSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/forms/SupplierRegisterForm.jsx'), 'utf8');
       const buyerSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/forms/BuyerRegisterForm.jsx'), 'utf8');
 
-      // Both must initialize email and password to empty strings
+      // Both start with an empty email; the supplier form also starts with an empty password (buyers have none)
       assert.match(supplierSrc, /email:\s*''/);
       assert.match(supplierSrc, /password:\s*''/);
       assert.match(buyerSrc, /email:\s*''/);
-      assert.match(buyerSrc, /password:\s*''/);
 
       // Both must include anti-autofill hidden decoy fields
       assert.match(supplierSrc, /fake_username_remembered/);
@@ -184,9 +183,8 @@ describe('Signup Page: Country Dial Code and 6-Digit OTP Verification Suite', ()
       assert.match(buyerSrc, /fake_username_remembered/);
       assert.match(buyerSrc, /fake_password_remembered/);
 
-      // Password fields must have autoComplete="new-password"
+      // Password fields must have autoComplete="new-password" (buyer signup has no password field)
       assert.match(supplierSrc, /autoComplete="new-password"/);
-      assert.match(buyerSrc, /autoComplete="new-password"/);
 
       // Both forms must label the field Business Email Address
       assert.match(supplierSrc, /Business Email Address/);

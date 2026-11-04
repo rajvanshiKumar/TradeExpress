@@ -1,14 +1,16 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { verifyJwt } from '../utils/jwt.js';
 import prisma from '../config/db.js';
+import { isSessionActive } from './sessionService.js';
 import * as messageService from './messageService.js';
+import { corsOriginCallback } from '../config/cors.js';
 
 let io = null;
 
 export function initSocket(httpServer) {
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: (origin, callback) => callback(null, true),
+      origin: corsOriginCallback,
       credentials: true,
       methods: ['GET', 'POST', 'PATCH'],
     },
@@ -50,8 +52,11 @@ export function initSocket(httpServer) {
       if (!user || user.isActive === false || user.status === 'SUSPENDED') {
         return next(new Error('User account is inactive or suspended.'));
       }
-      // Tokens issued before the last password change are no longer valid
+      // Tokens issued before the last password change, or from a signed-out device, are no longer valid
       if (user.sessionsValidAfter && (!decoded.iat || decoded.iat * 1000 < user.sessionsValidAfter.getTime())) {
+        return next(new Error('Session ended. Please sign in again.'));
+      }
+      if (!(await isSessionActive(decoded))) {
         return next(new Error('Session ended. Please sign in again.'));
       }
 
@@ -67,6 +72,8 @@ export function initSocket(httpServer) {
     const userId = socket.user.id;
     // Join private user room for notifications and unread badges
     socket.join(`user:${userId}`);
+    // Platform staff also receive inventory oversight events
+    if (socket.user.role === 'SUPER_ADMIN' || socket.user.role === 'ADMIN') socket.join('staff:inventory');
 
     // Join conversation room with participant verification
     socket.on('join_conversation', async ({ conversationId }, callback) => {
@@ -192,6 +199,17 @@ export function broadcastMessagesRead(conversationId, userId, role) {
 export function broadcastInventoryUpdate(supplierId, inventoryPayload) {
   if (!io || !supplierId) return;
   io.to(`user:${supplierId}`).emit('inventory:updated', {
+    ...inventoryPayload,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/**
+ * Sends inventory changes from every supplier to signed-in Super Admins / Admins only.
+ */
+export function broadcastAdminInventory(inventoryPayload) {
+  if (!io) return;
+  io.to('staff:inventory').emit('inventory:updated', {
     ...inventoryPayload,
     timestamp: new Date().toISOString(),
   });

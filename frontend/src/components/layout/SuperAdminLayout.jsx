@@ -25,6 +25,7 @@ import {
   Database,
   Lock,
   Truck,
+  Warehouse,
 } from 'lucide-react';
 import useAuth from '../../hooks/useAuth';
 
@@ -36,7 +37,8 @@ const NAV_ITEMS = [
   { to: '/super-admin/categories', label: 'Category Taxonomy', icon: Layers },
   { to: '/super-admin/rfqs', label: 'RFQs & Quotes', icon: FileText },
   { to: '/super-admin/orders', label: 'Orders & Shipping', icon: ShoppingBag },
-  { to: '/super-admin/logistics', label: 'Logistics & Transport', icon: Truck },
+  { to: '/super-admin/inventory', label: 'Inventory Oversight', icon: Warehouse },
+  { to: '/super-admin/transport', label: 'Transport & Delivery Management', icon: Truck },
   { to: '/super-admin/payments', label: 'Payments & Escrow', icon: CreditCard },
   { to: '/super-admin/disputes', label: 'Dispute Console', icon: AlertTriangle },
   { to: '/super-admin/tickets', label: 'Support Desk', icon: LifeBuoy },

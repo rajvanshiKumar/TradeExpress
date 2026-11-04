@@ -3,6 +3,7 @@ import app from './app.js';
 import { ENV } from './config/env.js';
 import prisma from './config/db.js';
 import { initSocket } from './services/socketService.js';
+import { RESERVATION_MINUTES, startReservationSweeper } from './services/inventoryLifecycleService.js';
 import { bootstrapSuperAdmin } from '../scripts/bootstrapSuperAdmin.js';
 
 async function startServer() {
@@ -21,6 +22,10 @@ async function startServer() {
 
     const httpServer = http.createServer(app);
     initSocket(httpServer);
+
+    // Releases stock held by online orders that were not paid within the reservation window
+    startReservationSweeper();
+    console.log(`✓ Stock reservations expire after ${RESERVATION_MINUTES} minutes without payment.`);
 
     httpServer.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {

@@ -22,7 +22,7 @@ import messageRoutes from './messageRoutes.js';
 import verificationRoutes from './verificationRoutes.js';
 import supplierRoutes from './supplierRoutes.js';
 import supplierInventoryRoutes from './supplierInventoryRoutes.js';
-import logisticsRoutes from './logisticsRoutes.js';
+import transportRoutes from './transportRoutes.js';
 import paymentMethodRoutes from './paymentMethodRoutes.js';
 
 const router = Router();
@@ -37,7 +37,7 @@ router.use('/payment-methods', paymentMethodRoutes);
 router.use('/tracking', trackingRoutes);
 router.use('/cart', cartRoutes);
 router.use('/upload', uploadRoutes);
-router.use('/logistics', logisticsRoutes);
+router.use('/transport', transportRoutes);
 router.use('/supplier', supplierRoutes);
 router.use('/supplier/products', supplierProductRoutes);
 router.use('/supplier/orders', supplierOrderRoutes);

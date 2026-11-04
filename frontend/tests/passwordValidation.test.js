@@ -169,13 +169,11 @@ describe('TradeExpress Frontend Password Validation & Security Suite', () => {
   describe('4. Component Integration & Real-Time Indicators Integrity', () => {
     const readSrc = (relPath) => fs.readFileSync(path.resolve(__dirname, relPath), 'utf8');
 
-    it('ensures BuyerRegisterForm integrates PasswordValidationIndicator and validatePassword', () => {
+    it('buyer signup asks for no password (buyers sign in with a code or Google, and can set one later)', () => {
       const src = readSrc('../src/components/forms/BuyerRegisterForm.jsx');
-      assert.ok(src.includes('PasswordValidationIndicator'), 'Must import or render PasswordValidationIndicator');
-      assert.ok(src.includes('validatePassword'), 'Must import and use validatePassword');
-      assert.ok(src.includes('confirmPassword'), 'Must track confirmPassword');
-      assert.ok(src.includes('showPassword'), 'Must support showPassword toggle');
-      assert.ok(src.includes('showConfirmPassword'), 'Must support showConfirmPassword toggle');
+      assert.ok(!src.includes('PasswordValidationIndicator'), 'Buyer signup must not render a password strength indicator');
+      assert.ok(!/type={show(Confirm)?Password/.test(src), 'Buyer signup must not render password inputs');
+      assert.ok(!/password:s*values.password/.test(src), 'Buyer signup must not send a password');
     });
 
     it('ensures SupplierRegisterForm integrates PasswordValidationIndicator and validatePassword', () => {

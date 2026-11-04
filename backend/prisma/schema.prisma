@@ -88,10 +88,12 @@ model User {
   googleId            String?              // Google account "sub" claim, set after a verified Google sign-in
   avatarUrl           String?              @db.Text
   sessionsValidAfter  DateTime?            // login tokens issued before this time are rejected (set on password change)
+  preferences         Json?                // notification / email / language choices (see preferencesService)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
   addresses           Address[]
+  loginSessions       UserSession[]
   paymentMethods      PaymentMethod[]
   orders              Order[]              @relation("BuyerOrders")
   supplierOrders      Order[]              @relation("SupplierOrders")
@@ -122,6 +124,7 @@ model User {
   freightPaymentsMade     FreightPayment[]     @relation("FreightPaymentsPayer")
 
   @@index([googleId])
+  @@index([phone])
   @@map("users")
 }
 
@@ -210,7 +213,8 @@ model Product {
   unit             String         @default("piece")
   moq              Int            @default(1)
   stock            Int            @default(100)
-  reservedStock    Int            @default(0)
+  reservedStock    Int            @default(0) // held for orders awaiting payment
+  committedStock   Int            @default(0) // paid / confirmed orders not yet shipped
   lowStockThreshold Int           @default(10)
   warehouseLocation String?
   leadTimeDays     Int            @default(7)
@@ -241,6 +245,7 @@ model Product {
   rfqItems         RfqItem[]
   conversations    Conversation[]
   inventoryLogs    InventoryLog[]
+  shipmentItems    ShipmentItem[]
 
   @@index([categorySlug])
   @@index([status])
@@ -271,6 +276,8 @@ model InventoryLog {
   changeAmount     Int
   previousReserved Int      @default(0)
   newReserved      Int      @default(0)
+  previousCommitted Int     @default(0)
+  newCommitted     Int      @default(0)
   reason           String
   notes            String?  @db.Text
   orderId          String?
@@ -354,6 +361,9 @@ model Order {
   rejectionReason       String?              @db.Text
   deliveryAcceptedAt    DateTime?
   notes                 String?              @db.Text
+  // Stock held by this order: RESERVED, COMMITTED, FULFILLED, RELEASED, RETURNED (null = placed before tracking)
+  inventoryState        String?
+  reservationExpiresAt  DateTime?
 
   // Commission snapshot per order (immutable against future setting changes)
   commissionEligibleSubtotal Decimal?   @db.Decimal(12, 2)
@@ -380,6 +390,7 @@ model Order {
   @@index([supplierId])
   @@index([orderStatus])
   @@index([paymentStatus])
+  @@index([inventoryState, reservationExpiresAt])
   @@map("orders")
 }
 
@@ -399,6 +410,11 @@ model OrderItem {
   unitPrice    Decimal  @db.Decimal(12, 2)
   lineTotal    Decimal  @db.Decimal(12, 2)
   variant      Json?
+  allocatedQuantity Int @default(0) // on non-cancelled shipments
+  shippedQuantity   Int @default(0) // dispatched (left the warehouse)
+  deliveredQuantity Int @default(0) // confirmed received by the buyer
+
+  shipmentItems ShipmentItem[]
 
   @@map("order_items")
 }
@@ -911,7 +927,18 @@ model TransportVehicle {
   id                  String             @id @default(uuid())
   companyId           String
   company             TransportCompany   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  vehicleNumber       String             // e.g. "MH-12-AB-1234"
+  vehicleNumber       String             // e.g. "MH-12-AB-1234" (stored normalised; uniqueness enforced by transportService)
+  vehicleCode         String?            // TradeExpress vehicle ID, e.g. VH-251103-123456
+  bodyType            String?            // OPEN, CLOSED, CONTAINER, FLATBED, REEFER, TANKER
+  cargoLengthM        Decimal?           @db.Decimal(6, 2)
+  cargoWidthM         Decimal?           @db.Decimal(6, 2)
+  cargoHeightM        Decimal?           @db.Decimal(6, 2)
+  cargoVolumeCbm      Decimal?           @db.Decimal(8, 2)
+  ownershipType       String             @default("OWNED") // OWNED, LEASED, HIRED
+  ownerName           String?
+  maintenanceNotes    String?            @db.Text
+  operationalNotes    String?            @db.Text
+  lastAssignedAt      DateTime?
   vehicleType         String             // Open Truck, Container 20ft, Container 32ft, Trailer, Mini Truck, Flatbed, Reefer
   capacityTons        Decimal            @db.Decimal(8, 2)
   make                String?            // Tata Motors, Ashok Leyland, BharatBenz, Eicher
@@ -944,6 +971,7 @@ model TransportVehicle {
 
   @@index([companyId])
   @@index([vehicleNumber])
+  @@index([vehicleCode])
   @@index([status])
   @@map("transport_vehicles")
 }
@@ -957,7 +985,10 @@ model TransportDriver {
   name                 String
   phone                String
   alternatePhone       String?
-  licenseNumber        String             // Commercial Driving License
+  licenseNumber        String             // Commercial Driving License (stored normalised; uniqueness enforced by transportService)
+  driverCode           String?            // TradeExpress driver ID
+  verificationStatus   String             @default("PENDING") // PENDING, VERIFIED, REJECTED
+  assignedVehicleId    String?
   licenseType          String             @default("COMMERCIAL_HEAVY") // LMV, COMMERCIAL_HEAVY, HAZARDOUS, ODC
   licenseExpiryDate    DateTime?
   licenseDocumentUrl   String?            @db.Text
@@ -980,6 +1011,7 @@ model TransportDriver {
   @@index([companyId])
   @@index([phone])
   @@index([licenseNumber])
+  @@index([driverCode])
   @@map("transport_drivers")
 }
 
@@ -997,8 +1029,14 @@ model TransportRequest {
   expectedDeliveryDate DateTime?
   targetFreight       Decimal?           @db.Decimal(12, 2)
   loadingRequirements String?            @db.Text
-  status              String             @default("OPEN") // OPEN, QUOTED, ASSIGNED, COMPLETED, CANCELLED
+  status              String             @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
   assignedQuoteId     String?            @unique
+  rejectionReason     String?            @db.Text
+  reviewedById        String?
+  reviewedAt          DateTime?
+  approvedFreight     Decimal?           @db.Decimal(12, 2)
+  freightPayer        String?            // SUPPLIER, BUYER, PLATFORM
+  notes               String?            @db.Text
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
@@ -1079,7 +1117,26 @@ model Shipment {
   totalPackages       Int?
   freightCharges      Decimal            @default(0) @db.Decimal(12, 2)
   freightPayer        String             @default("SUPPLIER") // SUPPLIER, BUYER, PLATFORM
-  status              String             @default("TRANSPORT_PENDING")
+  status              String             @default("AWAITING_TRANSPORT")
+  bookingNumber       String?            // transport booking ID once a truck is assigned
+  providerCode        String             @default("MANUAL") // transport provider adapter (MANUAL now; external APIs later)
+  externalReference   String?            // provider-side booking / tracking id
+  handlingRequirements String?           @db.Text
+  deliveryRequiredBy  DateTime?
+  cargoDimensions     Json?              // { lengthM, widthM, heightM, volumeCbm }
+  freightPaymentStatus String            @default("NOT_APPLICABLE") // NOT_APPLICABLE, PENDING, PAID
+  createdById         String?
+  loadingStartedAt    DateTime?
+  loadedAt            DateTime?
+  arrivedAt           DateTime?          // delivery attempt recorded at the buyer's address
+  deliveryFailedReason String?           @db.Text
+  lastReportedLocation String?
+  lastReportedAt      DateTime?
+  deliveryOtpHash     String?
+  deliveryOtpExpiresAt DateTime?
+  deliveryOtpAttempts Int                @default(0)
+  deliveryOtpSentCount Int               @default(0)
+  deliveryOtpSentAt   DateTime?
   pickupScheduledAt   DateTime?
   pickedUpAt          DateTime?
   dispatchedAt        DateTime?
@@ -1100,6 +1157,8 @@ model Shipment {
   locations           ShipmentLocation[]
   deliveryProof       DeliveryProof?
   freightPayment      FreightPayment?
+  items               ShipmentItem[]
+  issues              ShipmentIssue[]
 
   @@index([supplierId])
   @@index([buyerId])
@@ -1109,6 +1168,7 @@ model Shipment {
   @@index([orderId])
   @@index([status])
   @@index([trackingNumber])
+  @@index([bookingNumber])
   @@map("shipments")
 }
 
@@ -1149,11 +1209,60 @@ model ShipmentEvent {
   actorId     String?
   actorRole   String?
   actorName   String?
-  timestamp   DateTime           @default(now())
+  timestamp   DateTime           @default(now()) // when it happened (event time)
+  eventType   String             @default("STATUS_CHANGE") // STATUS_CHANGE, LOCATION_UPDATE, NOTE, DOCUMENT, ISSUE
+  source      String             @default("MANUAL") // MANUAL now; provider codes later
+  recordedAt  DateTime           @default(now()) // when it was entered
+  documents   Json?              // [{ title, url }]
 
   @@index([shipmentId])
   @@index([timestamp])
   @@map("shipment_events")
+}
+
+model ShipmentItem {
+  id                String     @id @default(uuid())
+  shipmentId        String
+  shipment          Shipment   @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderItemId       String
+  orderItem         OrderItem  @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName       String
+  productSku        String
+  unit              String     @default("piece")
+  quantity          Int        // planned for this truck
+  loadedQuantity    Int?       // actually loaded
+  deliveredQuantity Int        @default(0) // confirmed received in good condition
+  damagedQuantity   Int        @default(0)
+  missingQuantity   Int        @default(0)
+  createdAt         DateTime   @default(now())
+
+  @@index([shipmentId])
+  @@index([orderItemId])
+  @@map("shipment_items")
+}
+
+model ShipmentIssue {
+  id             String    @id @default(uuid())
+  shipmentId     String
+  shipment       Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  issueType      String    // DAMAGED, MISSING, SHORTAGE, DELAY, BREAKDOWN, DELIVERY_FAILED, OTHER
+  description    String    @db.Text
+  quantity       Int?
+  photoUrls      Json?
+  status         String    @default("OPEN") // OPEN, IN_REVIEW, RESOLVED, REJECTED
+  resolution     String?   @db.Text
+  reportedById   String?
+  reportedByRole String?
+  resolvedById   String?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([shipmentId])
+  @@index([status])
+  @@map("shipment_issues")
 }
 
 model ShipmentLocation {
@@ -1222,4 +1331,22 @@ model FreightPayment {
   @@index([transporterId])
   @@index([escrowStatus])
   @@map("freight_payments")
+}
+
+/// One signed-in device. Login tokens carry its id ("sid"); revoking the row signs that device out.
+model UserSession {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  method      String    @default("PASSWORD") // PASSWORD, OTP, GOOGLE, SIGNUP, ADMIN
+  ipAddress   String?
+  userAgent   String?   @db.Text
+  device      String?   // e.g. "Chrome on Windows"
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+
+  @@index([userId, revokedAt])
+  @@map("user_sessions")
 }

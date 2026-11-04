@@ -139,3 +139,14 @@ export async function getSimilarProducts(req, res, next) {
   }
 }
 
+
+export async function getSuggestions(req, res, next) {
+  try {
+    const data = await productService.suggestProducts(req.query.q, { limit: req.query.limit });
+    // Short browser cache: the same prefix typed again within a minute is served without a request
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}

@@ -193,15 +193,36 @@ async function resolveSupplier({ productId, supplierId, companyId }) {
 }
 
 /**
+ * Turns the client's context references into real records, so the conversation only links rows that exist.
+ * Products match by id or slug (catalogue pages may carry a display id). Orders and RFQs link only when they
+ * belong to this buyer; anything that does not resolve is left off instead of failing the chat.
+ */
+async function resolveConversationLinks({ buyerId, productId, productSlug, rfqId, orderId }) {
+  const productKeys = [productId, productSlug].filter((key) => typeof key === 'string' && key.trim());
+  const [product, rfq, order] = await Promise.all([
+    productKeys.length
+      ? prisma.product.findFirst({
+          where: { OR: productKeys.flatMap((key) => [{ id: key }, { slug: key }]) },
+          select: { id: true },
+        })
+      : null,
+    rfqId ? prisma.rfq.findFirst({ where: { id: String(rfqId), buyerId }, select: { id: true } }) : null,
+    orderId ? prisma.order.findFirst({ where: { id: String(orderId), userId: buyerId }, select: { id: true } }) : null,
+  ]);
+  return { productId: product?.id || null, rfqId: rfq?.id || null, orderId: order?.id || null };
+}
+
+/**
  * Creates or retrieves an existing conversation between a buyer and supplier.
  */
 export async function createOrGetConversation({
   buyerId,
   supplierId,
   companyId,
-  productId,
-  rfqId,
-  orderId,
+  productId: requestedProductId,
+  productSlug,
+  rfqId: requestedRfqId,
+  orderId: requestedOrderId,
   subject,
   initialMessage,
 }) {
@@ -216,6 +237,14 @@ export async function createOrGetConversation({
     err.statusCode = 404;
     throw err;
   }
+
+  const { productId, rfqId, orderId } = await resolveConversationLinks({
+    buyerId,
+    productId: requestedProductId,
+    productSlug,
+    rfqId: requestedRfqId,
+    orderId: requestedOrderId,
+  });
 
   const supplier = await resolveSupplier({ productId, supplierId, companyId });
   if (!supplier) {

@@ -226,8 +226,10 @@ export async function sendSupplierVerificationOtpEmail({ email, name = 'Supplier
 
 const ACCOUNT_CODE_PURPOSES = {
   PASSWORD_CHANGE: 'confirm it is you before changing your password',
+  PHONE_CHANGE: 'confirm it is you before changing your phone number',
   EMAIL_CHANGE_CURRENT: 'confirm it is you before changing your email address',
   EMAIL_CHANGE_NEW: 'confirm this new email address for your TradeExpress account',
+  ACCOUNT_DELETE: 'confirm that you want to permanently delete your TradeExpress account',
 };
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -276,6 +278,31 @@ export async function sendAccountSecurityEmail({ email, name, subject, message }
     return { success: true };
   } catch (error) {
     console.error('[TradeExpress Email Error] Account security notice could not be sent:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/** Delivery confirmation code for the buyer. Returns { success } and never throws. */
+export async function sendDeliveryCodeEmail({ email, name, otp, shipmentNumber, orderNumber, expiresInMinutes }) {
+  try {
+    const transporter = await getTransporter();
+    await transporter.sendMail({
+      from: ENV.SMTP_USER ? `TradeExpress Deliveries <${ENV.SMTP_USER}>` : ENV.SMTP_FROM,
+      to: email,
+      subject: `Your delivery has arrived: code ${otp} for shipment ${shipmentNumber}`,
+      text: `Hello ${name || ''},\n\nShipment ${shipmentNumber} for order ${orderNumber} has arrived at your delivery address.\n\nCheck the goods, then confirm the received quantity and condition in TradeExpress (My Orders > Track Delivery) using this code: ${otp}\n\nThe code expires in ${expiresInMinutes} minutes and can be used once. Only use it after you have checked the goods.\n\nTradeExpress`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px">
+        <h2 style="color:#123f25;margin-top:0">Your delivery has arrived</h2>
+        <p style="color:#334155">Hello ${escapeHtml(name)},</p>
+        <p style="color:#334155">Shipment <strong>${escapeHtml(shipmentNumber)}</strong> for order <strong>${escapeHtml(orderNumber)}</strong> has arrived at your delivery address.</p>
+        <p style="color:#334155">Check the goods, then confirm the received quantity and condition in TradeExpress (My Orders &rsaquo; Track Delivery) with this code:</p>
+        <p style="font-size:32px;font-weight:bold;letter-spacing:6px;color:#123f25;text-align:center;margin:20px 0">${escapeHtml(otp)}</p>
+        <p style="color:#64748b;font-size:13px">The code expires in ${escapeHtml(expiresInMinutes)} minutes and can be used once. Only use it after you have checked the goods.</p>
+      </div>`,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('[TradeExpress Email Error] Delivery code could not be sent:', error.message);
     return { success: false, error: error.message };
   }
 }

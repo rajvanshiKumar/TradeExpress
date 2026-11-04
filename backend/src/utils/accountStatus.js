@@ -92,8 +92,13 @@ export function assertCanSignIn(user, { role, via = 'email' } = {}) {
   }
 
   if (user.isActive === false || user.status === 'SUSPENDED') {
+    const accountState = user.status === 'DEACTIVATED'
+      ? 'deactivated'
+      : user.status === 'SUSPENDED'
+      ? 'suspended'
+      : 'inactive';
     throw authError(
-      'Your account is suspended. Reason: ' + (user.statusReason || 'Please contact platform administration.'),
+      `Your account is ${accountState}. Reason: ` + (user.statusReason || 'Please contact platform administration.'),
       403,
       AUTH_ERROR_CODES.ACCOUNT_SUSPENDED
     );

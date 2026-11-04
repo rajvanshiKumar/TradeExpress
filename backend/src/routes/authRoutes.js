@@ -33,6 +33,14 @@ const otpVerifyLimiter = rateLimit({
   },
 });
 
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isDev ? 100 : 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many sign-in attempts. Please try again in 15 minutes.' },
+});
+
 /** Standard Password Validation Middleware Rule */
 const passwordValidationRule = body('password').custom((value) => {
   const result = validatePassword(value);
@@ -64,7 +72,7 @@ router.post(
   otpVerifyLimiter,
   validate([
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
-    body('otp').trim().notEmpty().withMessage('OTP is required.').isLength({ min: 4, max: 9 }).withMessage('Valid OTP code is required.'),
+    body('otp').trim().isLength({ min: 6, max: 6 }).isNumeric().withMessage('Enter the 6-digit verification code.'),
   ]),
   authController.verifyMobileOtp
 );
@@ -111,7 +119,7 @@ router.post(
   otpVerifyLimiter,
   validate([
     body('email').isEmail().withMessage('Valid email is required.'),
-    body('otp').trim().notEmpty().withMessage('OTP is required.').isLength({ min: 4, max: 9 }).withMessage('Valid OTP code is required.'),
+    body('otp').trim().isLength({ min: 6, max: 6 }).isNumeric().withMessage('Enter the 6-digit verification code.'),
   ]),
   authController.verifyEmailVerificationOtp
 );
@@ -175,14 +183,17 @@ router.post(
   authRateLimiter,
   validate([
     body('email').isEmail().withMessage('Valid email is required.'),
-    body('name').trim().notEmpty().withMessage('Full name is required.'),
-    body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
-    body('password').optional().custom((value) => {
-      if (!value) return true;
+    body('name').isString().trim().isLength({ min: 2, max: 120 }).withMessage('Full name must be between 2 and 120 characters.'),
+    body('phone').isString().trim().notEmpty().withMessage('Mobile number is required.'),
+    // Password is optional for buyers (they sign in with a code or Google); when sent it must be valid
+    body('password').optional({ values: 'falsy' }).isString().custom((value) => {
       const result = validatePassword(value);
       if (!result.isValid) throw new Error(result.message);
       return true;
     }),
+    body('confirmPassword').optional({ values: 'falsy' }).isString().custom((value, { req }) => value === req.body.password).withMessage('Passwords do not match.'),
+    body('verificationToken').isString().notEmpty().withMessage('Mobile verification is required.'),
+    body('emailVerificationToken').isString().notEmpty().withMessage('Email verification is required.'),
   ]),
   authController.registerBuyer
 );
@@ -205,10 +216,14 @@ router.post(
 
 router.post(
   '/login',
+  loginRateLimiter,
   validate([
-    body('email').custom((val) => val === 'admin' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)).withMessage('Valid email is required.'),
+    body('email').isString().custom((val) =>
+      val === 'admin' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val) || /^\+?[0-9][0-9\s()-]{6,17}$/.test(val)
+    ).withMessage('Enter a valid email address or mobile number.'),
+    body('country').optional().isString().trim().notEmpty(),
     body('otp').optional({ nullable: true }).trim(),
-    body('password').optional({ nullable: true }),
+    body('password').optional({ nullable: true }).isString().isLength({ max: 128 }),
   ]),
   authController.login
 );
@@ -277,5 +292,7 @@ router.post('/addresses', ...buyerOnly, validate(addressBodyRules), authControll
 router.put('/addresses/:id', ...buyerOnly, validate([addressIdRule, ...addressBodyRules]), authController.updateAddress);
 router.patch('/addresses/:id/default', ...buyerOnly, validate([addressIdRule]), authController.setDefaultAddress);
 router.delete('/addresses/:id', ...buyerOnly, validate([addressIdRule]), authController.deleteAddress);
+
+router.post('/logout', authenticateJWT, authController.logout);
 
 export default router;

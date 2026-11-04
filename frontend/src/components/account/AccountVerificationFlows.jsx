@@ -6,7 +6,7 @@ import SixDigitOtpRow from '../common/SixDigitOtpRow';
 import PasswordValidationIndicator from '../common/PasswordValidationIndicator';
 import { AccountCard, DetailRow } from './AccountUi';
 import { validatePassword } from '../../utils/passwordRules';
-import { changePasswordWithCode, completeEmailChange, requestEmailChange, sendAccountCode, verifyAccountCode } from '../../services/accountApi';
+import { changePasswordWithCode, changePhone, completeEmailChange, requestEmailChange, sendAccountCode, sendPhoneCode, verifyAccountCode, verifyPhoneCode } from '../../services/accountApi';
 
 /** Seconds left until `deadline` (ms timestamp), updated every second. */
 function useSecondsLeft(deadline) {
@@ -32,7 +32,7 @@ function storeToken(token) {
   }
 }
 
-function Steps({ steps, current }) {
+export function Steps({ steps, current }) {
   return (
     <ol className="mb-5 flex flex-wrap items-center gap-2 text-xs font-semibold" aria-label="Progress">
       {steps.map((label, index) => {
@@ -51,7 +51,7 @@ function Steps({ steps, current }) {
   );
 }
 
-function Notice({ message }) {
+export function Notice({ message }) {
   if (!message) return null;
   return (
     <p role={message.type === 'error' ? 'alert' : 'status'} className={`mb-4 rounded-xl px-4 py-3 text-sm font-medium ${message.type === 'error' ? 'bg-danger-50 text-danger' : 'bg-success-50 text-success'}`}>
@@ -64,7 +64,7 @@ function Notice({ message }) {
  * Send-code + enter-code step. `send()` resolves with { maskedTarget, expiresInSeconds, resendAfterSeconds };
  * `verify(otp)` resolves when the code is accepted.
  */
-function CodeStep({ title, description, send, verify, onBack }) {
+export function CodeStep({ title, description, send, verify, onBack }) {
   const [sent, setSent] = useState(null);
   const [otp, setOtp] = useState('');
   const [busy, setBusy] = useState(false);
@@ -325,6 +325,103 @@ export function AccountEmailSection({ settings, onEmailChanged }) {
         <div role="status" className="rounded-xl bg-success-50 p-5 text-success">
           <p className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-5" aria-hidden="true" /> Your email address has been changed successfully.</p>
           <p className="mt-1 text-sm text-navy-900">A notice was sent to your previous address and a confirmation to your new one.</p>
+        </div>
+      ) : null}
+    </AccountCard>
+  );
+}
+
+/** Change Phone Number: verify the registered email, enter the new number, verify it by SMS, then it is applied. */
+export function AccountPhoneSection({ settings, onPhoneChanged }) {
+  const [step, setStep] = useState(0);
+  const [grant, setGrant] = useState('');
+  const [digits, setDigits] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [message, setMessage] = useState(null);
+
+  const restart = (text) => {
+    setGrant('');
+    setStep(0);
+    setMessage(text ? { type: 'error', text } : null);
+  };
+
+  return (
+    <AccountCard>
+      <Steps steps={['Verify your email', 'New number', 'Verify by SMS', 'Done']} current={step} />
+      <Notice message={message} />
+      {step === 0 ? (
+        <CodeStep
+          title="Verify your identity"
+          description={`We will send a code to ${settings.profile.maskedEmail}. Your number is not changed until the new one is verified by SMS.`}
+          send={() => sendAccountCode('PHONE_CHANGE')}
+          verify={async (otp) => {
+            const result = await verifyAccountCode('PHONE_CHANGE', otp);
+            setGrant(result.grant);
+            setMessage(null);
+            setStep(1);
+          }}
+        />
+      ) : null}
+      {step === 1 ? (
+        <form
+          noValidate
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!/^[6-9]d{9}$/.test(digits)) return setMessage({ type: 'error', text: 'Enter a valid 10-digit Indian mobile number.' });
+            if (settings.profile.phone && settings.profile.phone.replace(/D/g, '').endsWith(digits)) return setMessage({ type: 'error', text: 'This is already your phone number.' });
+            setNewPhone(digits);
+            setMessage(null);
+            setStep(2);
+            return undefined;
+          }}
+        >
+          <dl><DetailRow label="Current number">{settings.profile.maskedPhone || 'Not added'}</DetailRow></dl>
+          <Input
+            id="new-phone"
+            label="New mobile number (India)"
+            required
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel-national"
+            maxLength={10}
+            placeholder="10-digit mobile number"
+            value={digits}
+            onChange={(e) => setDigits(e.target.value.replace(/D/g, '').slice(0, 10))}
+          />
+          <div className="flex justify-end">
+            <Button type="submit">Continue</Button>
+          </div>
+        </form>
+      ) : null}
+      {step === 2 ? (
+        <CodeStep
+          title="Verify your new number"
+          description={`We will send an SMS code to +91 ${newPhone}.`}
+          onBack={() => { setMessage(null); setStep(1); }}
+          send={async () => {
+            const result = await sendPhoneCode(newPhone);
+            return { maskedTarget: `+91 ******${newPhone.slice(-4)}`, expiresInSeconds: 600, resendAfterSeconds: result?.cooldownSeconds || 60 };
+          }}
+          verify={async (otp) => {
+            const verified = await verifyPhoneCode(newPhone, otp);
+            const verificationToken = verified?.verificationToken || verified?.data?.verificationToken;
+            try {
+              const result = await changePhone({ grant, phone: newPhone, verificationToken });
+              setGrant('');
+              setStep(3);
+              onPhoneChanged?.(result);
+            } catch (err) {
+              if (err.status === 400 && /verify your email again/i.test(err.message || '')) restart(err.message);
+              throw err;
+            }
+          }}
+        />
+      ) : null}
+      {step === 3 ? (
+        <div role="status" className="rounded-xl bg-success-50 p-5 text-success">
+          <p className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-5" aria-hidden="true" /> Your phone number has been changed.</p>
+          <p className="mt-1 text-sm text-navy-900">A confirmation has been sent to your registered email.</p>
         </div>
       ) : null}
     </AccountCard>

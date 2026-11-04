@@ -97,6 +97,15 @@ export default function Checkout() {
   const [notice, setNotice] = useState('');
   const placed = useRef(false);
   const submitting = useRef(false); // guards against double clicks creating two orders
+  // One order per checkout attempt: a payment retry reuses the order already created (same idempotency key)
+  const pendingOrder = useRef(null);
+  const attemptKey = useRef(null);
+  const keyFor = (method) => {
+    if (!attemptKey.current || attemptKey.current.method !== method) {
+      attemptKey.current = { method, key: `checkout_${method}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}` };
+    }
+    return attemptKey.current.key;
+  };
   const headingRef = useRef(null);
 
   const address = addresses.find((item) => item.id === addressId) ?? null;
@@ -230,6 +239,7 @@ export default function Checkout() {
         contact,
         address,
         buyer: user,
+        idempotencyKey: keyFor(paymentMethod),
       });
       placed.current = true;
       if (isBuyNow) clearBuyNow(); else clearCart();
@@ -256,8 +266,9 @@ export default function Checkout() {
 
     try {
       submitting.current = true;
-      // 1. Create order on server to establish MySQL record and validate inventory
-      const order = await placeOrder({
+      // 1. Create the order on the server (stock is reserved) — or reuse the one from a failed payment attempt
+      const reuse = pendingOrder.current?.method === paymentMethod ? pendingOrder.current.order : null;
+      const order = reuse || await placeOrder({
         lines,
         totals,
         shippingMethod,
@@ -272,7 +283,9 @@ export default function Checkout() {
         contact,
         address,
         buyer: user,
+        idempotencyKey: keyFor(paymentMethod),
       });
+      pendingOrder.current = { method: paymentMethod, order };
 
       // 2. Process online payment with gateway (advance amount or full total)
       const payableAmount = isPartialPayment ? advanceAmount : totals.total;
@@ -322,7 +335,9 @@ export default function Checkout() {
 
   const closePayment = () => {
     setPayment({ open: false, state: 'pending', message: '' });
-    setNotice('Payment was not completed, so no order was placed. You can retry, choose another payment method, or place the order with payment pending.');
+    setNotice(pendingOrder.current
+      ? `Payment was not completed. Order ${pendingOrder.current.order.orderNumber || pendingOrder.current.order.id} is saved with payment pending and its stock is held for 30 minutes. Retry the payment, or it will be cancelled automatically.`
+      : 'Payment was not completed and no order was placed. You can retry or choose another payment method.');
   };
 
   const changeMethod = () => {

@@ -8,7 +8,13 @@ import {
   roundINR,
 } from './commissionTierService.js';
 import { createNotification } from './notificationService.js';
-import { broadcastInventoryUpdate, broadcastProductStock } from './socketService.js';
+import {
+  availabilitySnapshot,
+  availableOf,
+  publishInventoryChanges,
+  reserveForNewOrder,
+  transitionOrderInventory,
+} from './inventoryLifecycleService.js';
 
 export async function validateAndCalculateOrder({ lines, shippingMethod = 'standard', deliveryAddress = null }) {
   if (!lines || !Array.isArray(lines) || lines.length === 0) {
@@ -44,85 +50,14 @@ export async function validateAndCalculateOrder({ lines, shippingMethod = 'stand
       // Ignored if productId is not a UUID
     }
 
-    // 2. Fall back to SKU, model number, slug, or name
-    if (!product) {
-      const match = String(productId).match(/(\d+)$/);
-      const number = match ? match[1] : null;
-
-      const orConditions = [
-        { id: productId },
-        ...(productSku ? [{ sku: productSku }] : [{ sku: productId }]),
-        ...(number ? [{ sku: { endsWith: `-${number}` } }] : []),
-        ...(productSlug ? [{ slug: productSlug }] : []),
-        ...(productName ? [{ name: productName }] : []),
-      ];
-
+    // 2. Fall back to the exact SKU or slug the catalogue gave the buyer. Products are never matched by name
+    // (that could pick another supplier's product) and never created from order data: price, stock and
+    // supplier always come from the database.
+    if (!product && (productSku || productSlug)) {
       product = await prisma.product.findFirst({
-        where: {
-          OR: orConditions,
-        },
+        where: { OR: [...(productSku ? [{ sku: productSku }] : []), ...(productSlug ? [{ slug: productSlug }] : [])] },
       });
     }
-
-    // 3. Fall back to case-insensitive name match
-    if (!product && productName) {
-      product = await prisma.product.findFirst({
-        where: {
-          name: { equals: productName, mode: 'insensitive' },
-        },
-      });
-    }
-
-    // 4. Fall back to partial name match
-    if (!product && productName) {
-      product = await prisma.product.findFirst({
-        where: {
-          name: { contains: productName, mode: 'insensitive' },
-        },
-      });
-    }
-
-    // 5. If still not in database but valid product metadata is provided, auto-create as active product
-    if (!product && (productName || line.product)) {
-      const pData = line.product || {};
-      const finalName = productName || pData.name || 'Custom Wholesale Product';
-      const finalPrice = Number(pData.price || line.price || line.unitPrice || 100);
-      const finalMoq = Number(pData.moq || line.moq || 1);
-      const finalStock = Number(pData.stock || 50000);
-      const finalLead = Number(pData.leadTimeDays || line.leadTimeDays || 14);
-      const finalSku = productSku || pData.sku || `TS-P-${Date.now().toString().slice(-6)}`;
-      const finalSlug = productSlug || pData.slug || finalName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
-      try {
-        product = await prisma.product.create({
-          data: {
-            sku: finalSku,
-            name: finalName,
-            slug: finalSlug,
-            categorySlug: pData.categorySlug || pData.category || 'fashion-apparel',
-            subcategory: pData.subcategory || 'General',
-            summary: pData.summary || finalName,
-            description: pData.description || finalName,
-            photo: pData.photo || 'photo-1562157873-818bc0726f68',
-            currency: 'INR',
-            price: finalPrice,
-            unit: pData.unit || 'piece',
-            moq: finalMoq,
-            stock: finalStock,
-            leadTimeDays: finalLead,
-            status: 'Active',
-            companyId: pData.companyId || 'TS-CO-010',
-            supplierId: pData.supplierId || null,
-            variants: pData.variants || {},
-            priceTiers: pData.priceTiers || [],
-            specifications: pData.specifications || {},
-          },
-        });
-      } catch (createErr) {
-        console.warn('Auto-create fallback product warning:', createErr.message);
-      }
-    }
-
     if (!product || product.status !== 'Active') {
       const error = new Error(`Product "${productName || productId}" is not available.`);
       error.statusCode = 400;
@@ -135,8 +70,8 @@ export async function validateAndCalculateOrder({ lines, shippingMethod = 'stand
       throw error;
     }
 
-    if (quantity > product.stock) {
-      const error = new Error(`Insufficient stock for "${product.name}". Available: ${product.stock} ${product.unit}(s).`);
+    if (quantity > availableOf(product)) {
+      const error = new Error(`Insufficient stock for "${product.name}". Available: ${availableOf(product)} ${product.unit}(s).`);
       error.statusCode = 400;
       throw error;
     }
@@ -285,46 +220,19 @@ export async function createOrder({
   const initialPaymentStatus = isCod ? 'COD' : 'PENDING';
   const initialOrderStatus = isCod ? 'ORDER_CONFIRMED' : 'ORDER_PLACED';
 
+  const stockBefore = await availabilitySnapshot(calculation.items.map((i) => i.productId));
+  let touchedProducts = [];
+
   // Execute database atomic transaction
   const order = await prisma.$transaction(async (tx) => {
-    // 1. Concurrency-safe atomic stock reservation & negative stock prevention
-    for (const item of calculation.items) {
-      const affected = await tx.$executeRaw`
-        UPDATE products 
-        SET reservedStock = reservedStock + ${item.quantity} 
-        WHERE id = ${item.productId} AND (stock - reservedStock) >= ${item.quantity}
-      `;
-
-      if (affected === 0) {
-        const error = new Error(`Insufficient available stock for "${item.productName}". Remaining units were already claimed by another buyer.`);
-        error.statusCode = 409;
-        throw error;
-      }
-
-      const current = await tx.product.findUnique({
-        where: { id: item.productId },
-        select: { id: true, stock: true, reservedStock: true, supplierId: true, sku: true },
-      });
-
-      if (current) {
-        await tx.inventoryLog.create({
-          data: {
-            productId: item.productId,
-            supplierId: current.supplierId || item.supplierId,
-            previousStock: current.stock,
-            newStock: current.stock,
-            changeAmount: 0,
-            previousReserved: Math.max(0, current.reservedStock - item.quantity),
-            newReserved: current.reservedStock,
-            reason: 'ORDER_RESERVED',
-            notes: `Reserved ${item.quantity} ${item.unit || 'unit'}(s) for Order #${orderNumber}`,
-            orderId: orderNumber,
-            actorId: userId || 'Buyer',
-            actorName: buyerName || 'Buyer',
-          },
-        });
-      }
-    }
+    // 1. Lock the products and hold the stock (COD is confirmed at once, so it is committed straight away)
+    const holding = await reserveForNewOrder(tx, {
+      orderNumber,
+      items: calculation.items,
+      commit: isCod,
+      actor: { id: userId || null, name: buyerName || 'Buyer' },
+    });
+    touchedProducts = holding.touched;
 
     const primarySupplierCompanyId = calculation.items[0]?.companyId || 'SUP';
     const primarySupplierId = calculation.items[0]?.supplierId || null;
@@ -372,6 +280,8 @@ export async function createOrder({
         deliveryAddress: parsedAddress,
         idempotencyKey: idempotencyKey || null,
         notes: notes || '',
+        inventoryState: holding.inventoryState,
+        reservationExpiresAt: holding.reservationExpiresAt,
         items: {
           create: calculation.items.map((item) => ({
             productId: item.productId,
@@ -414,7 +324,7 @@ export async function createOrder({
     });
 
     return created;
-  });
+  }, { maxWait: 15000, timeout: 30000 });
 
   // Automatically initialize escrow ledger entry for wholesale order
   initiateEscrowForOrder(order.id).catch((err) => {
@@ -439,32 +349,8 @@ export async function createOrder({
     }).catch(() => {});
   }
 
-  // Broadcast real-time stock updates to supplier and buyers
-  for (const item of calculation.items) {
-    prisma.product.findUnique({
-      where: { id: item.productId },
-      select: { id: true, sku: true, stock: true, reservedStock: true, supplierId: true, lowStockThreshold: true },
-    }).then((prod) => {
-      if (prod) {
-        const available = Math.max(0, prod.stock - prod.reservedStock);
-        if (prod.supplierId) {
-          broadcastInventoryUpdate(prod.supplierId, {
-            productId: prod.id,
-            sku: prod.sku,
-            stock: prod.stock,
-            reservedStock: prod.reservedStock,
-            availableStock: available,
-            lowStockThreshold: prod.lowStockThreshold,
-          });
-        }
-        broadcastProductStock(prod.id, {
-          sku: prod.sku,
-          availableStock: available,
-          inStock: available > 0,
-        });
-      }
-    }).catch(() => {});
-  }
+  // Live stock to the supplier, admins and buyers (and a low-stock alert if a threshold was crossed)
+  publishInventoryChanges(touchedProducts, stockBefore);
 
   return formatOrder(order);
 }
@@ -564,54 +450,28 @@ export async function cancelBuyerOrder({ orderId, userId, reason = '' }) {
     throw error;
   }
 
-  return prisma.$transaction(async (tx) => {
-    // 1. Release reserved stock
-    for (const item of order.items) {
-      if (item.productId) {
-        await tx.$executeRaw`
-          UPDATE products
-          SET reservedStock = GREATEST(0, reservedStock - ${item.quantity})
-          WHERE id = ${item.productId}
-        `;
+  const stockBefore = await availabilitySnapshot(order.items.map((i) => i.productId));
 
-        const current = await tx.product.findUnique({
-          where: { id: item.productId },
-          select: { id: true, stock: true, reservedStock: true, supplierId: true, sku: true },
-        });
-
-        if (current) {
-          await tx.inventoryLog.create({
-            data: {
-              productId: item.productId,
-              supplierId: current.supplierId,
-              previousStock: current.stock,
-              newStock: current.stock,
-              changeAmount: 0,
-              previousReserved: current.reservedStock + item.quantity,
-              newReserved: current.reservedStock,
-              reason: 'ORDER_CANCELLED',
-              notes: `Released ${item.quantity} reserved unit(s) due to Order #${order.orderNumber} cancellation.`,
-              orderId: order.orderNumber,
-              actorId: userId || 'Buyer',
-              actorName: 'Buyer',
-            },
-          });
-        }
-      }
-    }
-
-    // 2. Update order status
-    const updated = await tx.order.update({
-      where: { id: order.id },
+  const { updated, released } = await prisma.$transaction(async (tx) => {
+    // 1. Claim the cancellation, so a double click or a parallel shipment cannot both win
+    const claimed = await tx.order.updateMany({
+      where: { id: order.id, orderStatus: { notIn: NON_CANCELLABLE } },
       data: {
         orderStatus: 'CANCELLED',
         rejectionReason: reason || 'Cancelled by buyer before packing.',
       },
-      include: {
-        items: true,
-        payments: true,
-        statusHistory: { orderBy: { createdAt: 'desc' } },
-      },
+    });
+    if (claimed.count === 0) {
+      const error = new Error('This order was already cancelled or has moved past packing.');
+      error.statusCode = 409;
+      throw error;
+    }
+
+    // 2. Give the held stock back (no-op for orders placed before stock tracking)
+    const moved = await transitionOrderInventory(tx, order.id, 'RELEASE', {
+      reason: 'ORDER_CANCELLED',
+      notes: `Buyer cancelled Order #${order.orderNumber}${reason ? `: ${reason}` : ''}`,
+      actor: { id: userId || null, name: 'Buyer' },
     });
 
     // 3. Record status history
@@ -624,49 +484,32 @@ export async function cancelBuyerOrder({ orderId, userId, reason = '' }) {
       },
     });
 
-    // Broadcast released stock to supplier and buyers
-    for (const item of order.items) {
-      if (item.productId) {
-        prisma.product.findUnique({
-          where: { id: item.productId },
-          select: { id: true, sku: true, stock: true, reservedStock: true, supplierId: true, lowStockThreshold: true },
-        }).then((prod) => {
-          if (prod) {
-            const available = Math.max(0, prod.stock - prod.reservedStock);
-            if (prod.supplierId) {
-              broadcastInventoryUpdate(prod.supplierId, {
-                productId: prod.id,
-                sku: prod.sku,
-                stock: prod.stock,
-                reservedStock: prod.reservedStock,
-                availableStock: available,
-                lowStockThreshold: prod.lowStockThreshold,
-              });
-            }
-            broadcastProductStock(prod.id, {
-              sku: prod.sku,
-              availableStock: available,
-              inStock: available > 0,
-            });
-          }
-        }).catch(() => {});
-      }
-    }
+    const fresh = await tx.order.findUnique({
+      where: { id: order.id },
+      include: {
+        items: true,
+        payments: true,
+        statusHistory: { orderBy: { createdAt: 'desc' } },
+      },
+    });
+    return { updated: fresh, released: moved };
+  }, { maxWait: 15000, timeout: 30000 });
 
-    const formatted = formatOrder(updated);
+  publishInventoryChanges(released.touched, stockBefore);
 
-    if (order.supplierId) {
-      createNotification({
-        userId: order.supplierId,
-        title: `Order Cancelled: #${order.orderNumber}`,
-        message: `Buyer cancelled order #${order.orderNumber}. Inventory stock has been restored.`,
-        type: 'ORDER',
-        link: `/supplier/orders?order=${order.orderNumber}`,
-      }).catch(() => {});
-    }
+  if (order.supplierId) {
+    createNotification({
+      userId: order.supplierId,
+      title: `Order Cancelled: #${order.orderNumber}`,
+      message: released.applied
+        ? `Buyer cancelled order #${order.orderNumber}. The held stock is available again.`
+        : `Buyer cancelled order #${order.orderNumber}.`,
+      type: 'ORDER',
+      link: `/supplier/orders?order=${order.orderNumber}`,
+    }).catch(() => {});
+  }
 
-    return formatted;
-  });
+  return formatOrder(updated);
 }
 
 function formatOrder(order) {

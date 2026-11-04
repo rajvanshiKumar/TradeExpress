@@ -89,7 +89,7 @@ export const dashboardNav = {
     { label: 'Buyer Inquiries/RFQs', to: '/supplier/inquiries', icon: 'FileText' },
     { label: 'My Quotations', to: '/supplier/quotations', icon: 'ClipboardList' },
     { label: 'Orders', to: '/supplier/orders', icon: 'Package' },
-    { label: 'Shipping & Delivery', to: '/supplier/shipping', icon: 'Truck' },
+    { label: 'Transport & Delivery Management', to: '/supplier/transport', icon: 'Truck' },
     { label: 'Payments & Earnings', to: '/supplier/payments', icon: 'CircleDollarSign' },
     { label: 'Verification Center', to: '/supplier/verification', icon: 'ShieldCheck' },
     { label: 'Business Profile', to: '/supplier/profile', icon: 'Building2' },
@@ -105,8 +105,5 @@ export const dashboardNav = {
     { label: 'Users', to: '/admin/users', icon: 'Users' },
     { label: 'Categories', to: '/admin/categories', icon: 'LayoutGrid' },
     { label: 'Reports', to: '/admin/reports', icon: 'ChartColumn' },
-  ],
-  transport_partner: [
-    { label: 'Transport Portal', to: '/transporter/dashboard', icon: 'Truck' },
   ],
 };

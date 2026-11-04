@@ -1,5 +1,7 @@
 import * as superAdminService from '../services/superAdminService.js';
 import * as auditService from '../services/auditService.js';
+import * as accountDeletionService from '../services/accountDeletionService.js';
+import prisma from '../config/db.js';
 
 // Dashboard
 export async function getDashboard(req, res, next) {
@@ -46,18 +48,46 @@ export async function updateUserStatus(req, res, next) {
   }
 }
 
-export async function resetUserPassword(req, res, next) {
+export async function sendPasswordResetLink(req, res, next) {
   try {
-    const { newPassword } = req.body;
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
-    }
-    const data = await superAdminService.resetUserPassword({
-      userId: req.params.id,
-      newPassword,
-      req,
-    });
+    const data = await superAdminService.sendPasswordResetLink({ userId: req.params.id, req });
     res.json({ success: true, ...data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getUserDeletionCheck(req, res, next) {
+  try {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, role: true, status: true } });
+    if (!target) return res.status(404).json({ success: false, message: 'Account not found.' });
+    if (!['BUYER', 'SUPPLIER'].includes(target.role)) {
+      return res.json({ success: true, data: { canDelete: false, blockers: [{ type: 'ROLE', message: 'Administrator accounts cannot be deleted through this workflow.' }] } });
+    }
+    if (target.status === 'DEACTIVATED') {
+      return res.json({ success: true, data: { canDelete: false, blockers: [{ type: 'ALREADY_DELETED', message: 'This account has already been deleted.' }] } });
+    }
+    const blockers = await accountDeletionService.getDeletionBlockers(target.id, target.role);
+    res.json({ success: true, data: { canDelete: blockers.length === 0, blockers } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteUserAccount(req, res, next) {
+  try {
+    const { reason, note, confirmation, adminPassword } = req.body;
+    const data = await accountDeletionService.adminDeleteAccount({
+      admin: req.user,
+      targetUserId: req.params.id,
+      reason,
+      note,
+      confirmation,
+      adminPassword,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    res.json({ success: true, message: 'The account has been deleted.', data });
   } catch (err) {
     next(err);
   }

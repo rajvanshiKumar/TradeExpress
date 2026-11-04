@@ -11,12 +11,13 @@ import { getShippingMethod } from '../../utils/calculateTotals';
 import { formatDateTime } from '../../utils/formatDate';
 import { quantityLabel } from '../../utils/units';
 import { printInvoice } from '../../utils/printInvoice';
+import TrackDelivery from '../transport/TrackDelivery';
 
 /**
  * Full details of one order. `companyId` limits the item list to one supplier's
- * products (used in the supplier dashboard).
+ * products (used in the supplier dashboard). `trackDelivery` shows the buyer's shipment tracking.
  */
-export default function OrderDetails({ order, companyId = null }) {
+export default function OrderDetails({ order, companyId = null, trackDelivery = false, highlightShipment = '' }) {
   const { money } = useCurrency();
   const { getCompany } = useProducts();
   const items = companyId ? order.items.filter((item) => item.companyId === companyId) : order.items;
@@ -38,6 +39,8 @@ export default function OrderDetails({ order, companyId = null }) {
           <StatusBadge status={order.status} />
         </div>
       </div>
+
+      {trackDelivery ? <TrackDelivery orderRef={order.orderNumber || order.id} highlight={highlightShipment} /> : null}
 
       <div className="overflow-hidden rounded-xl border bg-white">
         <ul className="divide-y">

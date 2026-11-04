@@ -2,10 +2,11 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { ENV } from '../config/env.js';
-import { signJwt } from '../utils/jwt.js';
+import { reissueCurrentToken } from './sessionService.js';
+import { getRequestContext } from '../utils/requestContext.js';
 import { validatePassword } from '../utils/passwordValidator.js';
-import { isDevOtpAllowed } from './otpService.js';
-import { maskEmail } from './accountService.js';
+import { isDevOtpAllowed, normalizeMobile, validateVerifiedMobile } from './otpService.js';
+import { maskEmail, maskPhone } from './accountService.js';
 import { sendAccountCodeEmail, sendAccountSecurityEmail } from './emailService.js';
 
 /*
@@ -24,7 +25,7 @@ export const RESEND_COOLDOWN_MS = 60 * 1000;
 export const MAX_ATTEMPTS = 5;
 export const MAX_SENDS_PER_HOUR = 5;
 
-const SELF_EMAIL_PURPOSES = ['PASSWORD_CHANGE', 'EMAIL_CHANGE_CURRENT'];
+const SELF_EMAIL_PURPOSES = ['PASSWORD_CHANGE', 'EMAIL_CHANGE_CURRENT', 'ACCOUNT_DELETE', 'PHONE_CHANGE'];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i;
 
 const keyedHash = (value) => crypto.createHmac('sha256', ENV.JWT_SECRET).update(String(value)).digest('hex');
@@ -142,7 +143,10 @@ async function consumeGrant(tx, userId, purpose, grant) {
   return record;
 }
 
-/** Step 1 of change password / change email: send a code to the account's current email. */
+/** Used by other verified actions (e.g. account deletion) to consume their authorization inside a transaction. */
+export const consumeAccountGrant = (tx, userId, purpose, grant) => consumeGrant(tx, userId, purpose, grant);
+
+/** Step 1 of change password / change email / delete account: send a code to the account's current email. */
 export async function sendAccountCode(userId, purpose) {
   if (!SELF_EMAIL_PURPOSES.includes(purpose)) throw fail('Unknown verification purpose.', 400, 'BAD_PURPOSE');
   const user = await loadUser(userId);
@@ -163,7 +167,8 @@ export async function verifyAccountCode(userId, purpose, otp) {
 
 /** Rejects every login token issued before now (whole seconds, matching the token's "iat"). */
 const sessionCutoff = () => new Date(Math.floor(Date.now() / 1000) * 1000);
-const tokenFor = (user, email) => signJwt({ userId: user.id, email, role: user.role });
+/** A fresh token for this device (same signed-in session) after a password or email change. */
+const tokenFor = (user, email) => reissueCurrentToken(user, { email });
 
 /** Change password with an authorization from a verified email code. Signs out every other session. */
 export async function changePasswordWithGrant(userId, { grant, newPassword, confirmPassword }) {
@@ -177,13 +182,16 @@ export async function changePasswordWithGrant(userId, { grant, newPassword, conf
   await prisma.$transaction(async (tx) => {
     await consumeGrant(tx, userId, 'PASSWORD_CHANGE', grant);
     await tx.user.update({ where: { id: userId }, data: { passwordHash, sessionsValidAfter: sessionCutoff() } });
+    // Every other signed-in device is signed out
+    const { sessionId } = getRequestContext();
+    await tx.userSession.updateMany({ where: { userId, revokedAt: null, ...(sessionId ? { id: { not: sessionId } } : {}) }, data: { revokedAt: new Date() } });
     // Any other password-change codes still pending are no longer needed
     await tx.accountVerification.updateMany({ where: { userId, purpose: 'PASSWORD_CHANGE', consumedAt: null }, data: { consumedAt: new Date() } });
   }, { maxWait: 10000, timeout: 20000 });
 
   await prisma.auditLog.create({ data: { actorId: userId, actorEmail: user.email, actorRole: user.role, action: 'PASSWORD_CHANGE', resource: 'ACCOUNT', targetId: userId, result: 'SUCCESS' } }).catch(() => {});
   sendAccountSecurityEmail({ email: user.email, name: user.name, subject: 'Your TradeExpress password was changed', message: 'The password for your TradeExpress account was just changed, and other devices were signed out.' });
-  return { token: tokenFor(user, user.email) };
+  return { token: await tokenFor(user, user.email) };
 }
 
 /** Change email, step 3: with the current-email authorization, send a code to the proposed new email. */
@@ -233,5 +241,37 @@ export async function completeEmailChange(userId, { grant, otp }) {
   await prisma.auditLog.create({ data: { actorId: userId, actorEmail: newEmail, actorRole: user.role, action: 'EMAIL_CHANGE', resource: 'ACCOUNT', targetId: userId, details: { from: maskEmail(oldEmail), to: maskEmail(newEmail) }, result: 'SUCCESS' } }).catch(() => {});
   sendAccountSecurityEmail({ email: oldEmail, name: user.name, subject: 'Your TradeExpress email address was changed', message: `The email address for your TradeExpress account was changed to ${maskEmail(newEmail)}. This address will no longer receive account emails.` });
   sendAccountSecurityEmail({ email: newEmail, name: user.name, subject: 'Your new TradeExpress email address is confirmed', message: 'This is now the email address for your TradeExpress account.' });
-  return { email: newEmail, maskedEmail: maskEmail(newEmail), token: tokenFor(user, newEmail) };
+  return { email: newEmail, maskedEmail: maskEmail(newEmail), token: await tokenFor(user, newEmail) };
+}
+
+/**
+ * Change phone number. Needs the email authorization (PHONE_CHANGE) and the single-use token from verifying the new
+ * number by SMS (the SMS step already refuses numbers that belong to another account).
+ */
+export async function changePhoneWithGrant(userId, { grant, phone, country = 'India', verificationToken }) {
+  const user = await loadUser(userId);
+  const normalized = normalizeMobile(phone, country);
+  if (!normalized.ok) throw fail('Enter a valid mobile number.', 400, 'INVALID_PHONE');
+  const current = await prisma.user.findUnique({ where: { id: userId }, select: { phone: true } });
+  if (current?.phone === normalized.formattedPhone) throw fail('This is already your phone number.', 400, 'SAME_PHONE');
+  const taken = await prisma.user.findFirst({ where: { phone: normalized.formattedPhone, NOT: { id: userId } }, select: { id: true } });
+  if (taken) throw fail('This mobile number is already registered with TradeExpress.', 409, 'PHONE_TAKEN');
+
+  // The email authorization must still be valid before the single-use SMS token is spent
+  const pending = await prisma.accountVerification.findFirst({
+    where: { userId, purpose: 'PHONE_CHANGE', grantHash: grantHashOf(grant || ''), consumedAt: null, grantExpiresAt: { gt: new Date() } },
+    select: { id: true },
+  });
+  if (!pending) throw fail('Your verification has expired. Please verify your email again.', 400, 'GRANT_INVALID');
+  await validateVerifiedMobile({ phone, country, verificationToken });
+
+  await prisma.$transaction(async (tx) => {
+    await consumeGrant(tx, userId, 'PHONE_CHANGE', grant);
+    await tx.user.update({ where: { id: userId }, data: { phone: normalized.formattedPhone, isPhoneVerified: true } });
+  }, { maxWait: 10000, timeout: 20000 });
+
+  const masked = maskPhone(normalized.formattedPhone);
+  await prisma.auditLog.create({ data: { actorId: userId, actorEmail: user.email, actorRole: user.role, action: 'PHONE_CHANGE', resource: 'ACCOUNT', targetId: userId, details: { to: masked }, result: 'SUCCESS' } }).catch(() => {});
+  sendAccountSecurityEmail({ email: user.email, name: user.name, subject: 'Your TradeExpress phone number was changed', message: `The mobile number on your TradeExpress account was changed to ${masked}.` });
+  return { phone: normalized.formattedPhone, maskedPhone: masked };
 }

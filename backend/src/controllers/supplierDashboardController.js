@@ -65,35 +65,6 @@ export async function getAnalytics(req, res, next) {
   }
 }
 
-export async function getShipping(req, res, next) {
-  try {
-    const shipping = await supplierDashboardService.getSupplierShipping(req.user);
-    res.json({
-      success: true,
-      data: shipping,
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function dispatchOrder(req, res, next) {
-  try {
-    const order = await supplierDashboardService.dispatchOrderWithCarrier(
-      req.user,
-      req.params.orderId,
-      req.body
-    );
-    res.json({
-      success: true,
-      message: 'Consignment dispatched and tracking saved.',
-      data: order,
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
 export async function getProfile(req, res, next) {
   try {
     const profile = await authService.getUserProfile(req.user.id);

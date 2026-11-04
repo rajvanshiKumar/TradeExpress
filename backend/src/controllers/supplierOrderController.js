@@ -51,15 +51,3 @@ export async function updateStatus(req, res, next) {
   }
 }
 
-export async function dispatchOrder(req, res, next) {
-  try {
-    const order = await supplierOrderService.dispatchSupplierOrder(req.user, req.params.orderId, req.body);
-    res.json({
-      success: true,
-      message: 'Order dispatch details and shipping documents saved.',
-      data: order,
-    });
-  } catch (error) {
-    next(error);
-  }
-}

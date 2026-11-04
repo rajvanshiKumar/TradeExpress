@@ -1,7 +1,6 @@
-import seedOrders, { toOrderItem } from '../data/orders';
+import seedOrders from '../data/orders';
 import { STORAGE_KEYS } from '../utils/constants';
-import { createCollection, wait } from './localCollection';
-import makeId from '../utils/ids';
+import { createCollection } from './localCollection';
 import { apiGet, apiPost, isApiConfigured } from './apiClient';
 
 const localOrders = createCollection(STORAGE_KEYS.orders, seedOrders);
@@ -96,89 +95,62 @@ const orderService = {
   },
 
   /** Creates an order record. Persists to MySQL via Express backend if API is configured. */
-  async createOrder({ lines, totals, shippingMethod, paymentMethod, paymentStatus, source = 'cart', contact, address, buyer, isPartialPayment, advanceAmount, balanceDue, buyerGstin, supplierGstin }) {
-    if (isApiConfigured) {
-      try {
-        const payload = {
-          userId: buyer?.id && !String(buyer.id).startsWith('TS-') ? buyer.id : null,
-          buyerName: contact?.name || buyer?.name || 'Customer',
-          buyerEmail: contact?.email || buyer?.email || 'customer@example.com',
-          buyerPhone: contact?.phone || buyer?.phone || '+91 98765 43210',
-          buyerCompany: contact?.company || buyer?.company || '',
-          shippingMethod,
-          paymentMethod,
-          deliveryAddress: address,
-          isPartialPayment: Boolean(isPartialPayment),
-          advanceAmount: advanceAmount ? Number(advanceAmount) : null,
-          balanceDue: balanceDue ? Number(balanceDue) : null,
-          buyerGstin: buyerGstin || buyer?.gstin || null,
-          supplierGstin: supplierGstin || null,
-          lines: lines.map((line) => ({
-            productId: line.product?.id || line.productId,
-            name: line.product?.name || line.name,
-            sku: line.product?.sku || line.sku,
-            slug: line.product?.slug || line.slug,
-            quantity: line.quantity,
-            variant: line.variant || null,
-          })),
-          idempotencyKey: `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          notes: `Placed via ${source}`,
-        };
-
-        const response = await apiPost('orders', payload);
-
-        if (response && response.success && response.data) {
-          const formatted = formatApiOrder(response.data, source);
-          // Also mirror to local collection for instant offline access
-          try {
-            if (typeof localOrders.save === 'function') {
-              await localOrders.save(formatted);
-            }
-          } catch {
-            // Ignore local storage mirror errors
-          }
-          return formatted;
-        }
-
-        // If backend explicitly replied with failure
-        throw new Error(response?.message || 'Order creation failed on backend.');
-      } catch (err) {
-        console.warn('[TradeExpress OrderService] Backend order creation error:', err.message);
-        // If it's a real validation, stock, or authentication error, pass it to UI
-        const isNetworkDown = err.message?.includes('timed out') || err.message?.includes('could not be reached') || err.status === 0;
-        if (!isNetworkDown && err.status && err.status >= 400 && err.status < 500) {
-          throw err;
-        }
-      }
+  async createOrder({ lines, shippingMethod, paymentMethod, source = 'cart', contact, address, buyer, isPartialPayment, advanceAmount, balanceDue, buyerGstin, supplierGstin, idempotencyKey }) {
+    // Orders exist only on the server: no offline or demo orders are invented here
+    if (!isApiConfigured) {
+      throw new Error('Ordering is not available right now. Please try again later.');
     }
 
-    // Fallback if API not configured or network unreachable
-    await wait(300);
-    const fallbackOrder = {
-      id: makeId('TS-O'),
-      orderNumber: `TS-${Date.now().toString(36).toUpperCase()}`,
-      buyerId: buyer?.id || 'guest',
-      buyerName: buyer?.name || contact?.name || 'Guest',
-      buyerCompany: buyer?.company ?? '',
-      items: lines.map((line) => toOrderItem(line.product, line.quantity, line.variant ?? null)),
-      shippingMethod,
-      paymentMethod,
-      paymentStatus: paymentStatus || (paymentMethod === 'cod' ? 'cod' : 'pending'),
-      source,
-      totals: { subtotal: totals.subtotal, shipping: totals.shipping, tax: totals.tax, total: totals.total },
-      contact: contact || {},
-      address,
-      status: paymentMethod === 'cod' ? 'Confirmed' : 'Pending',
-      createdAt: new Date().toISOString(),
-    };
     try {
-      if (typeof localOrders.save === 'function') {
-        await localOrders.save(fallbackOrder);
+      const payload = {
+        userId: buyer?.id && !String(buyer.id).startsWith('TS-') ? buyer.id : null,
+        buyerName: contact?.name || buyer?.name || '',
+        buyerEmail: contact?.email || buyer?.email || '',
+        buyerPhone: contact?.phone || buyer?.phone || '',
+        buyerCompany: contact?.company || buyer?.company || '',
+        shippingMethod,
+        paymentMethod,
+        deliveryAddress: address,
+        isPartialPayment: Boolean(isPartialPayment),
+        advanceAmount: advanceAmount ? Number(advanceAmount) : null,
+        balanceDue: balanceDue ? Number(balanceDue) : null,
+        buyerGstin: buyerGstin || buyer?.gstin || null,
+        supplierGstin: supplierGstin || null,
+        lines: lines.map((line) => ({
+          productId: line.product?.id || line.productId,
+          name: line.product?.name || line.name,
+          sku: line.product?.sku || line.sku,
+          slug: line.product?.slug || line.slug,
+          quantity: line.quantity,
+          variant: line.variant || null,
+        })),
+        // The same key on a retry returns the order already created instead of a second one
+        idempotencyKey: idempotencyKey || `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        notes: `Placed via ${source}`,
+      };
+
+      const response = await apiPost('orders', payload);
+
+      if (response && response.success && response.data) {
+        const formatted = formatApiOrder(response.data, source);
+        // Also mirror to local collection for instant offline access
+        try {
+          if (typeof localOrders.save === 'function') {
+            await localOrders.save(formatted);
+          }
+        } catch {
+          // Ignore local storage mirror errors
+        }
+        return formatted;
       }
-    } catch {
-      // Ignore local storage error
+
+      // If backend explicitly replied with failure
+      throw new Error(response?.message || 'Order creation failed on backend.');
+    } catch (err) {
+      const isNetworkDown = err.message?.includes('timed out') || err.message?.includes('could not be reached') || err.status === 0;
+      if (isNetworkDown) throw new Error('We could not reach TradeExpress to place your order. Check your connection and try again; you have not been charged.');
+      throw err;
     }
-    return fallbackOrder;
   },
 };
 
