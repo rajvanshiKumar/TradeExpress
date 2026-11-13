@@ -22,6 +22,7 @@ export default function CustomSelect({
   searchable = true,
   disabled = false,
   compact = false,
+  align = 'left',
   className = '',
   panelClassName = '',
   required = false,
@@ -233,7 +234,9 @@ export default function CustomSelect({
           id={selectId}
           role="listbox"
           tabIndex={-1}
-          className={`ts-dropdown-anim absolute left-0 right-0 top-full z-50 mt-1.5 max-h-72 overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 backdrop-blur-2xl shadow-[0_20px_50px_-12px_rgba(11,39,22,0.18),0_0_0_1px_rgba(0,0,0,0.08)] ${panelClassName}`}
+          className={`ts-dropdown-anim absolute top-full z-50 mt-1.5 w-max min-w-full sm:min-w-[15.5rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 backdrop-blur-2xl shadow-[0_20px_50px_-12px_rgba(11,39,22,0.18),0_0_0_1px_rgba(0,0,0,0.08)] ${
+            align === 'right' ? 'right-0 left-auto' : 'left-0'
+          } ${panelClassName}`}
         >
           {/* Top Emerald Glow Accent */}
           <div
@@ -270,7 +273,7 @@ export default function CustomSelect({
           {/* Options List */}
           <div
             ref={listboxRef}
-            className="max-h-56 overflow-y-auto p-1.5 space-y-0.5 ts-no-scrollbar"
+            className="max-h-96 overflow-y-auto p-1.5 space-y-1"
           >
             {filteredOptions.length === 0 ? (
               <div className="px-3 py-4 text-center text-xs text-slate-400">
@@ -289,7 +292,7 @@ export default function CustomSelect({
                     aria-selected={isSelected}
                     onClick={() => handleSelect(opt.value)}
                     onMouseEnter={() => setHighlightedIndex(idx)}
-                    className={`group flex w-full items-start justify-between rounded-xl px-3 py-2.5 text-left text-xs transition-all cursor-pointer ${
+                    className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs transition-all cursor-pointer whitespace-nowrap ${
                       isSelected
                         ? 'bg-emerald-50 text-emerald-950 font-bold border border-emerald-300/70 shadow-2xs'
                         : isHighlighted
@@ -297,25 +300,18 @@ export default function CustomSelect({
                         : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
                     }`}
                   >
-                    <div className="flex flex-col min-w-0 pr-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`truncate ${isSelected ? 'text-emerald-950 font-bold' : 'text-slate-900 font-semibold'}`}>
-                          {opt.label}
-                        </span>
-                        {opt.badge && (
-                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">
-                            {opt.badge}
-                          </span>
-                        )}
-                      </div>
-                      {opt.description && (
-                        <span className="text-[11px] text-slate-500 font-normal line-clamp-2 mt-0.5 leading-snug">
-                          {opt.description}
+                    <div className="flex items-center gap-2 whitespace-nowrap min-w-0 pr-1">
+                      <span className={`whitespace-nowrap ${isSelected ? 'text-emerald-950 font-bold' : 'text-slate-900 font-semibold'}`}>
+                        {opt.label}
+                      </span>
+                      {opt.badge && (
+                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">
+                          {opt.badge}
                         </span>
                       )}
                     </div>
                     {isSelected && (
-                      <span className="flex size-4.5 items-center justify-center rounded-full bg-emerald-600 text-white shadow-2xs shrink-0 mt-0.5">
+                      <span className="flex size-4.5 items-center justify-center rounded-full bg-emerald-600 text-white shadow-2xs shrink-0 ml-2">
                         <Check className="size-3" strokeWidth={3} />
                       </span>
                     )}

@@ -358,6 +358,18 @@ export async function getKyc(req, res, next) {
 }
 
 
+/** Checks whether a mobile number or official phone is available or already registered to an existing buyer or supplier. */
+export async function checkPhone(req, res, next) {
+  try {
+    const phone = req.body?.phone || req.query?.phone;
+    const country = req.body?.country || req.query?.country || 'India';
+    const result = await authService.checkPhoneAvailability({ phone, country });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 /** Signs out the device making the request (its login token stops working immediately). */
 export async function logout(req, res, next) {
   try {

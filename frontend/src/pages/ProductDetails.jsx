@@ -21,6 +21,7 @@ import VerificationBadge from '../components/common/VerificationBadge';
 import SupplierGrid from '../components/suppliers/SupplierGrid';
 import useProducts from '../hooks/useProducts';
 import useCart from '../hooks/useCart';
+import useAuth from '../hooks/useAuth';
 import useCurrency from '../hooks/useCurrency';
 import useNotifications from '../hooks/useNotifications';
 import useContactSupplier from '../hooks/useContactSupplier';
@@ -39,9 +40,12 @@ const TABS = [
 
 export default function ProductDetails() {
   const { slug } = useParams();
+  const { user } = useAuth();
   const { getProduct, getCompany, getCategory, companies, products, loading, error, reload, trackView } = useProducts();
-  const { addToCart, removeFromCart, inCart } = useCart();
-  const { money } = useCurrency();
+  const { addToCart, updateQuantity, removeFromCart, lines } = useCart();
+  const { displayMoney, money: exactMoney, isConverting } = useCurrency();
+  // Browsing price, shown in the buyer's currency ("≈" when converted); checkout and orders keep the real currency
+  const money = (value) => displayMoney(value, product?.currency || 'INR');
   const { showToast } = useNotifications();
   const contact = useContactSupplier();
 
@@ -111,6 +115,37 @@ export default function ProductDetails() {
   const variantEntries = Object.entries(product.variants ?? {});
   const specifications = { ...product.specifications, 'Place of origin': company ? `${company.city ? `${company.city}, ` : ''}${company.country}` : null, Condition: product.condition };
 
+  const cartLine = useMemo(() => {
+    if (!product?.id || !lines) return null;
+    return lines.find((line) => line.productId === product.id) || null;
+  }, [lines, product?.id]);
+
+  const isInCart = Boolean(cartLine);
+
+  const handleQuantityChange = (newQty) => {
+    setQuantity(newQty);
+    if (isInCart && updateQuantity) {
+      updateQuantity(product.id, newQty);
+    }
+  };
+
+  const handleTierSelect = (tierQty) => {
+    setQuantity(tierQty);
+    if (isInCart && updateQuantity) {
+      updateQuantity(product.id, tierQty);
+    }
+  };
+
+  const handleAddToCart = () => {
+    if (outOfStock) return;
+    const selectedVariant = variantEntries.length ? variant : null;
+    if (isInCart) {
+      removeFromCart(product.id);
+    } else {
+      addToCart(product, quantity, selectedVariant);
+    }
+  };
+
   const share = async () => {
     const url = window.location.href;
     try {
@@ -150,13 +185,15 @@ export default function ProductDetails() {
           <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.8125rem] text-muted">
             <span>Product ID: <span className="font-semibold text-ink">{product.id}</span></span>
             <span>SKU: <span className="font-semibold text-ink">{product.sku}</span></span>
-            <Rating value={product.rating} count={product.reviewCount} />
+            {Number(product.reviewCount) > 0 && Number(product.rating) > 0 ? (
+              <Rating value={product.rating} count={product.reviewCount} />
+            ) : null}
           </p>
           <p className="mt-3 text-muted">{product.summary}</p>
 
           <section aria-labelledby="pricing-title" className="mt-5 rounded-2xl bg-white p-4 shadow-card ring-1 ring-line sm:p-5">
             <h2 id="pricing-title" className="mb-3 text-sm font-bold">Price per {product.unit}, by quantity <span className="font-normal text-muted">(INR, excl. shipping & taxes)</span></h2>
-            <PriceTiers product={product} quantity={quantity} onSelectTier={setQuantity} />
+            <PriceTiers product={product} quantity={quantity} onSelectTier={handleTierSelect} />
             <p className="mt-3 text-sm text-ink">Minimum order: <span className="font-bold">{quantityLabel(product.moq, product.unit)}</span></p>
 
             {variantEntries.map(([name, options]) => (
@@ -176,11 +213,14 @@ export default function ProductDetails() {
             <div className="mt-4 flex flex-wrap items-end gap-x-6 gap-y-3">
               <div>
                 <label htmlFor="product-quantity" className="ts-label">Quantity ({product.unit}s)</label>
-                <QuantityInput id="product-quantity" value={quantity} min={product.moq} max={maxQuantity} step={product.moq >= 100 ? 50 : product.moq >= 10 ? 5 : 1} onChange={setQuantity} />
+                <QuantityInput id="product-quantity" value={quantity} min={product.moq} max={maxQuantity} step={product.moq >= 100 ? 50 : product.moq >= 10 ? 5 : 1} onChange={handleQuantityChange} />
               </div>
               <div aria-live="polite">
                 <p className="text-[0.8125rem] text-muted">{quantityLabel(quantity, product.unit)} × {money(unitPrice)}</p>
                 <p className="font-display text-2xl font-extrabold text-navy-900">{money(total)} <span className="text-sm font-medium text-muted">estimated total</span></p>
+                {isConverting && (product.currency || 'INR') === 'INR' ? (
+                  <p className="text-xs text-muted">Approximate, using today’s rate. You pay in INR: <span className="font-semibold text-ink">{exactMoney(total)}</span></p>
+                ) : null}
               </div>
             </div>
 
@@ -188,22 +228,16 @@ export default function ProductDetails() {
               <Button
                 size="lg"
                 variant="outline"
-                icon={inCart(product.id) ? CheckCircle2 : ShoppingCart}
+                icon={ShoppingCart}
                 disabled={outOfStock}
-                onClick={() => {
-                  if (inCart(product.id)) {
-                    removeFromCart(product.id);
-                  } else {
-                    addToCart(product, quantity, variantEntries.length ? variant : null);
-                  }
-                }}
-                className={`transition-all font-bold ${
-                  inCart(product.id)
-                    ? '!bg-emerald-100/95 !text-emerald-900 !border-2 !border-emerald-500 shadow-sm ring-2 ring-emerald-500/20 hover:!bg-emerald-200/90'
-                    : '!bg-emerald-50 !text-emerald-800 !border !border-emerald-300/90 shadow-xs hover:!bg-emerald-100 hover:!border-emerald-400'
+                onClick={handleAddToCart}
+                className={`transition-all font-bold shadow-xs select-none active:scale-[0.98] ${
+                  isInCart
+                    ? '!bg-emerald-700 !text-white !border !border-emerald-800 hover:!bg-emerald-800'
+                    : '!bg-emerald-50 !text-emerald-800 !border !border-emerald-300/90 hover:!bg-emerald-100 hover:!border-emerald-400'
                 }`}
               >
-                {outOfStock ? 'Out of stock' : inCart(product.id) ? 'In Cart (Click to Remove)' : 'Add to Cart'}
+                {outOfStock ? 'Out of stock' : isInCart ? 'Added to Cart' : 'Add to Cart'}
               </Button>
               <BuyNowButton product={product} quantity={quantity} variant={variantEntries.length ? variant : null} size="lg" full />
               <Button variant="outline" icon={FileText} to={`/rfq?product=${product.id}`}>Request a Quote</Button>
@@ -290,22 +324,6 @@ export default function ProductDetails() {
                       ))}
                     </ul>
                   </div>
-                ) : company?.reviews?.length ? (
-                  <div>
-                    <p className="mb-4 rounded-lg bg-navy-50 px-4 py-3 text-[0.8125rem] text-navy-800">Verified buyer ratings will appear here after orders are delivered. Showing supplier benchmark feedback:</p>
-                    <ul className="divide-y">
-                      {company.reviews.map((review) => (
-                        <li key={review.id} className="py-4 first:pt-0 last:pb-0">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-ink">{review.author}</p>
-                            <p className="text-xs text-muted">{formatDate(review.date)}</p>
-                          </div>
-                          <Rating value={review.rating} showValue={false} className="mt-1" />
-                          <p className="mt-1.5 text-sm text-ink">{review.text}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
                 ) : (
                   <p className="text-sm text-muted">No reviews for this listing yet. Be the first verified buyer to review after delivery!</p>
                 )}
@@ -328,7 +346,9 @@ export default function ProductDetails() {
               <div className="flex justify-between gap-3"><dt className="text-muted">Business type</dt><dd className="font-semibold">{company.businessType}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-muted">Established</dt><dd className="font-semibold">{company.established}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-muted">Response time</dt><dd className="font-semibold">{company.responseTime}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-muted">Rating</dt><dd><Rating value={company.rating} /></dd></div>
+              {Number(company.rating) > 0 && Number(company.reviewCount) > 0 ? (
+                <div className="flex justify-between gap-3"><dt className="text-muted">Rating</dt><dd><Rating value={company.rating} count={company.reviewCount} /></dd></div>
+              ) : null}
             </dl>
             <div className="mt-3"><VerificationBadge company={company} size="md" /></div>
             <p className="mt-2 text-xs text-muted">Company details are provided by the supplier.</p>

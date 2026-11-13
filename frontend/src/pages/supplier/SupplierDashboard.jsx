@@ -7,8 +7,7 @@ import {
   Package,
   Plus,
   TriangleAlert,
-  Crown,
-  Check,
+  MessageSquare,
   Scale,
   TrendingUp,
   ShieldCheck,
@@ -21,13 +20,13 @@ import {
 import { SectionHeading } from '../../components/common/PageHeader';
 import StatCard from '../../components/common/StatCard';
 import Button from '../../components/common/Button';
-import Modal from '../../components/common/Modal';
 import { StatusBadge } from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import SupplierGuard from './SupplierGuard';
 import useOrders from '../../hooks/useOrders';
 import useAuth from '../../hooks/useAuth';
 import useInquiries from '../../hooks/useInquiries';
+import useMessages from '../../hooks/useMessages';
 import useCurrency from '../../hooks/useCurrency';
 import useProducts from '../../hooks/useProducts';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -40,12 +39,12 @@ function Overview({ company, products }) {
   const { user } = useAuth();
   const { orders } = useOrders();
   const { inquiries } = useInquiries();
+  const { unreadCount: unreadMessages } = useMessages();
   const { money } = useCurrency();
   const { products: allCatalogueProducts, getCompany } = useProducts();
 
   const [liveData, setLiveData] = useState(null);
   const [loadingLive, setLoadingLive] = useState(true);
-  const [showPlansModal, setShowPlansModal] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -174,7 +173,7 @@ function Overview({ company, products }) {
       />
 
       {/* Quick Action Navigation Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Link
           to="/supplier/products/new"
           className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-navy-950 shadow-2xs hover:border-emerald-600 hover:text-emerald-800 transition-colors"
@@ -183,6 +182,21 @@ function Overview({ company, products }) {
             <Plus className="size-4" />
           </div>
           <span>Add Product</span>
+        </Link>
+
+        <Link
+          to="/messages"
+          className="relative flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-navy-950 shadow-2xs hover:border-emerald-600 hover:text-emerald-800 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-teal-50 text-teal-800 flex items-center justify-center shrink-0">
+            <MessageSquare className="size-4" />
+          </div>
+          <span className="truncate">Messages & Inbox</span>
+          {unreadMessages > 0 ? (
+            <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white shrink-0">
+              {unreadMessages}
+            </span>
+          ) : null}
         </Link>
 
         <Link
@@ -224,31 +238,6 @@ function Overview({ company, products }) {
           </div>
           <span>Verification Status</span>
         </Link>
-      </div>
-
-      {/* Tier Banner */}
-      <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm font-black text-sm">
-            GOLD
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-navy-950 text-sm">Gold Merchant Membership · Active</h3>
-              <span className="rounded-full bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 text-[10px]">
-                {verification.isVerified ? 'VERIFIED MERCHANT' : 'KYC PENDING'}
-              </span>
-            </div>
-            <p className="text-xs text-muted mt-0.5">
-              Active Catalogue: <strong className="text-navy-900">{metrics.activeProducts} of {metrics.totalProducts}</strong> listings active · Priority buyer inquiries · Direct Escrow
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" icon={Crown} onClick={() => setShowPlansModal(true)}>
-            View Plan Limits
-          </Button>
-        </div>
       </div>
 
       {/* 4-Card Primary Metrics Grid */}
@@ -517,48 +506,6 @@ function Overview({ company, products }) {
           </div>
         </section>
       )}
-
-      {/* Plans Modal */}
-      <Modal open={showPlansModal} onClose={() => setShowPlansModal(false)} title="TradeExpress Supplier Plans" className="max-w-2xl">
-        <div className="space-y-4 text-xs">
-          <p className="text-muted">Compare wholesale merchant tiers and listing capacity:</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="rounded-xl border p-4 bg-white space-y-2">
-              <span className="font-bold text-slate-700">Free Tier</span>
-              <p className="text-lg font-black text-navy-900">₹0 <span className="text-[10px] font-normal text-muted">/mo</span></p>
-              <ul className="space-y-1.5 text-muted pt-2 border-t text-[11px]">
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Up to 5 listings</li>
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Standard RFQs</li>
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-slate-400" /> Standard Escrow</li>
-              </ul>
-            </div>
-
-            <div className="rounded-xl border p-4 bg-white space-y-2">
-              <span className="font-bold text-slate-700">Silver Verified</span>
-              <p className="text-lg font-black text-navy-900">₹4,999 <span className="text-[10px] font-normal text-muted">/yr</span></p>
-              <ul className="space-y-1.5 text-muted pt-2 border-t text-[11px]">
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Up to 25 listings</li>
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Verified Badge</li>
-                <li className="flex items-center gap-1.5"><Check className="size-3.5 text-blue-500" /> Priority RFQ alerts</li>
-              </ul>
-            </div>
-
-            <div className="rounded-xl border-2 border-amber-400 bg-amber-50/50 p-4 space-y-2 relative">
-              <span className="absolute -top-2.5 right-3 bg-amber-500 text-white font-bold text-[9px] px-2 py-0.5 rounded-full">
-                ACTIVE
-              </span>
-              <span className="font-bold text-amber-900">Gold Verified</span>
-              <p className="text-lg font-black text-navy-900">₹14,999 <span className="text-[10px] font-normal text-muted">/yr</span></p>
-              <ul className="space-y-1.5 text-navy-900 pt-2 border-t border-amber-200 text-[11px]">
-                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> 100 listings allowed</li>
-                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Instant Escrow Payout</li>
-                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Dedicated Account Mgr</li>
-                <li className="flex items-center gap-1.5 font-medium"><Check className="size-3.5 text-emerald-600" /> Top Supplier Placement</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

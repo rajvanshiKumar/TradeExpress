@@ -31,7 +31,7 @@ import addressService from '../services/addressService';
 // Front-end prototype authentication.
 export { AuthContext };
 
-const PUBLIC_ROLES = ['buyer', 'supplier'];
+const PUBLIC_ROLES = ['buyer', 'supplier', 'exporter'];
 const SESSION_HOURS = 12;
 const MAX_ATTEMPTS = 5;
 const LOCK_SECONDS = 30;
@@ -94,8 +94,8 @@ export function AuthProvider({ children }) {
     if (session.role === 'super_admin') return SUPER_ADMIN_PROFILE;
     if (session.role === 'admin') return ADMIN_PROFILE;
     const accountList = Array.isArray(accounts) ? accounts : [];
-    const found = accountList.find((account) => account && account.id === session.userId && PUBLIC_ROLES.includes(account.role));
-    return found && found.status !== 'Suspended' && found.role === session.role ? found : null;
+    const found = accountList.find((account) => account && account.id === session.userId && (PUBLIC_ROLES.includes(account.role) || (session.role === 'exporter' && account.role === 'supplier')));
+    return found && found.status !== 'Suspended' && (found.role === session.role || (session.role === 'exporter' && found.role === 'supplier')) ? found : null;
   }, [accounts, session]);
 
   // Follows this window's own role only: a sign-in or sign-out of that role elsewhere, an expired login, or a token
@@ -211,7 +211,7 @@ export function AuthProvider({ children }) {
       }
 
       if (res.data?.data?.token) {
-        storeAuthToken(res.data.data.token);
+        storeAuthToken(res.data.data.token, slotForRole(expectedRole || res.data.data.user?.role));
         backendUser = res.data.data.user;
       }
     } catch (err) {
@@ -225,7 +225,7 @@ export function AuthProvider({ children }) {
     }
 
     let activeAccount = accounts.find((item) => item.email.toLowerCase() === clean);
-    const resolvedRole = (backendUser.role || activeAccount?.role || expectedRole || 'buyer').toLowerCase();
+    const resolvedRole = (expectedRole || backendUser.role || activeAccount?.role || 'buyer').toLowerCase();
 
     if (activeAccount) {
       activeAccount = {
@@ -416,7 +416,7 @@ export function AuthProvider({ children }) {
   const setAuthUser = useCallback(async (backendUser, token, rawPassword = '') => {
     if (!backendUser?.id) return null;
     if (token) {
-      storeAuthToken(token);
+      storeAuthToken(token, slotForRole(backendUser.role));
     }
     const cleanRole = (backendUser.role || 'buyer').toLowerCase();
     const activeAccount = {

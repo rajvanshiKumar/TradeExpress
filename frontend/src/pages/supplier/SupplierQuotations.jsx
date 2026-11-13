@@ -338,7 +338,7 @@ export default function SupplierQuotations() {
                 Close
               </Button>
               <Button
-                to={`/messages`}
+                to={`/messages?rfq=${encodeURIComponent(selectedQuote.rfqId || selectedQuote.rfqNumber || selectedQuote.id || '')}&buyerId=${encodeURIComponent(selectedQuote.buyerId || '')}`}
                 variant="primary"
                 size="sm"
                 icon={Send}

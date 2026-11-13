@@ -13,7 +13,9 @@ export default function RoleRoute({ roles }) {
   const allowed = Boolean(
     user &&
       (normalizedRoles.includes(userRole) ||
-        (userRole === 'super_admin' && normalizedRoles.includes('admin')))
+        (userRole === 'super_admin' && normalizedRoles.includes('admin')) ||
+        (userRole === 'exporter' && normalizedRoles.includes('supplier')) ||
+        (userRole === 'supplier' && normalizedRoles.includes('exporter')))
   );
 
   if (allowed) return <Outlet />;

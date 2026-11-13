@@ -269,18 +269,11 @@ export async function checkPanAadhaarLinkStatus({
 
   // Local/demo signup: accept any correctly shaped PAN/Aadhaar pair without calling
   // the paid provider. This mode is disabled automatically in production.
-  const testMode = isPanAadhaarTestMode();
   const cacheKey = secretHash(`${aadhaar}:${cleanPan}`);
   const cached = linkStatusCache.get(cacheKey);
   let outcome;
   let fromCache = false;
-  if (testMode) {
-    outcome = {
-      status: 'LINKED', linked: true, maskedPan: null, requestId: 'TEST_MODE', definitive: false,
-      reason: 'TEST_MODE',
-      message: 'TEST MODE: accepted for signup only. PAN–Aadhaar linkage was not checked with Income Tax records.',
-    };
-  } else if (!bypassCache && cached && cached.expiresAt > Date.now()) {
+  if (!bypassCache && cached && cached.expiresAt > Date.now()) {
     outcome = cached.outcome;
     fromCache = true;
   } else {

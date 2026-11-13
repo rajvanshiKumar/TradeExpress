@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Download, Eye, Lock, RefreshCw, ShieldCheck } from 'lucide-react';
 import Button from '../common/Button';
-import CustomSelect from '../common/CustomSelect';
 import { TableSkeleton } from '../common/Skeleton';
 import { AccountCard } from './AccountUi';
 import { Notice } from './AccountVerificationFlows';
-import { useTranslation } from '../../i18n/LanguageContext';
-import { SUPPORTED_COUNTRIES, SUPPORTED_LANGUAGES } from '../../i18n/languages';
+import { LocationForm } from '../layout/LocationSelector';
+import { PreferenceCurrencyPicker } from '../layout/PreferencesMenu';
 import { exportAccountData, getPreferences, updatePreferences } from '../../services/accountApi';
 import { formatDateTime } from '../../utils/formatDate';
 
@@ -123,40 +122,22 @@ export function AccountEmailPreferencesSection() {
   );
 }
 
-/** Language Preferences: saved to the account and applied on every sign-in. */
+/** Location & currency: where deliveries go and the currency prices are shown in. TradeExpress is always in English. */
 export function AccountLanguageSection() {
-  const { data, error, message, saving, load, save } = usePreferences();
-  const { setLanguage, setCountry } = useTranslation();
-  const [draft, setDraft] = useState(null);
-  useEffect(() => { if (data && !draft) setDraft(data.preferences.language); }, [data, draft]);
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (!draft || saving) return;
-    if (await save({ language: draft }, 'Language and region saved. They will be used whenever you sign in.')) {
-      setLanguage(draft.language);
-      setCountry(draft.country);
-    }
-  };
-
+  const [savedMessage, setSavedMessage] = useState('');
   return (
-    <AccountCard title="Language preferences" description="The language and region TradeExpress uses for you on every device.">
-      <Notice message={message} />
-      {!data || !draft ? <LoadState error={error} onRetry={load} /> : (
-        <form onSubmit={submit} className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="pref-language" className="ts-label">Language</label>
-              <CustomSelect id="pref-language" value={draft.language} onChange={(e) => setDraft((d) => ({ ...d, language: e.target.value }))} searchable={false} options={SUPPORTED_LANGUAGES.filter((l) => data.languages.includes(l.code)).map((l) => ({ value: l.code, label: `${l.nativeName} (${l.label})` }))} />
-            </div>
-            <div>
-              <label htmlFor="pref-country" className="ts-label">Country / region</label>
-              <CustomSelect id="pref-country" value={draft.country} onChange={(e) => setDraft((d) => ({ ...d, country: e.target.value }))} searchable={false} options={SUPPORTED_COUNTRIES.filter((c) => data.countries.includes(c.name)).map((c) => ({ value: c.name, label: `${c.flag} ${c.name}`, description: `Prices in ${c.currency}` }))} />
-            </div>
-          </div>
-          <div className="flex justify-end"><Button type="submit" loading={saving}>Save language & region</Button></div>
-        </form>
-      )}
+    <AccountCard title="Location & currency" description="Your delivery country and postal code, and the currency product prices are shown in. Saved to your account for every device. TradeExpress is always shown in English.">
+      <Notice message={savedMessage} />
+      <div className="grid gap-6 md:grid-cols-2">
+        <div>
+          <h3 className="mb-3 text-sm font-bold text-navy-900">Delivery location</h3>
+          <LocationForm idPrefix="account-location" onSaved={() => setSavedMessage('Location saved. It applies on every device you sign in to.')} />
+        </div>
+        <div>
+          <h3 className="mb-3 text-sm font-bold text-navy-900">Display currency</h3>
+          <PreferenceCurrencyPicker />
+        </div>
+      </div>
     </AccountCard>
   );
 }

@@ -11,7 +11,15 @@ import { apiGet, apiPatch, isApiConfigured } from '../services/apiClient';
 export { NotificationContext };
 
 const matchesUser = (notification, user) =>
-  Boolean(user) && (notification.audience === user.id || notification.audience === `role:${user.role}` || (user.companyId && notification.audience === `company:${user.companyId}`));
+  Boolean(user) && (
+    notification.audience === 'all' ||
+    notification.audience === user.id ||
+    notification.audience === `role:${user.role}` ||
+    (user.companyId && notification.audience === `company:${user.companyId}`)
+  );
+
+const NOTIFICATION_POLL_INTERVAL_MS = 45000; // 45 seconds (within 30-60s requirement)
+const MIN_VISIBILITY_REFRESH_MS = 30000;
 
 export function NotificationProvider({ children }) {
   const { user } = useContext(AuthContext);
@@ -19,41 +27,86 @@ export function NotificationProvider({ children }) {
   const [backendItems, setBackendItems] = useState([]);
   const [toasts, setToasts] = useState([]);
   const timers = useRef(new Map());
+  const inFlightRef = useRef(false);
+  const lastFetchTimeRef = useRef(0);
+  const abortControllerRef = useRef(null);
 
-  // Fetch backend notifications when user is authenticated
-  useEffect(() => {
+  const fetchBackendNotifications = useCallback(async (force = false) => {
     if (!user?.id || !isApiConfigured) return;
-    let isMounted = true;
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible' && !force) {
+      return;
+    }
+    if (inFlightRef.current) return;
 
-    async function fetchBackendNotifications() {
-      try {
-        const res = await apiGet(`notifications?userId=${encodeURIComponent(user.id)}`);
-        if (isMounted && res && res.success && res.data?.notifications) {
-          const mapped = res.data.notifications.map((n) => ({
-            id: n.id,
-            audience: n.userId,
-            type: n.type?.toLowerCase() || 'orders',
-            title: n.title,
-            body: n.message,
-            link: n.link || '',
-            read: n.read,
-            at: n.createdAt,
-            isBackend: true,
-          }));
-          setBackendItems(mapped);
-        }
-      } catch (err) {
+    inFlightRef.current = true;
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      // Use authenticated session token identity; do not pass untrusted userId parameters
+      const res = await apiGet('notifications?limit=50', { signal: controller.signal });
+      lastFetchTimeRef.current = Date.now();
+      const list = res?.data?.notifications || (Array.isArray(res?.data) ? res.data : []);
+      if (res && res.success && Array.isArray(list)) {
+        const mapped = list.map((n) => ({
+          id: n.id,
+          audience: n.userId || user.id,
+          type: n.type?.toLowerCase() || 'orders',
+          rawType: n.type,
+          title: n.title,
+          body: n.message || n.body,
+          message: n.message || n.body,
+          link: n.link || '',
+          read: Boolean(n.read || n.isRead),
+          isRead: Boolean(n.read || n.isRead),
+          at: n.createdAt || n.at || new Date().toISOString(),
+          createdAt: n.createdAt || n.at || new Date().toISOString(),
+          isBackend: true,
+        }));
+        setBackendItems(mapped);
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
         console.warn('[TradeExpress] Could not sync backend notifications:', err.message);
       }
+    } finally {
+      inFlightRef.current = false;
+    }
+  }, [user?.id]);
+
+  // Centralized polling with tab visibility guard and automatic cleanup
+  useEffect(() => {
+    if (!user?.id || !isApiConfigured) {
+      setBackendItems([]);
+      abortControllerRef.current?.abort();
+      return;
     }
 
-    fetchBackendNotifications();
-    const interval = setInterval(fetchBackendNotifications, 15000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
+    fetchBackendNotifications(true);
+
+    const interval = setInterval(() => {
+      fetchBackendNotifications(false);
+    }, NOTIFICATION_POLL_INTERVAL_MS);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const elapsed = Date.now() - lastFetchTimeRef.current;
+        if (elapsed >= MIN_VISIBILITY_REFRESH_MS) {
+          fetchBackendNotifications(true);
+        }
+      }
     };
-  }, [user?.id]);
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      abortControllerRef.current?.abort();
+      inFlightRef.current = false;
+    };
+  }, [user?.id, fetchBackendNotifications]);
 
   const dismissToast = useCallback((id) => {
     window.clearTimeout(timers.current.get(id));
@@ -100,7 +153,7 @@ export function NotificationProvider({ children }) {
     setBackendItems((previous) => previous.map((item) => (item.id === id ? { ...item, read: true } : item)));
 
     if (isApiConfigured && id) {
-      apiPatch(`notifications/${encodeURIComponent(id)}/read`, {}).catch(() => {});
+      apiPatch(`notifications/${encodeURIComponent(id)}/read`, {}).catch(() => { });
     }
   }, [setAll]);
 
@@ -109,7 +162,7 @@ export function NotificationProvider({ children }) {
     setBackendItems((previous) => previous.map((item) => ({ ...item, read: true })));
 
     if (isApiConfigured && user?.id) {
-      apiPatch(`notifications/read-all`, { userId: user.id }).catch(() => {});
+      apiPatch('notifications/read-all', {}).catch(() => { });
     }
   }, [setAll, user]);
 
@@ -119,8 +172,8 @@ export function NotificationProvider({ children }) {
   }, [setAll, user]);
 
   const value = useMemo(() => ({
-    toasts, showToast, dismissToast, notifications, unreadCount, addNotification, markRead, markAllRead, clearNotifications,
-  }), [toasts, showToast, dismissToast, notifications, unreadCount, addNotification, markRead, markAllRead, clearNotifications]);
+    toasts, showToast, dismissToast, notifications, unreadCount, addNotification, markRead, markAllRead, clearNotifications, refreshNotifications: fetchBackendNotifications,
+  }), [toasts, showToast, dismissToast, notifications, unreadCount, addNotification, markRead, markAllRead, clearNotifications, fetchBackendNotifications]);
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 }

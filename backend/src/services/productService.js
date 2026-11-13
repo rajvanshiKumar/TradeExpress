@@ -1,5 +1,23 @@
 import prisma from '../config/db.js';
 
+/**
+ * Public supplier details sent with each listed product, for product cards. Only what the supplier record holds:
+ * no country is assumed, and "verified" means the supplier's KYC was approved (isVerified on a user only says the
+ * email address was confirmed). Returns null without a supplier record.
+ */
+export function listingSupplier(sup) {
+  if (!sup) return null;
+  return {
+    id: sup.id,
+    name: sup.name,
+    company: sup.company || sup.name,
+    city: sup.city || null,
+    country: sup.country || null,
+    isVerified: sup.kycStatus === 'VERIFIED',
+    kycStatus: sup.kycStatus || 'NOT_SUBMITTED',
+  };
+}
+
 export async function listProducts({
   category,
   search,
@@ -76,6 +94,7 @@ export async function listProducts({
           select: { name: true, slug: true },
         },
         images: { orderBy: { sortOrder: 'asc' } },
+        reviews: { select: { rating: true } },
       },
     }),
   ]);
@@ -122,17 +141,7 @@ export async function listProducts({
     return {
       ...formattedItem,
       supplierCount: count,
-      supplier: sup
-        ? {
-            id: sup.id,
-            name: sup.name,
-            company: sup.company || sup.name,
-            city: sup.city,
-            country: sup.country || 'India',
-            isVerified: Boolean(sup.isVerified || sup.kycStatus === 'VERIFIED'),
-            kycStatus: sup.kycStatus || 'NOT_SUBMITTED',
-          }
-        : null,
+      supplier: listingSupplier(sup),
     };
   });
 
@@ -154,6 +163,7 @@ export async function getProductBySlug(slug) {
     include: {
       category: true,
       images: { orderBy: { sortOrder: 'asc' } },
+      reviews: { select: { rating: true } },
     },
   });
 
@@ -169,7 +179,11 @@ export async function getProductBySlug(slug) {
 export async function getProductById(id) {
   let product = await prisma.product.findUnique({
     where: { id },
-    include: { category: true },
+    include: {
+      category: true,
+      images: { orderBy: { sortOrder: 'asc' } },
+      reviews: { select: { rating: true } },
+    },
   });
 
   if (!product) {
@@ -184,7 +198,11 @@ export async function getProductById(id) {
           { slug: id },
         ],
       },
-      include: { category: true },
+      include: {
+        category: true,
+        images: { orderBy: { sortOrder: 'asc' } },
+        reviews: { select: { rating: true } },
+      },
     });
   }
 
@@ -240,6 +258,12 @@ export async function getCategoryBySlug(slug) {
 }
 
 function formatProduct(p) {
+  const reviews = Array.isArray(p.reviews) ? p.reviews : [];
+  const reviewCount = reviews.length > 0 ? reviews.length : (p.reviewCount ? Number(p.reviewCount) : 0);
+  const rating = reviews.length > 0
+    ? Math.round((reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / reviews.length) * 10) / 10
+    : (p.rating ? Number(p.rating) : 0);
+
   return {
     ...p,
     price: Number(p.price),
@@ -247,6 +271,8 @@ function formatProduct(p) {
     specifications: p.specifications || {},
     packaging: p.packaging || {},
     priceTiers: p.priceTiers || [],
+    rating,
+    reviewCount,
   };
 }
 
@@ -371,8 +397,8 @@ export async function getProductSuppliers(slugOrId) {
     const isVerified = Boolean(supUser.isVerified || supUser.kycStatus === 'VERIFIED');
     const location = [supUser.city, supUser.country || 'India'].filter(Boolean).join(', ');
     const ratingData = ratingsBySupplier.get(supUser.id);
-    const averageRating = ratingData && ratingData.count > 0 ? Math.round((ratingData.totalRating / ratingData.count) * 10) / 10 : 4.8;
-    const reviewCount = ratingData ? ratingData.count : (isVerified ? 28 : 8);
+    const averageRating = ratingData && ratingData.count > 0 ? Math.round((ratingData.totalRating / ratingData.count) * 10) / 10 : 0;
+    const reviewCount = ratingData ? ratingData.count : 0;
 
     const price = Number(listing.price);
     const moq = listing.moq;

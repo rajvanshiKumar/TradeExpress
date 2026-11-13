@@ -28,6 +28,7 @@ import {
   Image as ImageIcon,
   ArrowRight,
   BadgeCheck,
+  Loader2,
 } from 'lucide-react';
 
 import CustomSelect from '../common/CustomSelect';
@@ -35,6 +36,7 @@ import OtpModal from '../common/OtpModal';
 import SixDigitOtpRow from '../common/SixDigitOtpRow';
 import PasswordValidationIndicator from '../common/PasswordValidationIndicator';
 import useAuth from '../../hooks/useAuth';
+import useProducts from '../../hooks/useProducts';
 import useNotifications from '../../hooks/useNotifications';
 import {
   COUNTRIES,
@@ -44,7 +46,9 @@ import {
   SUPPLIER_BUSINESS_TYPES,
   SUPPLIER_DOC_TYPES,
   ROLE_HOME,
+  STORAGE_KEYS,
 } from '../../utils/constants';
+import { readStorage } from '../../utils/storage';
 import { normalizeEmail, parseMobile, mobileExample, rules, validate, hasErrors } from '../../utils/validators';
 import { validatePassword } from '../../utils/passwordRules';
 import { certificateFormatHint, isValidCertificateFormat, normalizeCertificateNumber } from '../../utils/certificateFormats';
@@ -103,7 +107,8 @@ const SERVER_UNREACHABLE = 'Unable to reach the TradeExpress server. Please chec
 const AUTH_REQUEST_TIMEOUT_MS = 20000;
 
 export default function SupplierRegisterForm() {
-  const { preferences, setAuthUser } = useAuth();
+  const { preferences, setAuthUser, accounts: authAccounts } = useAuth();
+  const { addCompany } = useProducts();
   const { showToast } = useNotifications();
   const navigate = useNavigate();
   // Set by "Continue with Google" when this Google account has no supplier yet: the email is already verified by Google
@@ -111,6 +116,7 @@ export default function SupplierRegisterForm() {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [checkingBusinessPhone, setCheckingBusinessPhone] = useState(false);
   const [formError, setFormError] = useState('');
   const [submittedData, setSubmittedData] = useState(null);
 
@@ -261,6 +267,113 @@ export default function SupplierRegisterForm() {
     }
   };
 
+  // Checks local accounts for conflicting official/mobile phone numbers
+  const findConflictingLocalAccount = (phoneInput, myPhone) => {
+    const clean = String(phoneInput || '').replace(/\D/g, '').slice(-10);
+    if (!clean || clean.length !== 10) return null;
+
+    const repDigits = String(myPhone || '').replace(/\D/g, '').slice(-10);
+    if (clean === repDigits) {
+      return {
+        type: 'REPRESENTATIVE_PHONE',
+        message: 'Official phone number cannot be the same as your representative mobile number.',
+      };
+    }
+
+    const localAccounts = readStorage(STORAGE_KEYS.accounts, []) || [];
+    const allAccounts = [
+      ...(Array.isArray(authAccounts) ? authAccounts : []),
+      ...(Array.isArray(localAccounts) ? localAccounts : []),
+    ];
+
+    for (const acc of allAccounts) {
+      if (!acc) continue;
+      const userPhoneDigits = String(acc.phone || '').replace(/\D/g, '').slice(-10);
+      const userBizDigits = String(acc.businessPhone || '').replace(/\D/g, '').slice(-10);
+      if ((userPhoneDigits && userPhoneDigits === clean) || (userBizDigits && userBizDigits === clean)) {
+        const role = (acc.role || '').toLowerCase() === 'buyer' ? 'buyer' : 'supplier';
+        return {
+          type: 'EXISTING_ACCOUNT',
+          role: acc.role,
+          message: `This official phone number is already registered to a ${role} account.`,
+        };
+      }
+    }
+    return null;
+  };
+
+  // Asynchronously queries server to check official phone number availability
+  const checkOfficialPhoneAvailability = async (phoneDigits) => {
+    const clean = String(phoneDigits || '').replace(/\D/g, '').slice(-10);
+    if (!clean || clean.length !== 10) return { available: true };
+    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    try {
+      const res = await fetch(`${baseUrl}/auth/check-phone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: clean, country: values.countryCode || values.country || 'India' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.available === false) {
+        return {
+          available: false,
+          message: data.message || 'This official phone number is already registered to another account.',
+        };
+      }
+      return { available: true };
+    } catch {
+      return { available: true };
+    }
+  };
+
+  const handleBusinessPhoneBlur = async () => {
+    const phoneVal = (values.businessPhone || '').trim();
+    if (!phoneVal) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.businessPhone;
+        return next;
+      });
+      return;
+    }
+
+    if (phoneVal.length !== 10) {
+      setErrors((prev) => ({ ...prev, businessPhone: 'Office phone number must be exactly 10 digits.' }));
+      return;
+    }
+
+    const repDigits = String(values.phone || '').replace(/\D/g, '').slice(-10);
+    if (phoneVal === repDigits) {
+      setErrors((prev) => ({ ...prev, businessPhone: 'Official phone number cannot be the same as your representative mobile number.' }));
+      return;
+    }
+
+    const localConflict = findConflictingLocalAccount(phoneVal, values.phone);
+    if (localConflict) {
+      setErrors((prev) => ({ ...prev, businessPhone: localConflict.message }));
+      return;
+    }
+
+    setCheckingBusinessPhone(true);
+    try {
+      const result = await checkOfficialPhoneAvailability(phoneVal);
+      if (!result.available) {
+        setErrors((prev) => ({ ...prev, businessPhone: result.message }));
+      } else {
+        setErrors((prev) => {
+          if (prev.businessPhone && (prev.businessPhone.includes('already registered') || prev.businessPhone.includes('same as your representative'))) {
+            const next = { ...prev };
+            delete next.businessPhone;
+            return next;
+          }
+          return prev;
+        });
+      }
+    } finally {
+      setCheckingBusinessPhone(false);
+    }
+  };
+
   const mobileMaxDigits = Math.max(...(COUNTRY_PHONE_RULES[values.countryCode || 'India']?.lengths || [10]));
 
   // Handle Input Changes
@@ -272,6 +385,33 @@ export default function SupplierRegisterForm() {
     }
     if (field === 'businessPhone') {
       val = String(val || '').replace(/\D/g, '').slice(0, 10);
+      if (val.length === 10) {
+        const repDigits = String(values.phone || '').replace(/\D/g, '').slice(-10);
+        if (val === repDigits) {
+          setErrors((prev) => ({ ...prev, businessPhone: 'Official phone number cannot be the same as your representative mobile number.' }));
+        } else {
+          const conflict = findConflictingLocalAccount(val, values.phone);
+          if (conflict) {
+            setErrors((prev) => ({ ...prev, businessPhone: conflict.message }));
+          } else {
+            setErrors((prev) => {
+              if (prev.businessPhone && (prev.businessPhone.includes('same as your representative') || prev.businessPhone.includes('already registered'))) {
+                const { businessPhone, ...rest } = prev;
+                return rest;
+              }
+              return prev;
+            });
+          }
+        }
+      } else {
+        setErrors((prev) => {
+          if (prev.businessPhone && (prev.businessPhone.includes('same as your representative') || prev.businessPhone.includes('already registered'))) {
+            const { businessPhone, ...rest } = prev;
+            return rest;
+          }
+          return prev;
+        });
+      }
     }
     if (field === 'yearEstablished') {
       val = String(val || '').replace(/\D/g, '').slice(0, 4);
@@ -986,8 +1126,20 @@ export default function SupplierRegisterForm() {
       }
 
       // Office phone (optional): exactly 10 digits when given
-      if (values.businessPhone && values.businessPhone.length !== 10) {
-        stepErrors.businessPhone = 'Office phone number must be exactly 10 digits.';
+      if (values.businessPhone) {
+        if (values.businessPhone.length !== 10) {
+          stepErrors.businessPhone = 'Office phone number must be exactly 10 digits.';
+        } else {
+          const repDigits = String(values.phone || '').replace(/\D/g, '').slice(-10);
+          if (values.businessPhone === repDigits) {
+            stepErrors.businessPhone = 'Official phone number cannot be the same as your representative mobile number.';
+          } else {
+            const conflict = findConflictingLocalAccount(values.businessPhone, values.phone);
+            if (conflict) {
+              stepErrors.businessPhone = conflict.message;
+            }
+          }
+        }
       }
 
       // Year Established validation
@@ -1076,6 +1228,39 @@ export default function SupplierRegisterForm() {
   };
 
   const handleNext = async () => {
+    if (currentStep === 2) {
+      if (!validateStep(2)) return;
+      if (values.businessPhone && values.businessPhone.length === 10) {
+        const repDigits = String(values.phone || '').replace(/\D/g, '').slice(-10);
+        if (values.businessPhone === repDigits) {
+          setErrors((prev) => ({ ...prev, businessPhone: 'Official phone number cannot be the same as your representative mobile number.' }));
+          return;
+        }
+        const conflict = findConflictingLocalAccount(values.businessPhone, values.phone);
+        if (conflict) {
+          setErrors((prev) => ({ ...prev, businessPhone: conflict.message }));
+          return;
+        }
+        setCheckingBusinessPhone(true);
+        try {
+          const check = await checkOfficialPhoneAvailability(values.businessPhone);
+          if (!check.available) {
+            setErrors((prev) => ({ ...prev, businessPhone: check.message }));
+            setCheckingBusinessPhone(false);
+            return;
+          }
+        } catch {
+          // allow progress if network unavailable
+        } finally {
+          setCheckingBusinessPhone(false);
+        }
+      }
+      setFormError('');
+      setCurrentStep(3);
+      window.scrollTo({ top: 120, behavior: 'smooth' });
+      return;
+    }
+
     if (currentStep === 4 && values.panAadhaarStatus !== 'LINKED') {
       const rawPan = (values.panNumber || '').trim().toUpperCase();
       const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
@@ -1182,6 +1367,34 @@ export default function SupplierRegisterForm() {
         }
         if (setAuthUser && data.data) {
           await setAuthUser(data.data.user || data.data, data.data.token, '');
+        }
+
+        if (addCompany && payload.companyName) {
+          try {
+            const hasDocs = Array.isArray(payload.documents) && payload.documents.some((d) => d && d.fileUrl);
+            const userKycStatus = data.data?.user?.kycStatus || (hasDocs ? 'PENDING' : 'NOT_SUBMITTED');
+            const isVer = Boolean(data.data?.user?.isVerified || userKycStatus === 'VERIFIED');
+            addCompany({
+              name: payload.companyName,
+              country: payload.country || 'India',
+              city: payload.city || '',
+              businessType: payload.businessType || 'Supplier',
+              verified: isVer,
+              isVerified: isVer,
+              kycStatus: userKycStatus,
+              verification: {
+                status: isVer ? 'reviewed' : (userKycStatus === 'PENDING' ? 'under-review' : 'not-submitted'),
+                label: isVer ? 'Verified Supplier' : (userKycStatus === 'PENDING' ? 'Verification Pending' : 'Not verified'),
+                submittedAt: new Date().toISOString(),
+                reviewedAt: isVer ? new Date().toISOString() : null,
+                documents: payload.documents || [],
+              },
+              contact: { person: payload.name, email: payload.email, phone: payload.phone, address: payload.businessAddress || '' },
+            });
+            window.dispatchEvent(new Event('tradeexpress_auth_changed'));
+          } catch (e) {
+            console.warn('Could not add to companies collection:', e);
+          }
         }
 
         setSubmittedData({
@@ -1821,21 +2034,32 @@ export default function SupplierRegisterForm() {
               {/* Business Landline / Secondary Phone */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Office Phone Number (Optional)
+                  Official Phone Number (Optional)
                 </label>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  placeholder="10-digit number, e.g. 2245678900"
-                  value={values.businessPhone}
-                  onChange={handleChange('businessPhone')}
-                  onKeyDown={handlePhoneKeyDown}
-                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
-                    errors.businessPhone ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                  }`}
-                />
+                <div className="relative">
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="10-digit number, e.g. 2245678900"
+                    value={values.businessPhone}
+                    onChange={handleChange('businessPhone')}
+                    onBlur={handleBusinessPhoneBlur}
+                    onKeyDown={handlePhoneKeyDown}
+                    className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
+                      errors.businessPhone ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
+                    }`}
+                  />
+                  {checkingBusinessPhone && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                    </div>
+                  )}
+                </div>
                 {errors.businessPhone && <p className="mt-1 text-xs text-red-600">{errors.businessPhone}</p>}
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Direct official company phone or landline. Must not match your personal mobile or any registered buyer or supplier.
+                </p>
               </div>
 
               {/* Year Established */}
@@ -2377,6 +2601,12 @@ export default function SupplierRegisterForm() {
                     <div>
                       <span className="text-slate-400 block">Established:</span>
                       <span className="font-semibold text-slate-800">{values.yearEstablished}</span>
+                    </div>
+                  )}
+                  {values.businessPhone && (
+                    <div>
+                      <span className="text-slate-400 block">Official Phone:</span>
+                      <span className="font-semibold text-slate-800">{values.businessPhone}</span>
                     </div>
                   )}
                   <div className="col-span-2">

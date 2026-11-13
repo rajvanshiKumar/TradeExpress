@@ -3,7 +3,6 @@ import { Bookmark, Clock, MapPin, MessageSquare } from 'lucide-react';
 import Button from '../common/Button';
 import Image from '../common/Image';
 import CompanyLogo from '../common/CompanyLogo';
-import Rating from '../common/Rating';
 import VerificationBadge from '../common/VerificationBadge';
 import useProducts from '../../hooks/useProducts';
 import useWishlist from '../../hooks/useWishlist';
@@ -34,7 +33,6 @@ export function SaveSupplierButton({ company, className = '' }) {
       onClick={handleClick}
       aria-pressed={saved}
       aria-label={saved ? `Remove ${company.name} from saved suppliers` : `Save ${company.name}`}
-      title={user ? (saved ? 'Remove from saved suppliers' : 'Save supplier') : 'Log in to save supplier'}
       className={`inline-flex size-9 items-center justify-center rounded-full bg-white/90 shadow-sm ring-1 ring-navy-900/5 backdrop-blur transition-all hover:scale-105 hover:ring-brand-500 ${saved ? 'text-brand-600' : 'text-navy-900'} ${className}`}
     >
       <Bookmark className={`size-4 ${saved ? 'fill-current' : ''}`} aria-hidden="true" />
@@ -63,7 +61,6 @@ export default function SupplierCard({ company }) {
         </div>
         <h3 className="mt-3 font-display text-lg font-bold leading-snug"><Link to={href} className="hover:text-brand-600">{company.name}</Link></h3>
         <p className="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-muted"><MapPin className="size-3.5 shrink-0" aria-hidden="true" />{company.flag} {company.city ? `${company.city}, ` : ''}{company.country}</p>
-        <div className="mt-2"><Rating value={company.rating} count={company.reviewCount} /></div>
 
         <dl className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-ivory p-3 text-center text-[0.75rem]">
           <div><dt className="text-muted">Type</dt><dd className="mt-0.5 truncate font-semibold text-navy-900">{company.businessType}</dd></div>

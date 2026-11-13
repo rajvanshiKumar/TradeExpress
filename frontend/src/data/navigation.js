@@ -4,8 +4,6 @@ export const mainNav = [
   { label: 'Explore Products', to: '/products' },
   { label: 'Categories', to: '/categories', megaMenu: true },
   { label: 'Find Suppliers', to: '/suppliers' },
-  { label: 'Exporters', to: '/exporters' },
-  { label: 'Request For Quotation', to: '/rfq' },
   { label: 'Compare Products', to: '/compare-products' },
   { label: 'Wishlist', to: '/wishlist' },
   { label: 'Help', to: '/help' },
@@ -16,7 +14,6 @@ export const mainNav = [
 // Secondary shortcuts shown in the mobile menu and footer.
 export const quickLinks = [
   { label: 'Help Center', to: '/help' },
-  { label: 'Verified Exporters', to: '/exporters' },
   { label: 'Find Suppliers', to: '/suppliers' },
   { label: 'Request for Quotation (RFQ)', to: '/rfq' },
   { label: 'Ready to Ship', to: '/products?ready=1' },
@@ -40,7 +37,6 @@ export const footerColumns = [
       { label: 'Explore products', to: '/products' },
       { label: 'All categories', to: '/categories' },
       { label: 'Find verified suppliers', to: '/suppliers' },
-      { label: 'Verified Indian exporters', to: '/exporters' },
       { label: 'Request for quotation (RFQ)', to: '/rfq' },
       { label: 'Ready to ship', to: '/products?ready=1' },
       { label: 'Buyer protection guide', to: '/info/buyer-protection' },
@@ -69,7 +65,7 @@ export const footerColumns = [
 
 export const dashboardNav = {
   buyer: [
-    { label: 'Dashboard Overview', to: '/buyer', icon: 'LayoutDashboard' },
+    { label: 'Dashboard', to: '/buyer', icon: 'LayoutDashboard' },
     { label: 'Find Products', to: '/products', icon: 'Search' },
     { label: 'Compare Similar Products', to: '/compare-products', icon: 'Scale' },
     { label: 'Request a Quote (RFQ)', to: '/rfq', icon: 'FileSpreadsheet' },

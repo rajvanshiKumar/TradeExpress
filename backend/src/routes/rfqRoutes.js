@@ -7,12 +7,23 @@ import { validate } from '../middleware/validate.js';
 const router = Router();
 
 router.get('/', optionalAuth, rfqController.listRfqs);
+router.get('/matching-suppliers', optionalAuth, rfqController.getMatchingSuppliers);
 router.post(
   '/',
   optionalAuth,
   validate([
-    body('title').notEmpty().withMessage('Title is required.'),
-    body('quantity').isInt({ min: 1 }).withMessage('Quantity must be at least 1.'),
+    body('title').custom((value, { req }) => {
+      if (value && String(value).trim()) return true;
+      if (req.body.products && Array.isArray(req.body.products) && req.body.products.length > 0) return true;
+      if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) return true;
+      throw new Error('Title or at least one product is required.');
+    }),
+    body('quantity').custom((value, { req }) => {
+      if (value !== undefined && value !== null && parseInt(value, 10) >= 1) return true;
+      if (req.body.products && Array.isArray(req.body.products) && req.body.products.length > 0) return true;
+      if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) return true;
+      throw new Error('Quantity must be at least 1.');
+    }),
   ]),
   rfqController.createRfq
 );

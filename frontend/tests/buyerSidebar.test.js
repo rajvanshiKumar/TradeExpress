@@ -4,7 +4,7 @@ import { dashboardNav } from '../src/data/navigation.js';
 
 describe('Buyer Dashboard Sidebar Navigation & Architecture Test Suite', () => {
   const REQUIRED_ITEMS = [
-    { label: 'Dashboard Overview', path: '/buyer' },
+    { label: 'Dashboard', path: '/buyer' },
     { label: 'Find Products', path: '/products' },
     { label: 'Compare Similar Products', path: '/compare-products' },
     { label: 'Request a Quote (RFQ)', path: '/rfq' },
@@ -41,7 +41,7 @@ describe('Buyer Dashboard Sidebar Navigation & Architecture Test Suite', () => {
       return currentPathname.startsWith(itemTo);
     };
 
-    it('highlights Dashboard Overview only on root /buyer route', () => {
+    it('highlights Dashboard only on root /buyer route', () => {
       assert.equal(isActiveRoute('/buyer', '/buyer'), true);
       assert.equal(isActiveRoute('/buyer', '/buyer/'), true);
       assert.equal(isActiveRoute('/buyer', '/buyer/orders'), false);

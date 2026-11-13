@@ -5,12 +5,12 @@ export default function PageHeader({ breadcrumbs, title, description, actions, c
   return (
     <div className="relative overflow-hidden border-b border-navy-900/[0.06] bg-white">
       <div className="pointer-events-none absolute -right-32 -top-40 size-[26rem] rounded-full bg-brand-100/60 blur-3xl" aria-hidden="true" />
-      <div className="ts-container relative py-8 sm:py-12">
-        {breadcrumbs ? <Breadcrumbs items={breadcrumbs} className="mb-3" /> : null}
+      <div className="ts-container relative pt-10 pb-[19px]">
+        {breadcrumbs ? <Breadcrumbs items={breadcrumbs} className="mb-[26px]" /> : null}
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0 max-w-3xl">
             <h1 className="text-3xl font-extrabold tracking-[-0.03em] sm:text-[2.6rem]">{title}</h1>
-            {description ? <p className="mt-3 max-w-2xl text-[1.0625rem] leading-relaxed text-muted">{description}</p> : null}
+            {description ? <p className="mt-[14px] max-w-2xl text-[1.0625rem] leading-relaxed text-muted">{description}</p> : null}
           </div>
           {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
         </div>

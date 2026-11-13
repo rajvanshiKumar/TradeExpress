@@ -12,7 +12,6 @@ import Categories from '../pages/Categories';
 import CategoryDetails from '../pages/CategoryDetails';
 import Suppliers from '../pages/Suppliers';
 import SupplierDetails from '../pages/SupplierDetails';
-import Exporters from '../pages/Exporters';
 import Help from '../pages/Help';
 import HelpArticlePage from '../pages/help/HelpArticlePage';
 import HelpCategoryPage from '../pages/help/HelpCategoryPage';
@@ -102,7 +101,7 @@ export default function AppRoutes() {
         <Route path="/suppliers" element={<Suppliers />} />
         <Route path="/suppliers/:slug" element={<SupplierDetails />} />
         <Route path="/supplier/:supplierCode" element={<PublicSupplierProfile />} />
-        <Route path="/exporters" element={<Exporters />} />
+        <Route path="/exporters" element={<Navigate to="/suppliers" replace />} />
         <Route path="/help" element={<Help />} />
         <Route path="/help/article/:slug" element={<HelpArticlePage />} />
         <Route path="/help/category/:categoryId" element={<HelpCategoryPage />} />
@@ -123,6 +122,7 @@ export default function AppRoutes() {
         <Route path="/superadmin/login" element={<Navigate to="/super-admin/login" replace />} />
         <Route path="/superadmin" element={<Navigate to="/super-admin" replace />} />
         <Route path="/info/:slug" element={<Info />} />
+        <Route path="/about" element={<Navigate to="/info/about" replace />} />
         <Route path="/policies" element={<Policies />} />
         <Route path="/terms" element={<TermsAndConditions />} />
         <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
@@ -173,7 +173,7 @@ export default function AppRoutes() {
             <Route path="/buyer/account-settings/:section" element={<AccountSettingsPage />} />
           </Route>
         </Route>
-        <Route element={<RoleRoute roles={['supplier']} />}>
+        <Route element={<RoleRoute roles={['supplier', 'exporter']} />}>
           <Route element={<DashboardLayout role="supplier" />}>
             <Route path="/supplier" element={<SupplierDashboard />} />
             <Route path="/supplier/products" element={<SupplierProducts />} />
@@ -194,16 +194,28 @@ export default function AppRoutes() {
             <Route path="/supplier/payments" element={<SupplierPayments />} />
             <Route path="/supplier/profile" element={<SupplierProfile />} />
             <Route path="/supplier/notifications" element={<SupplierNotifications />} />
-            <Route path="/supplier/dashboard" element={<SupplierDashboard />} />
-            <Route path="/supplier/quotations" element={<SupplierQuotations />} />
-            <Route path="/supplier/transport" element={<SupplierTransport />} />
-            <Route path="/supplier/shipping" element={<Navigate to="/supplier/transport" replace />} />
-            <Route path="/supplier/logistics" element={<Navigate to="/supplier/transport" replace />} />
-            <Route path="/supplier/payments" element={<SupplierPayments />} />
-            <Route path="/supplier/profile" element={<SupplierProfile />} />
-            <Route path="/supplier/notifications" element={<SupplierNotifications />} />
             <Route path="/supplier/verification" element={<SupplierVerification />} />
             <Route path="/supplier/documents" element={<SupplierDocuments />} />
+
+            {/* Exporter Dashboard Routes */}
+            <Route path="/exporter" element={<SupplierDashboard />} />
+            <Route path="/exporter/dashboard" element={<SupplierDashboard />} />
+            <Route path="/exporter/products" element={<SupplierProducts />} />
+            <Route path="/exporter/inventory" element={<SupplierInventory />} />
+            <Route path="/exporter/products/new" element={<SupplierProductForm />} />
+            <Route path="/exporter/products/:id/edit" element={<SupplierProductForm />} />
+            <Route path="/exporter/orders" element={<SupplierOrders />} />
+            <Route path="/exporter/inquiries" element={<SupplierInquiries />} />
+            <Route path="/exporter/analytics" element={<SupplierAnalytics />} />
+            <Route path="/exporter/settings" element={<SupplierSettings />} />
+            <Route path="/exporter/account-settings" element={<AccountSettingsPage />} />
+            <Route path="/exporter/quotations" element={<SupplierQuotations />} />
+            <Route path="/exporter/transport" element={<SupplierTransport />} />
+            <Route path="/exporter/payments" element={<SupplierPayments />} />
+            <Route path="/exporter/profile" element={<SupplierProfile />} />
+            <Route path="/exporter/notifications" element={<SupplierNotifications />} />
+            <Route path="/exporter/verification" element={<SupplierVerification />} />
+            <Route path="/exporter/documents" element={<SupplierDocuments />} />
           </Route>
         </Route>
         <Route element={<RoleRoute roles={['admin']} />}>

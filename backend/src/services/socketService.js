@@ -112,8 +112,14 @@ export function initSocket(httpServer) {
 
         // Notify both participants in their personal user rooms
         const { conversation } = result;
-        io.to(`user:${conversation.buyerId}`).emit('conversation_updated', conversation);
-        io.to(`user:${conversation.supplierId}`).emit('conversation_updated', conversation);
+        if (conversation.buyerId) {
+          io.to(`user:${conversation.buyerId}`).emit('new_message', result.message);
+          io.to(`user:${conversation.buyerId}`).emit('conversation_updated', conversation);
+        }
+        if (conversation.supplierId) {
+          io.to(`user:${conversation.supplierId}`).emit('new_message', result.message);
+          io.to(`user:${conversation.supplierId}`).emit('conversation_updated', conversation);
+        }
 
         if (callback) callback({ success: true, data: result.message });
       } catch (err) {
@@ -174,10 +180,16 @@ export function getIO() {
  * Broadcasts a new message to the conversation room and personal rooms.
  */
 export function broadcastNewMessage(conversation, message) {
-  if (!io) return;
+  if (!io || !conversation) return;
   io.to(`conversation:${conversation.id}`).emit('new_message', message);
-  io.to(`user:${conversation.buyerId}`).emit('conversation_updated', conversation);
-  io.to(`user:${conversation.supplierId}`).emit('conversation_updated', conversation);
+  if (conversation.buyerId) {
+    io.to(`user:${conversation.buyerId}`).emit('new_message', message);
+    io.to(`user:${conversation.buyerId}`).emit('conversation_updated', conversation);
+  }
+  if (conversation.supplierId) {
+    io.to(`user:${conversation.supplierId}`).emit('new_message', message);
+    io.to(`user:${conversation.supplierId}`).emit('conversation_updated', conversation);
+  }
 }
 
 /**

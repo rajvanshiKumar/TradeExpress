@@ -31,7 +31,7 @@ export const BUYER_NAV_GROUPS = [
   {
     group: 'Marketplace & Sourcing',
     items: [
-      { id: 'overview', label: 'Dashboard Overview', to: '/buyer', icon: LayoutDashboard },
+      { id: 'overview', label: 'Dashboard', to: '/buyer', icon: LayoutDashboard },
       { id: 'products', label: 'Find Products', to: '/products', icon: Search },
       { id: 'compare', label: 'Compare Similar Products', to: '/compare-products', icon: Scale },
       { id: 'rfq', label: 'Request a Quote (RFQ)', to: '/rfq', icon: FileSpreadsheet },

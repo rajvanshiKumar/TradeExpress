@@ -11,7 +11,6 @@ import ErrorState from '../components/common/ErrorState';
 import { PageSkeleton } from '../components/common/Skeleton';
 import SupplierHeader from '../components/suppliers/SupplierHeader';
 import SupplierProductList from '../components/suppliers/SupplierProductList';
-import InquiryForm from '../components/forms/InquiryForm';
 import useProducts from '../hooks/useProducts';
 import useContactSupplier from '../hooks/useContactSupplier';
 import useDocumentTitle from '../hooks/useDocumentTitle';
@@ -39,10 +38,11 @@ export default function SupplierDetails() {
   }
 
   const productCount = products.filter((product) => product.companyId === company.id && product.status === 'Active').length;
+  const hasReviews = (company.reviews?.length ?? 0) > 0 && Number(company.rating) > 0;
   const tabs = [
     { id: 'products', label: 'Products', count: productCount },
     { id: 'profile', label: 'Company Profile' },
-    { id: 'reviews', label: 'Reviews', count: company.reviews?.length ?? 0 },
+    ...(hasReviews ? [{ id: 'reviews', label: 'Reviews', count: company.reviews.length }] : []),
     { id: 'contact', label: 'Contact' },
   ];
   const contactRows = [
@@ -116,9 +116,10 @@ export default function SupplierDetails() {
             <section className="ts-card p-5 sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-bold">Buyer reviews</h2>
-                <Rating value={company.rating} count={company.reviewCount} size="lg" />
+                {Number(company.rating) > 0 && Number(company.reviewCount) > 0 ? (
+                  <Rating value={company.rating} count={company.reviewCount} size="lg" />
+                ) : null}
               </div>
-              <p className="mt-3 rounded-lg bg-navy-50 px-4 py-3 text-[0.8125rem] text-navy-800">Sample reviews shown for illustration.</p>
               {company.reviews?.length ? (
                 <ul className="mt-2 divide-y">
                   {company.reviews.map((review) => (
@@ -155,9 +156,31 @@ export default function SupplierDetails() {
                 <p className="mt-2 text-center text-xs text-muted">Opens a conversation in your message centre.</p>
               </section>
               <section className="ts-card p-5 sm:p-6">
-                <h2 className="text-lg font-bold">Request a quote from {company.name}</h2>
-                <p className="mb-5 mt-1 text-sm text-muted">Pick one of their products or describe what you need.</p>
-                <InquiryForm company={company} idPrefix="sd-rfq-" />
+                <h2 className="text-lg font-bold">Request a Quote from {company.name}</h2>
+                <p className="mb-4 mt-1 text-sm text-muted">
+                  Quotations must be requested directly through verified product listings. Choose a product below:
+                </p>
+                {products.filter((p) => p.companyId === company.id && p.status === 'Active').length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {products.filter((p) => p.companyId === company.id && p.status === 'Active').map((p) => (
+                      <div key={p.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200/90 bg-slate-50/50 hover:border-emerald-500 hover:bg-emerald-50/30 transition-all">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-navy-900 truncate">{p.name}</p>
+                          <p className="text-xs text-muted">MOQ: {p.moq} {p.unit || 'units'} · SKU: {p.id}</p>
+                        </div>
+                        <Button to={`/rfq?product=${p.id}`} size="sm" variant="navy" className="shrink-0">
+                          Request Quote
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No Products Available for Quote"
+                    text="This supplier does not currently have active product listings."
+                    action={<Button to="/products" variant="navy">Browse All Products</Button>}
+                  />
+                )}
               </section>
             </div>
           ) : null}

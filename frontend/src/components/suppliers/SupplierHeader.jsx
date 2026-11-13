@@ -1,15 +1,11 @@
-import { Clock, FileText, MapPin, MessageSquare, Users } from 'lucide-react';
+import { Clock, MapPin, Users } from 'lucide-react';
 import Image from '../common/Image';
-import Button from '../common/Button';
 import CompanyLogo from '../common/CompanyLogo';
-import Rating from '../common/Rating';
-import useContactSupplier from '../../hooks/useContactSupplier';
 import VerificationBadge from '../common/VerificationBadge';
 import { SaveSupplierButton } from './SupplierCard';
 
 /** Cover image and identity block at the top of a supplier profile. */
 export default function SupplierHeader({ company, productCount }) {
-  const contact = useContactSupplier();
   return (
     <section className="ts-card overflow-hidden">
       <div className="relative h-36 bg-navy-900 sm:h-52">
@@ -28,18 +24,13 @@ export default function SupplierHeader({ company, productCount }) {
               <span>{company.industry}</span>
             </p>
           </div>
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-            <Button icon={MessageSquare} onClick={() => contact(company)} className="flex-1 sm:flex-none">Contact Supplier</Button>
-            <Button to={`/rfq?company=${company.id}`} variant="outline" icon={FileText} className="flex-1 sm:flex-none">Request a Quote</Button>
-          </div>
         </div>
-        <dl className="mt-5 grid grid-cols-2 gap-4 border-t pt-5 text-sm md:grid-cols-4">
-          <div><dt className="text-muted">Rating</dt><dd className="mt-1"><Rating value={company.rating} count={company.reviewCount} /></dd></div>
+        <dl className="mt-5 grid grid-cols-2 gap-4 border-t pt-5 text-sm sm:grid-cols-3">
           <div><dt className="text-muted">Established</dt><dd className="mt-1 font-semibold text-ink">{company.established}</dd></div>
           <div><dt className="flex items-center gap-1 text-muted"><Users className="size-3.5" aria-hidden="true" />Employees</dt><dd className="mt-1 font-semibold text-ink">{company.employees}</dd></div>
           <div><dt className="flex items-center gap-1 text-muted"><Clock className="size-3.5" aria-hidden="true" />Response time</dt><dd className="mt-1 font-semibold text-ink">{company.responseTime}</dd></div>
         </dl>
-        <p className="mt-4 text-xs text-muted">{productCount} products listed. Ratings, response times and company details are self-reported and not independently verified.</p>
+        <p className="mt-4 text-xs text-muted">{productCount} products listed. Response times and company details are self-reported and not independently verified.</p>
       </div>
     </section>
   );

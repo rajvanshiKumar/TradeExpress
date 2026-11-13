@@ -1,4 +1,4 @@
-import { useCallback, useContext, useMemo } from 'react';
+import { useCallback, useContext, useMemo, useRef } from 'react';
 import { CartContext } from './contextObjects';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { BUY_NOW_TTL_MS, STORAGE_KEYS } from '../utils/constants';
@@ -77,11 +77,20 @@ export function CartProvider({ children }) {
     return { status: 'ready', line, product };
   }, [buyNowIntent, products, loading]);
 
+  const lastAddRef = useRef({ productId: null, time: 0 });
+
   const addToCart = useCallback((product, quantity = product.moq, variant = null) => {
-    if (product.stock <= 0) {
-      showToast('This product is out of stock.', 'error');
+    if (!product || product.stock <= 0) {
+      if (product?.stock <= 0) showToast('This product is out of stock.', 'error');
       return;
     }
+    const now = Date.now();
+    // Guard against rapid duplicate clicks within 600ms
+    if (lastAddRef.current.productId === product.id && (now - lastAddRef.current.time) < 600) {
+      return;
+    }
+    lastAddRef.current = { productId: product.id, time: now };
+
     const existing = items.find((item) => item.productId === product.id);
     const nextQuantity = clampQuantity(product, existing ? existing.quantity + Number(quantity) : quantity);
     setItems((previous) => (previous.some((item) => item.productId === product.id)

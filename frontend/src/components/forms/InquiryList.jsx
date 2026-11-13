@@ -18,6 +18,7 @@ import Input, { Textarea } from '../common/Input';
 import useProducts from '../../hooks/useProducts';
 import useCurrency from '../../hooks/useCurrency';
 import useInquiries from '../../hooks/useInquiries';
+import useContactSupplier from '../../hooks/useContactSupplier';
 import useCart from '../../hooks/useCart';
 import useNotifications from '../../hooks/useNotifications';
 import { formatDate } from '../../utils/formatDate';
@@ -29,10 +30,12 @@ export default function InquiryList({ inquiries }) {
   const { counterInquiry, acceptInquiryQuote, rejectInquiryQuote } = useInquiries();
   const { addToCart } = useCart();
   const { showToast } = useNotifications();
+  const contact = useContactSupplier();
   const navigate = useNavigate();
 
   // State for counter offer dialog
   const [counterTarget, setCounterTarget] = useState(null);
+  const [compareTarget, setCompareTarget] = useState(null);
   const [counterValues, setCounterValues] = useState({
     unitPrice: '',
     leadTimeDays: '',
@@ -288,6 +291,31 @@ export default function InquiryList({ inquiries }) {
                       )}
 
                       <Button
+                        variant="outline"
+                        icon={MessageSquare}
+                        onClick={() => {
+                          const targetComp = company || (quote.supplier ? { id: quote.supplier.id, name: quote.supplier.company || quote.supplier.name } : null);
+                          if (targetComp) {
+                            contact(targetComp, product, `Inquiring about quotation #${quote.quoteNumber || inquiry.id}`);
+                          } else {
+                            navigate(`/messages?rfq=${encodeURIComponent(inquiry.rfqId || inquiry.id)}&supplierId=${encodeURIComponent(quote.supplierId || '')}`);
+                          }
+                        }}
+                      >
+                        Contact Supplier
+                      </Button>
+
+                      {inquiry.quotations && inquiry.quotations.length > 1 && (
+                        <Button
+                          variant="outline"
+                          icon={Scale}
+                          onClick={() => setCompareTarget(inquiry)}
+                        >
+                          Compare All ({inquiry.quotations.length})
+                        </Button>
+                      )}
+
+                      <Button
                         variant="ghost"
                         icon={XCircle}
                         onClick={() => handleDeclineQuote(inquiry)}
@@ -374,6 +402,95 @@ export default function InquiryList({ inquiries }) {
               </Button>
             </div>
           </form>
+        )}
+      </Modal>
+
+      {/* Compare Quotations Modal */}
+      <Modal
+        open={Boolean(compareTarget)}
+        onClose={() => setCompareTarget(null)}
+        title={`Compare Quotations · ${compareTarget?.rfqNumber || compareTarget?.id}`}
+        description={`Comparing ${compareTarget?.quotations?.length || 0} independent quotations for ${compareTarget?.quantity} × ${compareTarget?.productName}`}
+        size="xl"
+      >
+        {compareTarget && (
+          <div className="space-y-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                <thead className="bg-slate-100 text-navy-900 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="p-3">Supplier</th>
+                    <th className="p-3">Unit Price</th>
+                    <th className="p-3">Est. Freight</th>
+                    <th className="p-3">Total Landed Amount</th>
+                    <th className="p-3">Lead Time</th>
+                    <th className="p-3">Round</th>
+                    <th className="p-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {(compareTarget.quotations || []).map((q) => {
+                    const unitPrice = Number(q.unitPrice);
+                    const freight = Number(q.freightCharge || 0);
+                    const subtotal = unitPrice * Number(compareTarget.quantity);
+                    const totalAmount = subtotal + freight;
+                    const isAcc = q.status === 'ACCEPTED';
+
+                    return (
+                      <tr key={q.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-3">
+                          <p className="font-bold text-navy-900">{q.supplier?.company || q.supplier?.name || 'Verified Supplier'}</p>
+                          <p className="text-[0.6875rem] text-muted">{q.quoteNumber}</p>
+                        </td>
+                        <td className="p-3 font-mono font-bold text-navy-900">{money(unitPrice)}</td>
+                        <td className="p-3 font-mono">{freight > 0 ? money(freight) : 'Free'}</td>
+                        <td className="p-3 font-mono font-bold text-brand-600">{money(totalAmount)}</td>
+                        <td className="p-3">{q.leadTimeDays} days</td>
+                        <td className="p-3 font-semibold text-slate-700">Round {q.currentVersion || 1} of 3</td>
+                        <td className="p-3 text-right">
+                          {isAcc ? (
+                            <span className="text-xs font-bold text-emerald-700">Accepted</span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => {
+                                const quoteInquiry = {
+                                  ...compareTarget,
+                                  companyId: q.supplierId,
+                                  quote: {
+                                    id: q.id,
+                                    quoteNumber: q.quoteNumber,
+                                    unitPrice: Number(q.unitPrice),
+                                    leadTimeDays: q.leadTimeDays,
+                                    freightCharge: Number(q.freightCharge || 0),
+                                    paymentTerms: q.paymentTerms,
+                                    note: q.notes,
+                                    status: q.status,
+                                    supplier: q.supplier,
+                                    versions: q.versions,
+                                  },
+                                };
+                                setCompareTarget(null);
+                                handleAcceptQuote(quoteInquiry);
+                              }}
+                            >
+                              Accept Offer
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button variant="outline" size="sm" onClick={() => setCompareTarget(null)}>
+                Close Comparison
+              </Button>
+            </div>
+          </div>
         )}
       </Modal>
     </>

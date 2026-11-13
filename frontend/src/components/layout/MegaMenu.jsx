@@ -37,7 +37,7 @@ export default function MegaMenu({ id, onNavigate }) {
   return (
     <div
       id={id}
-      className="ts-dropdown-anim-center fixed left-1/2 -translate-x-1/2 top-[4.25rem] z-50 w-[min(50rem,calc(100vw-3rem))] max-h-[min(29rem,calc(100vh-5.5rem))] flex flex-col overflow-hidden rounded-3xl border border-slate-200/90 bg-white/98 backdrop-blur-2xl text-slate-900 shadow-[0_24px_56px_-12px_rgba(11,39,22,0.24),0_0_0_1px_rgba(0,0,0,0.06)]"
+      className="ts-dropdown-anim-center fixed left-1/2 -translate-x-1/2 top-[5.5rem] z-50 w-[min(50rem,calc(100vw-3rem))] max-h-[min(29rem,calc(100vh-5.5rem))] flex flex-col overflow-hidden rounded-3xl border border-slate-200/90 bg-white/98 backdrop-blur-2xl text-slate-900 shadow-[0_24px_56px_-12px_rgba(11,39,22,0.24),0_0_0_1px_rgba(0,0,0,0.06)]"
     >
       {/* Top Emerald Accent Line */}
       <div

@@ -10,6 +10,64 @@ import { getRequestContext } from '../utils/requestContext.js';
  */
 
 const LAST_SEEN_REFRESH_MS = 5 * 60 * 1000;
+const SESSION_CACHE_TTL_MS = 20 * 1000; // 20-second in-memory cache to stop hammering MySQL on rapid requests
+
+// In-memory caches for active sessions and user auth details
+const sessionCache = new Map(); // sid -> { session, cachedAt }
+const userAuthCache = new Map(); // userId -> { user, cachedAt }
+
+/** Invalidates in-memory session and user auth cache when user logs out or modifies session state. */
+export function invalidateSessionCache(sessionId = null, userId = null) {
+  if (sessionId) {
+    sessionCache.delete(String(sessionId));
+  }
+  if (userId) {
+    userAuthCache.delete(String(userId));
+    for (const [key, val] of sessionCache.entries()) {
+      if (val?.session?.userId === String(userId)) {
+        sessionCache.delete(key);
+      }
+    }
+  }
+}
+
+/** Fetches user authentication profile with a short 20-second cache to prevent redundant per-request SELECT queries. */
+export async function getCachedUser(userId) {
+  if (!userId) return null;
+  const uid = String(userId);
+  const now = Date.now();
+  const cached = userAuthCache.get(uid);
+  if (cached && (now - cached.cachedAt) < SESSION_CACHE_TTL_MS) {
+    return cached.user;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: uid },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      adminRole: true,
+      adminPermissions: true,
+      isActive: true,
+      status: true,
+      statusReason: true,
+      company: true,
+      phone: true,
+      city: true,
+      country: true,
+      sessionsValidAfter: true,
+    },
+  });
+
+  if (user) {
+    userAuthCache.set(uid, { user, cachedAt: now });
+  } else {
+    userAuthCache.delete(uid);
+  }
+  return user;
+}
 
 /** "7d" / "12h" / "30m" -> milliseconds (the login token lifetime). */
 function lifetimeMs(value = ENV.JWT_EXPIRES_IN) {
@@ -66,16 +124,37 @@ export async function reissueCurrentToken(user, { email, method = 'PASSWORD' } =
  */
 export async function isSessionActive(payload) {
   if (!payload?.sid) return true;
-  const session = await prisma.userSession.findUnique({
-    where: { id: String(payload.sid) },
-    select: { userId: true, revokedAt: true, expiresAt: true, lastSeenAt: true },
-  });
-  if (!session || session.userId !== payload.userId || session.revokedAt || session.expiresAt < new Date()) return false;
-  if (Date.now() - session.lastSeenAt.getTime() > LAST_SEEN_REFRESH_MS) {
-    prisma.userSession.update({ where: { id: String(payload.sid) }, data: { lastSeenAt: new Date() } }).catch(() => {});
+  const sid = String(payload.sid);
+  const now = Date.now();
+  const cached = sessionCache.get(sid);
+  let session = null;
+
+  if (cached && (now - cached.cachedAt) < SESSION_CACHE_TTL_MS) {
+    session = cached.session;
+  } else {
+    session = await prisma.userSession.findUnique({
+      where: { id: sid },
+      select: { userId: true, revokedAt: true, expiresAt: true, lastSeenAt: true },
+    });
+    if (session) {
+      sessionCache.set(sid, { session, cachedAt: now });
+    } else {
+      sessionCache.delete(sid);
+    }
+  }
+
+  if (!session || session.userId !== payload.userId || session.revokedAt || session.expiresAt < new Date()) {
+    sessionCache.delete(sid);
+    return false;
+  }
+
+  const lastSeenTime = session.lastSeenAt ? new Date(session.lastSeenAt).getTime() : 0;
+  if (now - lastSeenTime > LAST_SEEN_REFRESH_MS) {
+    session.lastSeenAt = new Date();
+    prisma.userSession.update({ where: { id: sid }, data: { lastSeenAt: session.lastSeenAt } }).catch(() => {});
   }
   const context = getRequestContext();
-  if (context) context.sessionId = String(payload.sid);
+  if (context) context.sessionId = sid;
   return true;
 }
 
@@ -117,6 +196,7 @@ function fail(message, statusCode = 400) {
 
 /** Signs one device out (signing out the current device is the same as logging out). */
 export async function revokeSession(user, sessionId) {
+  invalidateSessionCache(sessionId, user.id);
   const { count } = await prisma.userSession.updateMany({ where: { id: String(sessionId), userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } });
   if (!count) throw fail('That device is already signed out.', 404);
   await prisma.auditLog.create({ data: { actorId: user.id, actorEmail: user.email, actorRole: user.role, action: 'SESSION_REVOKED', resource: 'ACCOUNT', targetId: user.id, details: { sessionId }, result: 'SUCCESS' } }).catch(() => {});
@@ -126,6 +206,7 @@ export async function revokeSession(user, sessionId) {
 /** Logout: ends the session the request came from. */
 export async function revokeCurrentSession(userId) {
   const { sessionId } = getRequestContext();
+  invalidateSessionCache(sessionId, userId);
   if (!sessionId) return { revoked: false };
   await prisma.userSession.updateMany({ where: { id: sessionId, userId, revokedAt: null }, data: { revokedAt: new Date() } });
   return { revoked: true };
@@ -134,6 +215,7 @@ export async function revokeCurrentSession(userId) {
 /** Signs out every other device (including sign-ins from before session tracking) and keeps this one. */
 export async function revokeOtherSessions(user) {
   const { sessionId } = getRequestContext();
+  invalidateSessionCache(null, user.id);
   const cutoff = new Date(Math.floor(Date.now() / 1000) * 1000);
   const { count } = await prisma.$transaction(async (tx) => {
     const result = await tx.userSession.updateMany({

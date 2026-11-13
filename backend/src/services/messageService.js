@@ -62,6 +62,14 @@ const conversationInclude = {
       conversationId: true,
       senderId: true,
       senderRole: true,
+      sender: {
+        select: {
+          id: true,
+          name: true,
+          company: true,
+          role: true,
+        },
+      },
       content: true,
       isAutomated: true,
       isRead: true,
@@ -81,6 +89,9 @@ export function formatMessage(msg) {
     conversationId: msg.conversationId,
     senderId: msg.senderId,
     senderRole: msg.senderRole,
+    senderName: msg.sender?.name || null,
+    senderCompany: msg.sender?.company || null,
+    sender: msg.sender || null,
     from: msg.senderRole ? msg.senderRole.toLowerCase() : 'buyer',
     text: msg.content,
     content: msg.content,
@@ -105,7 +116,9 @@ export function formatConversation(conv) {
     buyerName: conv.buyer?.name || 'Buyer',
     buyer: conv.buyer,
     supplierId: conv.supplierId,
-    supplierName: conv.supplier?.name || conv.supplier?.company || 'Supplier',
+    supplierName: conv.supplier?.company || conv.supplier?.name || 'Supplier',
+    supplierCompanyName: conv.supplier?.company || null,
+    supplierContactName: conv.supplier?.name || null,
     supplier: conv.supplier,
     companyId: conv.companyId || conv.product?.companyId || null,
     productId: conv.productId,
@@ -189,6 +202,12 @@ async function resolveSupplier({ productId, supplierId, companyId }) {
     if (supplierUser) return supplierUser;
   }
 
+  // Fallback: If not resolved to a specific supplier user, assign to any active supplier user
+  const fallbackSupplier = await prisma.user.findFirst({
+    where: { role: 'SUPPLIER', isActive: true },
+  });
+  if (fallbackSupplier) return fallbackSupplier;
+
   return null;
 }
 
@@ -203,19 +222,43 @@ async function resolveConversationLinks({ buyerId, productId, productSlug, rfqId
     productKeys.length
       ? prisma.product.findFirst({
           where: { OR: productKeys.flatMap((key) => [{ id: key }, { slug: key }]) },
-          select: { id: true },
+          select: { id: true, name: true, companyId: true, supplierId: true },
         })
       : null,
-    rfqId ? prisma.rfq.findFirst({ where: { id: String(rfqId), buyerId }, select: { id: true } }) : null,
-    orderId ? prisma.order.findFirst({ where: { id: String(orderId), userId: buyerId }, select: { id: true } }) : null,
+    rfqId
+      ? prisma.rfq.findFirst({
+          where: {
+            OR: [{ id: String(rfqId) }, { rfqNumber: String(rfqId) }],
+            ...(buyerId ? { buyerId } : {}),
+          },
+          select: { id: true, rfqNumber: true, buyerId: true, title: true },
+        })
+      : null,
+    orderId
+      ? prisma.order.findFirst({
+          where: {
+            OR: [{ id: String(orderId) }, { orderNumber: String(orderId) }],
+            ...(buyerId ? { userId: buyerId } : {}),
+          },
+          select: { id: true, orderNumber: true, userId: true },
+        })
+      : null,
   ]);
-  return { productId: product?.id || null, rfqId: rfq?.id || null, orderId: order?.id || null };
+  return {
+    productId: product?.id || null,
+    product,
+    rfqId: rfq?.id || null,
+    rfq,
+    orderId: order?.id || null,
+    order,
+  };
 }
 
 /**
  * Creates or retrieves an existing conversation between a buyer and supplier.
  */
 export async function createOrGetConversation({
+  callerUser,
   buyerId,
   supplierId,
   companyId,
@@ -226,27 +269,65 @@ export async function createOrGetConversation({
   subject,
   initialMessage,
 }) {
+  let resolvedBuyerId = buyerId;
+  let resolvedSupplierId = supplierId;
+
+  // Auto-resolve buyer from RFQ or Order if not provided
+  if (!resolvedBuyerId && requestedRfqId) {
+    const rfqRec = await prisma.rfq.findFirst({
+      where: { OR: [{ id: String(requestedRfqId) }, { rfqNumber: String(requestedRfqId) }] },
+      select: { id: true, buyerId: true },
+    });
+    if (rfqRec?.buyerId) resolvedBuyerId = rfqRec.buyerId;
+  }
+
+  if (!resolvedBuyerId && requestedOrderId) {
+    const orderRec = await prisma.order.findFirst({
+      where: { OR: [{ id: String(requestedOrderId) }, { orderNumber: String(requestedOrderId) }] },
+      select: { id: true, userId: true },
+    });
+    if (orderRec?.userId) resolvedBuyerId = orderRec.userId;
+  }
+
+  if (!resolvedBuyerId) {
+    const err = new Error('Target buyer could not be identified. Provide buyer ID or link an RFQ/order.');
+    err.status = 400;
+    err.statusCode = 400;
+    throw err;
+  }
+
   const buyer = await prisma.user.findUnique({
-    where: { id: buyerId },
+    where: { id: resolvedBuyerId },
     select: { id: true, name: true, role: true, isActive: true },
   });
 
   if (!buyer) {
-    const err = new Error('Authenticated buyer user not found.');
+    const err = new Error('Target buyer user not found.');
     err.status = 404;
     err.statusCode = 404;
     throw err;
   }
 
-  const { productId, rfqId, orderId } = await resolveConversationLinks({
-    buyerId,
+  const { productId, product, rfqId, rfq, orderId, order } = await resolveConversationLinks({
+    buyerId: resolvedBuyerId,
     productId: requestedProductId,
     productSlug,
     rfqId: requestedRfqId,
     orderId: requestedOrderId,
   });
 
-  const supplier = await resolveSupplier({ productId, supplierId, companyId });
+  let supplier = null;
+  if (callerUser?.role === 'SUPPLIER' && resolvedBuyerId !== callerUser.id && !resolvedSupplierId && !companyId) {
+    supplier = await prisma.user.findUnique({
+      where: { id: callerUser.id },
+      select: { id: true, name: true, company: true, role: true, isActive: true },
+    });
+  }
+
+  if (!supplier) {
+    supplier = await resolveSupplier({ productId, supplierId: resolvedSupplierId, companyId });
+  }
+
   if (!supplier) {
     const err = new Error('Target supplier could not be identified.');
     err.status = 404;
@@ -254,36 +335,39 @@ export async function createOrGetConversation({
     throw err;
   }
 
-  if (supplier.id === buyerId) {
+  if (supplier.id === resolvedBuyerId) {
     const err = new Error('You cannot start a conversation with yourself.');
     err.status = 400;
     err.statusCode = 400;
     throw err;
   }
 
-  // Fetch product name for default subject if product ID exists
+  // Fetch subject
   let defaultSubject = subject;
-  if (!defaultSubject && productId) {
-    const prod = await prisma.product.findUnique({
-      where: { id: productId },
-      select: { name: true, companyId: true },
-    });
-    if (prod) {
-      defaultSubject = `Inquiry: ${prod.name}`;
-      if (!companyId) companyId = prod.companyId;
-    }
+  if (!defaultSubject && product?.name) {
+    defaultSubject = `Inquiry: ${product.name}`;
+    if (!companyId && product.companyId) companyId = product.companyId;
+  } else if (!defaultSubject && rfq?.rfqNumber) {
+    defaultSubject = `Inquiry regarding RFQ ${rfq.rfqNumber}`;
+  } else if (!defaultSubject && order?.orderNumber) {
+    defaultSubject = `Inquiry regarding Order ${order.orderNumber}`;
   }
 
   if (!defaultSubject) {
     defaultSubject = `Inquiry for ${supplier.company || supplier.name}`;
   }
 
+  // Determine who sends the initial message
+  const senderId = callerUser ? callerUser.id : resolvedBuyerId;
+  const senderRole = callerUser ? callerUser.role : (buyer.role || 'BUYER');
+  const isSenderBuyer = senderId === resolvedBuyerId;
+
   // Run in a transaction to prevent race conditions on duplicate creation
   const result = await prisma.$transaction(async (tx) => {
     // Check if an existing conversation exists for this buyer, supplier, and product context
     const existing = await tx.conversation.findFirst({
       where: {
-        buyerId,
+        buyerId: resolvedBuyerId,
         supplierId: supplier.id,
         productId: productId || null,
         rfqId: rfqId || null,
@@ -293,24 +377,29 @@ export async function createOrGetConversation({
     });
 
     if (existing) {
-      // If an initial message was sent, append it to the existing conversation
       if (initialMessage && initialMessage.trim()) {
         const cleanText = initialMessage.trim();
         await tx.message.create({
           data: {
             conversationId: existing.id,
-            senderId: buyerId,
-            senderRole: buyer.role,
+            senderId,
+            senderRole,
             content: cleanText,
           },
         });
 
+        const updateData = {
+          lastMessageAt: new Date(),
+        };
+        if (isSenderBuyer) {
+          updateData.unreadSupplier = { increment: 1 };
+        } else {
+          updateData.unreadBuyer = { increment: 1 };
+        }
+
         const updated = await tx.conversation.update({
           where: { id: existing.id },
-          data: {
-            unreadSupplier: { increment: 1 },
-            lastMessageAt: new Date(),
-          },
+          data: updateData,
           include: conversationInclude,
         });
 
@@ -323,21 +412,21 @@ export async function createOrGetConversation({
     // Create new conversation
     const newConv = await tx.conversation.create({
       data: {
-        buyerId,
+        buyerId: resolvedBuyerId,
         supplierId: supplier.id,
         companyId: companyId || supplier.company || null,
         productId: productId || null,
         rfqId: rfqId || null,
         orderId: orderId || null,
         subject: defaultSubject,
-        unreadBuyer: 0,
-        unreadSupplier: initialMessage && initialMessage.trim() ? 1 : 0,
+        unreadBuyer: !isSenderBuyer && initialMessage && initialMessage.trim() ? 1 : 0,
+        unreadSupplier: isSenderBuyer && initialMessage && initialMessage.trim() ? 1 : 0,
         lastMessageAt: new Date(),
         messages: initialMessage && initialMessage.trim()
           ? {
               create: {
-                senderId: buyerId,
-                senderRole: buyer.role,
+                senderId,
+                senderRole,
                 content: initialMessage.trim(),
               },
             }
@@ -362,9 +451,9 @@ export async function listConversations(userId, role, search = '') {
   const where = {};
 
   if (role === 'BUYER') {
-    where.buyerId = userId;
+    where.OR = [{ buyerId: userId }, { supplierId: userId }];
   } else if (role === 'SUPPLIER') {
-    where.supplierId = userId;
+    where.OR = [{ supplierId: userId }, { buyerId: userId }];
   } else if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
     // Fallback for safety: user must participate
     where.OR = [{ buyerId: userId }, { supplierId: userId }];
@@ -498,6 +587,16 @@ export async function sendMessage({ conversationId, senderId, senderRole, conten
         senderRole,
         content: cleanContent,
         isAutomated: Boolean(isAutomated),
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            company: true,
+            role: true,
+          },
+        },
       },
     });
 

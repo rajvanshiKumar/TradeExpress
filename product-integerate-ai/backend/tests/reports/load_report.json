@@ -1,0 +1,18 @@
+{
+ "uploads": {
+  "count": 60,
+  "wall_s": 0.92,
+  "p50_ms": 729,
+  "p95_ms": 841
+ },
+ "listing_jobs_end_to_end": {
+  "count": 30,
+  "wall_s": 2.54,
+  "jobs_per_s": 11.8
+ },
+ "usage_reads_100_concurrent": {
+  "p50_ms": 516,
+  "p95_ms": 728
+ },
+ "note": "In-process ASGI + embedded PostgreSQL + fake provider; measures platform overhead only."
+}

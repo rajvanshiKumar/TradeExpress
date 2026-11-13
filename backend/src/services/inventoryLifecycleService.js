@@ -388,73 +388,91 @@ export async function runOrderTransition(orderId, action, options = {}) {
   return result;
 }
 
+let sweeper = null;
+let isSweeping = false;
+
 /**
  * Cancels unpaid online orders whose reservation lapsed and gives the stock back. Safe to run on several servers:
  * each order is claimed once.
  */
 export async function expireStaleReservations({ now = new Date(), limit = 50 } = {}) {
-  const stale = await prisma.order.findMany({
-    where: {
-      inventoryState: INVENTORY_STATES.RESERVED,
-      reservationExpiresAt: { lt: now },
-      paymentStatus: { in: ['PENDING', 'FAILED'] },
-    },
-    select: { id: true, orderNumber: true, userId: true, supplierId: true, orderStatus: true, items: { select: { productId: true } } },
-    take: limit,
-  });
-
-  let expired = 0;
-  for (const order of stale) {
-    const before = await availabilitySnapshot(order.items.map((i) => i.productId));
-    const result = await prisma.$transaction(async (tx) => {
-      const moved = await transitionOrderInventory(tx, order.id, 'RELEASE', {
-        reason: 'RESERVATION_EXPIRED',
-        notes: `Payment not completed within ${RESERVATION_MINUTES} minutes; reservation for Order #${order.orderNumber} released.`,
-        actor: { id: 'SYSTEM', name: 'Reservation expiry' },
-      });
-      if (moved.applied && ['ORDER_PLACED', 'ORDER_CONFIRMED'].includes(order.orderStatus)) {
-        await tx.order.update({
-          where: { id: order.id },
-          data: { orderStatus: 'CANCELLED', rejectionReason: 'Payment was not completed in time.' },
-        });
-        await tx.orderStatusHistory.create({
-          data: {
-            orderId: order.id,
-            status: 'CANCELLED',
-            notes: `Cancelled automatically: payment was not completed within ${RESERVATION_MINUTES} minutes and the reserved stock was released.`,
-            changedBy: 'System',
-          },
-        });
-      }
-      return moved;
-    }, TX_OPTIONS);
-
-    if (!result.applied) continue;
-    expired += 1;
-    publishInventoryChanges(result.touched, before);
-    if (order.userId) {
-      createNotification({
-        userId: order.userId,
-        title: `Order #${order.orderNumber} cancelled`,
-        message: 'Payment was not completed in time, so the reserved stock was released. You can place the order again.',
-        type: 'ORDER',
-        link: '/buyer/orders',
-      }).catch(() => {});
-    }
+  if (isSweeping) {
+    return { checked: 0, expired: 0, skipped: true };
   }
-  return { checked: stale.length, expired };
-}
+  isSweeping = true;
+  try {
+    const stale = await prisma.order.findMany({
+      where: {
+        inventoryState: INVENTORY_STATES.RESERVED,
+        reservationExpiresAt: { lt: now },
+        paymentStatus: { in: ['PENDING', 'FAILED'] },
+      },
+      select: { id: true, orderNumber: true, userId: true, supplierId: true, orderStatus: true, items: { select: { productId: true } } },
+      take: limit,
+    });
 
-let sweeper = null;
+    let expired = 0;
+    for (const order of stale) {
+      const before = await availabilitySnapshot(order.items.map((i) => i.productId));
+      const result = await prisma.$transaction(async (tx) => {
+        const moved = await transitionOrderInventory(tx, order.id, 'RELEASE', {
+          reason: 'RESERVATION_EXPIRED',
+          notes: `Payment not completed within ${RESERVATION_MINUTES} minutes; reservation for Order #${order.orderNumber} released.`,
+          actor: { id: 'SYSTEM', name: 'Reservation expiry' },
+        });
+        if (moved.applied && ['ORDER_PLACED', 'ORDER_CONFIRMED'].includes(order.orderStatus)) {
+          await tx.order.update({
+            where: { id: order.id },
+            data: { orderStatus: 'CANCELLED', rejectionReason: 'Payment was not completed in time.' },
+          });
+          await tx.orderStatusHistory.create({
+            data: {
+              orderId: order.id,
+              status: 'CANCELLED',
+              notes: `Cancelled automatically: payment was not completed within ${RESERVATION_MINUTES} minutes and the reserved stock was released.`,
+              changedBy: 'System',
+            },
+          });
+        }
+        return moved;
+      }, TX_OPTIONS);
+
+      if (!result.applied) continue;
+      expired += 1;
+      publishInventoryChanges(result.touched, before);
+      if (order.userId) {
+        createNotification({
+          userId: order.userId,
+          title: `Order #${order.orderNumber} cancelled`,
+          message: 'Payment was not completed in time, so the reserved stock was released. You can place the order again.',
+          type: 'ORDER',
+          link: '/buyer/orders',
+        }).catch(() => {});
+      }
+    }
+    return { checked: stale.length, expired };
+  } finally {
+    isSweeping = false;
+  }
+}
 
 /** Starts the background reservation sweeper (once per process). */
 export function startReservationSweeper(intervalMs = 60 * 1000) {
   if (sweeper) return sweeper;
   sweeper = setInterval(() => {
+    if (isSweeping) return;
     expireStaleReservations().catch((err) => console.error('[Inventory] Reservation sweep failed:', err.message));
   }, intervalMs);
   sweeper.unref?.();
   return sweeper;
+}
+
+/** Stops the background reservation sweeper. */
+export function stopReservationSweeper() {
+  if (sweeper) {
+    clearInterval(sweeper);
+    sweeper = null;
+  }
 }
 
 /**

@@ -157,6 +157,8 @@ model Address {
 
 // A buyer's saved payment method. Only gateway-issued token references and display metadata are
 // stored here: never a full card number, CVV, UPI PIN, banking password or OTP.
+
+
 model PaymentMethod {
   id              String    @id @default(uuid())
   userId          String

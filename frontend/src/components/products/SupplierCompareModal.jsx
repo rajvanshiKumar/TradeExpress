@@ -21,7 +21,6 @@ import {
   Zap,
 } from 'lucide-react';
 import Button from '../common/Button';
-import Rating from '../common/Rating';
 import useCurrency from '../../hooks/useCurrency';
 import useCart from '../../hooks/useCart';
 import { apiGet, isApiConfigured } from '../../services/apiClient';
@@ -36,7 +35,9 @@ export default function SupplierCompareModal({
   onOpenMultiRfq,
   onContactSupplier,
 }) {
-  const { money } = useCurrency();
+  const { displayMoney } = useCurrency();
+  // Browsing price, shown in the buyer's currency ("≈" when converted); checkout and orders keep the real currency
+  const money = (value) => displayMoney(value, product?.currency || 'INR');
   const { addToCart } = useCart();
 
   const [loading, setLoading] = useState(false);
@@ -288,13 +289,6 @@ export default function SupplierCompareModal({
                               </span>
                             )}
                           </div>
-
-                          {sup.rating > 0 && (
-                            <div className="mt-2 flex items-center gap-1 text-[11px]">
-                              <Rating value={sup.rating} showValue={true} />
-                              <span className="text-muted">({sup.reviewCount})</span>
-                            </div>
-                          )}
                         </div>
                       </th>
                     ))}

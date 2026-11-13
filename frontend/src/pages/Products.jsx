@@ -23,7 +23,7 @@ export default function Products() {
   return (
     <>
       <PageHeader breadcrumbs={title === 'All Products' ? [{ label: 'Products' }] : [{ label: 'Products', to: '/products' }, { label: title }]} title={title} description={description} />
-      <div className="ts-container py-6 sm:py-8"><CatalogView /></div>
+      <div className="ts-container pt-6 pb-8"><CatalogView /></div>
     </>
   );
 }

@@ -3,7 +3,10 @@ import { Link, useLocation } from "react-router-dom";
 import {
   BadgePercent,
   ChevronDown,
+  FileSpreadsheet,
+  Heart,
   Menu,
+  MessageSquare,
   Scale,
   Search,
   ShieldCheck,
@@ -15,12 +18,15 @@ import { IconButton } from "../common/Button";
 import SearchForm from "../forms/SearchForm";
 import MegaMenu from "./MegaMenu";
 import MobileMenu from "./MobileMenu";
-import LanguageSelector from "./LanguageSelector";
+import AboutMenu from "./AboutMenu";
+import LocationSelector from "./LocationSelector";
 import NotificationsMenu, { CountDot } from "./NotificationsMenu";
 import UserMenu from "./UserMenu";
 import SupportMenu from "./SupportMenu";
 import useAuth from "../../hooks/useAuth";
 import useCart from "../../hooks/useCart";
+import useWishlist from "../../hooks/useWishlist";
+import useMessages from "../../hooks/useMessages";
 import useDisclosure from "../../hooks/useDisclosure";
 import useScrolled from "../../hooks/useScrolled";
 import { useTranslation } from "../../i18n/LanguageContext";
@@ -33,7 +39,7 @@ function IconLink({ to, icon: Icon, label, count, className = "" }) {
       to={to}
       aria-label={`${label}${count ? `, ${count}` : ""}`}
       title={label}
-      className={`relative ${displayClass}size-7.5 sm:size-8 xl:size-8.5 shrink-0 items-center justify-center rounded-full text-navy-800 transition-colors hover:bg-navy-900/5 hover:text-navy-950 ${className}`}
+      className={`relative ${displayClass}size-8 shrink-0 items-center justify-center rounded-full text-navy-800 transition-colors hover:bg-navy-900/5 hover:text-navy-950 ${className}`}
     >
       <Icon className="size-4" strokeWidth={1.75} aria-hidden="true" />
       <CountDot count={count} />
@@ -52,6 +58,12 @@ function isActive(to, location) {
   if (to === "/products") {
     return location.pathname === "/products" && !location.search.includes("deal=1");
   }
+  if (to === "/rfq") {
+    return location.pathname === "/rfq";
+  }
+  if (to === "/info/about" || to === "/about") {
+    return location.pathname === "/info/about" || location.pathname === "/about";
+  }
   return (
     path === location.pathname ||
     (path !== "/" && location.pathname.startsWith(`${path}/`))
@@ -64,6 +76,8 @@ export default function Header() {
   const { user } = useAuth();
   const { t } = useTranslation();
   const { count: cartCount } = useCart();
+  const { count: wishlistCount } = useWishlist();
+  const { unreadCount: unreadMessages } = useMessages();
   const mobileMenu = useDisclosure();
   const scrolled = useScrolled();
   const [megaOpen, setMegaOpen] = useState(false);
@@ -124,7 +138,7 @@ export default function Header() {
         </a>
 
         <div
-          className={`w-full max-w-[105rem] mx-auto px-3 sm:px-4 lg:px-5 xl:px-6 flex items-center justify-between gap-3 lg:gap-4 transition-[padding] duration-300 ${scrolled ? "py-1.5 sm:py-2" : "py-2 sm:py-2.5"}`}
+          className="w-full max-w-[102rem] mx-auto px-3 sm:px-4 lg:px-4 xl:px-6 flex items-center justify-between gap-2 lg:gap-3 xl:gap-4 h-14 sm:h-16 lg:h-[66px]"
         >
           {/* Left: Mobile menu button & Brand Logo */}
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -139,138 +153,116 @@ export default function Header() {
             <Logo size="sm" />
           </div>
 
-          {/* Center Navigation: Clean, streamlined B2B wholesale links */}
+          {/* Center Navigation: Clean, optimized B2B wholesale marketplace links & About section */}
           <nav
             aria-label="Main"
             ref={megaRef}
             onMouseLeave={scheduleClose}
-            className="relative hidden items-center gap-0.5 xl:gap-1 lg:flex shrink-0"
+            className="relative hidden items-center justify-center flex-1 min-w-0 gap-1 xl:gap-1.5 2xl:gap-2 lg:flex"
           >
             {[
               { label: "Products", to: "/products" },
               { label: "Categories", to: "/categories", megaMenu: true },
               { label: "Suppliers", to: "/suppliers" },
-              { label: "Exporters", to: "/exporters" },
-              { label: "Post RFQ", to: "/rfq" },
+              { label: "Request a Quote", to: "/rfq" },
               ...(!isAuthPage
                 ? [{ label: "Compare Products", to: "/compare-products" }]
                 : []),
               { label: "Deals", to: "/products?deal=1" },
-              { label: "About Us", to: "/info/about" },
             ].map((item) => {
               const active = isActive(item.to, location);
-              const isAbout = item.to === "/info/about";
-              const isExporters = item.to === "/exporters";
-              const isDeals = item.to.includes("deal=1");
+              const pillClass = `relative inline-flex h-8.5 xl:h-9 items-center whitespace-nowrap rounded-full px-2 lg:px-2.5 xl:px-3 text-xs xl:text-[13px] font-semibold transition-all ${
+                active
+                  ? "bg-navy-900/[0.08] text-navy-950 font-bold ring-1 ring-navy-900/10 shadow-2xs"
+                  : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-950"
+              }`;
 
-              // Responsive tiering:
-              // - Categories, Products, Suppliers, Post RFQ, Compare Products: visible on lg+ (1024px+)
-              // - Exporters: visible on xl+ (1280px+)
-              // - Deals: visible on xl+ (1280px+)
-              // - About Us: visible on min-[1420px]+ when logged in, or min-[1360px]+ when guest
-              const hideClass = isAbout
-                ? user
-                  ? "hidden min-[1420px]:inline-flex "
-                  : "hidden min-[1360px]:inline-flex "
-                : isExporters || isDeals
-                  ? "hidden xl:inline-flex "
-                  : "";
-
-              const displayClass = hideClass ? hideClass : "inline-flex ";
-
-                const pillClass = `relative ${displayClass}h-8 xl:h-8.5 items-center whitespace-nowrap rounded-full px-2 xl:px-2.5 text-xs xl:text-[13px] font-medium transition-all ${active
-                    ? "bg-navy-900/[0.08] text-navy-950 font-bold ring-1 ring-navy-900/10"
-                    : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-950"
-                  }`;
-
-                const renderLabel = (label) => {
-                  if (label === "Request For Quotation" || label === "RFQ") {
-                    return "Post RFQ";
-                  }
-                  if (label === "Compare Products") {
-                    return (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Scale className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
-                        <span>Compare Products</span>
-                      </span>
-                    );
-                  }
-                  if (label === "Deals") {
-                    return (
-                      <span className="inline-flex items-center gap-1.5">
-                        <BadgePercent className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
-                        <span>{t('nav.deals', {}, 'Deals')}</span>
-                      </span>
-                    );
-                  }
-                  if (label === "Find Suppliers") {
-                    return t('nav.findSuppliers', {}, 'Suppliers');
-                  }
-                  if (label === "Explore Products") {
-                    return t('nav.exploreProducts', {}, 'Products');
-                  }
-                  if (label === "Categories") {
-                    return t('nav.categories', {}, 'Categories');
-                  }
-                  if (label === "Exporters") {
-                    return t('nav.exporters', {}, 'Exporters');
-                  }
-                  if (label === "Request For Quotation") {
-                    return t('nav.rfq', {}, 'RFQ');
-                  }
-                  if (label === "Compare Products") {
-                    return t('nav.compareProducts', {}, 'Compare');
-                  }
-                  if (label === "About Us") {
-                    return t('nav.about', {}, 'About Us');
-                  }
-                  if (label === "Become a Supplier") {
-                    return t('nav.becomeSupplier', {}, 'Become a Supplier');
-                  }
-                  return label;
-                };
-
-                if (item.megaMenu) {
+              const renderLabel = (label) => {
+                if (label === "Compare Products") {
                   return (
-                    <div
-                      key={item.label}
-                      className="relative inline-flex items-center"
-                      onMouseEnter={openMega}
-                    >
-                      <Link
-                        to={item.to}
-                        className={`relative inline-flex h-8 xl:h-8.5 items-center gap-1 whitespace-nowrap rounded-full px-2 xl:px-2.5 text-xs xl:text-[13px] font-medium transition-all ${active || megaOpen
-                            ? "bg-navy-900/[0.08] text-navy-950 font-bold ring-1 ring-navy-900/10"
-                            : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-950"
-                          }`}
-                        aria-current={active ? "page" : undefined}
-                      >
-                        <span>{renderLabel(item.label)}</span>
-                        <ChevronDown
-                          onClick={(e) => {
-                            e.preventDefault();
-                            toggleMega();
-                          }}
-                          className={`size-3 transition-transform duration-200 ${megaOpen ? "rotate-180" : ""
-                            }`}
-                          aria-hidden="true"
-                        />
-                      </Link>
-                    </div>
+                    <span className="inline-flex items-center gap-1 xl:gap-1.5">
+                      <Scale className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                      <span className="hidden xl:inline">{t('nav.compareProducts', {}, 'Compare Products')}</span>
+                      <span className="xl:hidden">{t('nav.compareShort', {}, 'Compare')}</span>
+                    </span>
                   );
                 }
+                if (label === "Deals") {
+                  return (
+                    <span className="inline-flex items-center gap-1 xl:gap-1.5">
+                      <BadgePercent className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                      <span>{t('nav.deals', {}, 'Deals')}</span>
+                    </span>
+                  );
+                }
+                if (label === "Request a Quote") {
+                  return (
+                    <span className="inline-flex items-center gap-1 xl:gap-1.5">
+                      <FileSpreadsheet className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                      <span className="hidden xl:inline">{t('nav.rfqLong', {}, 'Request a Quote')}</span>
+                      <span className="xl:hidden">{t('nav.rfq', {}, 'RFQ')}</span>
+                    </span>
+                  );
+                }
+                if (label === "Find Suppliers" || label === "Suppliers") {
+                  return t('nav.findSuppliers', {}, 'Suppliers');
+                }
+                if (label === "Explore Products" || label === "Products") {
+                  return t('nav.exploreProducts', {}, 'Products');
+                }
+                if (label === "Categories") {
+                  return t('nav.categories', {}, 'Categories');
+                }
+                return label;
+              };
+
+              if (item.megaMenu) {
                 return (
-                  <Link
+                  <div
                     key={item.label}
-                    to={item.to}
-                    onMouseEnter={scheduleClose}
-                    aria-current={active ? "page" : undefined}
-                    className={pillClass}
+                    className="relative inline-flex items-center"
+                    onMouseEnter={openMega}
                   >
-                    {renderLabel(item.label)}
-                  </Link>
+                    <Link
+                      to={item.to}
+                      className={`relative inline-flex h-8.5 xl:h-9 items-center gap-1 whitespace-nowrap rounded-full px-2 lg:px-2.5 xl:px-3 text-xs xl:text-[13px] font-semibold transition-all ${
+                        active || megaOpen
+                          ? "bg-navy-900/[0.08] text-navy-950 font-bold ring-1 ring-navy-900/10 shadow-2xs"
+                          : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-950"
+                      }`}
+                      aria-current={active ? "page" : undefined}
+                    >
+                      <span>{renderLabel(item.label)}</span>
+                      <ChevronDown
+                        onClick={(e) => {
+                          e.preventDefault();
+                          toggleMega();
+                        }}
+                        className={`size-3 transition-transform duration-200 ${
+                          megaOpen ? "rotate-180" : ""
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </Link>
+                  </div>
                 );
-              })}
+              }
+
+              return (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  onMouseEnter={scheduleClose}
+                  aria-current={active ? "page" : undefined}
+                  className={pillClass}
+                >
+                  {renderLabel(item.label)}
+                </Link>
+              );
+            })}
+
+            {/* Dedicated About Section Dropdown Menu */}
+            <AboutMenu active={isActive("/info/about", location)} />
             {megaOpen ? (
               <div onMouseEnter={openMega}>
                 <MegaMenu
@@ -282,7 +274,7 @@ export default function Header() {
           </nav>
 
           {/* Right Action Icons & User Account */}
-          <div className="flex shrink-0 items-center gap-1 sm:gap-1.5 lg:gap-1.5 xl:gap-2 pr-1 sm:pr-2">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-1.5 xl:gap-2">
             <IconButton
               icon={searchOpen ? X : Search}
               label={searchOpen ? "Close search" : "Search"}
@@ -290,13 +282,28 @@ export default function Header() {
               aria-expanded={searchOpen}
               aria-controls="header-search"
               size="sm"
-              className={`!size-7.5 sm:!size-8 xl:!size-8.5 shrink-0 -translate-x-1 ${scrolled ? "" : "max-lg:hidden"}`}
+              className="!size-8 shrink-0 max-lg:hidden"
             />
             {/* Very narrow phones choose language from the menu ("Region, language & currency") so Sign up fits */}
-            <LanguageSelector className="max-[389px]:hidden" />
+            <LocationSelector className="max-[389px]:hidden" />
             {user && user.role !== "super_admin" && (
               <NotificationsMenu className="hidden sm:inline-flex" />
             )}
+            {user && user.role !== "super_admin" && (
+              <IconLink
+                to="/messages"
+                icon={MessageSquare}
+                label="Messages"
+                count={unreadMessages}
+                className="hidden sm:inline-flex"
+              />
+            )}
+            <IconLink
+              to={user?.role === "buyer" ? "/buyer/wishlist" : "/wishlist"}
+              icon={Heart}
+              label="Wishlist"
+              count={wishlistCount}
+            />
             <IconLink
               to="/cart"
               icon={ShoppingCart}
@@ -329,7 +336,7 @@ export default function Header() {
             ) : null}
 
             {/* Subtle Divider between utility icons and user account CTA */}
-            <div className="hidden sm:block h-5 w-px bg-navy-900/10 mx-0.5 sm:mx-1" aria-hidden="true" />
+            <div className="hidden sm:block h-4 w-px bg-slate-200 mx-0.5 xl:mx-1 shrink-0" aria-hidden="true" />
 
             <div className="shrink-0">
               <UserMenu />
@@ -337,12 +344,13 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Desktop search drawer, and a permanent search row on smaller screens */}
+        {/* Desktop search drawer, and a permanent search row on smaller screens. It never hides on scroll: changing the
+            sticky header's height moves the page under the reader and makes the header tremble near the top. */}
         <div
           id="header-search"
-          className={`border-t border-navy-900/[0.06] ${searchOpen ? "block" : scrolled ? "hidden" : "lg:hidden"}`}
+          className={`border-t border-navy-900/[0.06] bg-white/98 backdrop-blur-md ${searchOpen ? "block" : "lg:hidden"}`}
         >
-          <div className="w-full max-w-[98rem] mx-auto px-2 sm:px-3 lg:px-4 xl:px-6 py-2">
+          <div className="w-full max-w-[102rem] mx-auto px-3 sm:px-4 lg:px-4 xl:px-6 py-2">
             <SearchForm
               idPrefix={searchOpen ? "header-search" : "mobile-search"}
               autoFocus={searchOpen}

@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { countryName, defaultCurrencyFor, isCountryCode, isCurrencyCode, validatePostalCode } from '../utils/countryData.js';
 
 /**
  * Account preferences that the platform actually applies:
@@ -23,6 +24,8 @@ export const DEFAULT_PREFERENCES = {
   notifications: Object.fromEntries(Object.keys(NOTIFICATION_CATEGORIES).map((key) => [key, true])),
   email: { productUpdates: false, consentUpdatedAt: null },
   language: { language: 'en', country: 'India' },
+  // Shipping location and display currency, chosen in the header. Display only: never the currency of an order.
+  location: { countryCode: 'IN', countryName: 'India', postalCode: '', displayCurrency: 'INR', currencyManual: false },
 };
 
 const TYPE_TO_CATEGORY = Object.fromEntries(
@@ -42,6 +45,7 @@ export function mergePreferences(stored) {
     notifications: { ...DEFAULT_PREFERENCES.notifications, ...(value.notifications || {}) },
     email: { ...DEFAULT_PREFERENCES.email, ...(value.email || {}) },
     language: { ...DEFAULT_PREFERENCES.language, ...(value.language || {}) },
+    location: { ...DEFAULT_PREFERENCES.location, ...(value.location || {}) },
   };
 }
 
@@ -81,6 +85,20 @@ export async function updatePreferences(userId, changes = {}) {
     if (language !== undefined && !LANGUAGES.includes(language)) throw fail('Choose a supported language.');
     if (country !== undefined && !COUNTRIES.includes(country)) throw fail('Choose a supported country.');
     next.language = { language: language ?? next.language.language, country: country ?? next.language.country };
+  }
+
+  if (changes.location !== undefined) {
+    const { countryCode, postalCode, displayCurrency, currencyManual } = changes.location || {};
+    const code = String(countryCode || '').toUpperCase();
+    if (!isCountryCode(code)) throw fail('Choose a country from the list.');
+    const postal = validatePostalCode(code, postalCode);
+    if (!postal.ok) throw fail(postal.message);
+    const manual = currencyManual === true;
+    // A currency the user picked by hand is kept; otherwise it follows the country
+    const currency = manual ? String(displayCurrency || '').toUpperCase() : defaultCurrencyFor(code);
+    if (!isCurrencyCode(currency)) throw fail('Choose a valid currency.');
+    // savedAt tells a sign-in that this account has a real choice, not just the default
+    next.location = { countryCode: code, countryName: countryName(code), postalCode: postal.value, displayCurrency: currency, currencyManual: manual, savedAt: new Date().toISOString() };
   }
 
   await prisma.user.update({ where: { id: userId }, data: { preferences: next } });

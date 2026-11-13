@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import useTrendingCategorySlugs from '../../hooks/useTrendingCategorySlugs';
 import {
   Armchair,
   Boxes,
@@ -116,9 +117,34 @@ export default function ProductCategoryDropdown({
     ? CATEGORY_ICONS[selectedCategory]
     : Boxes;
 
-  // Curated 4 popular shortcuts to show beside the dropdown
-  const popularSlugs = ['electronics', 'fashion-apparel', 'machinery', 'home-kitchen'];
-  const popularCategories = categories.filter((c) => popularSlugs.includes(c.slug));
+  // Quick buttons beside the dropdown: the categories trending on the marketplace right now (every category stays in the dropdown)
+  const trendingSlugs = useTrendingCategorySlugs();
+  const popularCategories = trendingSlugs.map((slug) => categories.find((c) => c.slug === slug)).filter(Boolean);
+
+  // The buttons stay on one line: any button that would not fully fit is hidden (every category is still in the dropdown)
+  const chipRowRef = useRef(null);
+  const [fittingChips, setFittingChips] = useState(Infinity);
+  useEffect(() => {
+    const row = chipRowRef.current;
+    if (!row) return undefined;
+    const measure = () => {
+      const limit = row.getBoundingClientRect().right;
+      const chips = [...row.querySelectorAll('[data-chip]')];
+      const fit = chips.filter((chip) => chip.getBoundingClientRect().right <= limit + 0.5).length;
+      setFittingChips((previous) => (previous === fit ? previous : fit));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(row);
+    // Button widths change when the web fonts finish loading
+    let active = true;
+    document.fonts?.ready.then(() => { if (active) measure(); });
+    return () => {
+      active = false;
+      observer.disconnect();
+    };
+    // Re-measured whenever the buttons themselves change, not only their number
+  }, [popularCategories.map((c) => c.slug).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="mb-5 flex flex-wrap items-center gap-2.5">
@@ -409,13 +435,13 @@ export default function ProductCategoryDropdown({
       )}
 
       {/* ============================================================ */}
-      {/* 3. Quick Popular Category Chips (Wrapped cleanly, NO scrollbar) */}
+      {/* 3. Quick trending category chips, on a single line (NO wrapping, NO scrollbar) */}
       {/* ============================================================ */}
-      <div className="hidden sm:flex flex-wrap items-center gap-1.5">
+      <div ref={chipRowRef} className="hidden sm:flex w-full basis-full flex-nowrap items-center gap-1.5 overflow-hidden">
         <button
           type="button"
           onClick={() => onSelectCategory('')}
-          className={`inline-flex min-h-[2.25rem] items-center rounded-xl px-3 py-1 text-xs font-semibold transition-all duration-150 border ${
+          className={`inline-flex shrink-0 whitespace-nowrap min-h-[2.25rem] items-center rounded-xl px-3 py-1 text-xs font-semibold transition-all duration-150 border ${
             !selectedCategory
               ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
               : 'bg-white text-slate-700 border-slate-200/90 hover:border-slate-300 hover:bg-slate-50'
@@ -424,14 +450,19 @@ export default function ProductCategoryDropdown({
           All
         </button>
 
-        {popularCategories.map((cat) => {
+        {popularCategories.map((cat, index) => {
           const isActive = selectedCategory === cat.slug;
+          // Hidden but kept in place, so measuring never moves the row
+          const fits = index < fittingChips;
           return (
             <button
               key={cat.id || cat.slug}
+              data-chip
               type="button"
               onClick={() => onSelectCategory(cat.slug)}
-              className={`inline-flex min-h-[2.25rem] items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-semibold transition-all duration-150 border ${
+              tabIndex={fits ? undefined : -1}
+              aria-hidden={fits ? undefined : 'true'}
+              className={`inline-flex shrink-0 whitespace-nowrap min-h-[2.25rem] items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-semibold transition-all duration-150 border ${fits ? '' : 'invisible'} ${
                 isActive
                   ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs font-bold'
                   : 'bg-white text-slate-700 border-slate-200/90 hover:border-emerald-400 hover:bg-emerald-50/50'

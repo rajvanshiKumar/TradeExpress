@@ -53,5 +53,6 @@ export const adminGetSignatory = wrap(async (req, res) => ok(res, await document
 export const adminUpdateSignatory = wrap(async (req, res) => ok(res, await documents.updateSignatory({ ...req.body, req }), 'Signatory saved.'));
 
 /* ---------- public ---------- */
+export const listPublicSuppliers = wrap(async (req, res) => ok(res, await documents.listPublicSuppliers()));
 export const publicProfile = wrap(async (req, res) => ok(res, await documents.getPublicProfile(req.params.code)));
 export const publicPhoto = wrap(async (req, res) => sendPhoto(res, await documents.getPublicPhoto(req.params.code), 'public, max-age=3600'));

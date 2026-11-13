@@ -3,14 +3,12 @@ import { WishlistContext } from './contextObjects';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { STORAGE_KEYS } from '../utils/constants';
 import { ProductContext } from './ProductContext';
-import { NotificationContext } from './NotificationContext';
 import useAuth from '../hooks/useAuth';
 
 export { WishlistContext };
 
 export function WishlistProvider({ children }) {
   const { user } = useAuth();
-  const { showToast } = useContext(NotificationContext);
   const [ids, setIds] = useLocalStorage(STORAGE_KEYS.wishlist, []);
   const [supplierIds, setSupplierIds] = useLocalStorage(STORAGE_KEYS.savedSuppliers, []);
   const { products, companies } = useContext(ProductContext);
@@ -26,14 +24,14 @@ export function WishlistProvider({ children }) {
 
   const toggleWishlist = useCallback((product) => {
     if (!user) {
-      showToast('Please log in or sign up to add items to your wishlist.', 'warning');
+      // Notification removed as requested
       return false;
     }
     const saved = ids.includes(product.id);
     // No toast: the heart icon itself shows the saved state
     setIds((previous) => (saved ? previous.filter((id) => id !== product.id) : [product.id, ...previous.filter((id) => id !== product.id)]));
     return !saved;
-  }, [user, ids, setIds, showToast]);
+  }, [user, ids, setIds]);
 
   const clearWishlist = useCallback(() => {
     if (!user) return;
@@ -47,13 +45,13 @@ export function WishlistProvider({ children }) {
 
   const toggleSupplier = useCallback((company) => {
     if (!user) {
-      showToast('Please log in or sign up to save suppliers to your wishlist.', 'warning');
+      // Notification removed as requested
       return false;
     }
     const saved = supplierIds.includes(company.id);
     setSupplierIds((previous) => (saved ? previous.filter((id) => id !== company.id) : [company.id, ...previous.filter((id) => id !== company.id)]));
     return !saved;
-  }, [user, supplierIds, setSupplierIds, showToast]);
+  }, [user, supplierIds, setSupplierIds]);
 
   const clearSuppliers = useCallback(() => {
     if (!user) return;
@@ -70,4 +68,3 @@ export function WishlistProvider({ children }) {
   }), [activeIds, items, suppliers, isSaved, toggleWishlist, clearWishlist, isSupplierSaved, toggleSupplier, clearSuppliers]);
   return <WishlistContext.Provider value={value}>{children}</WishlistContext.Provider>;
 }
-

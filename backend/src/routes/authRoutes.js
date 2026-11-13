@@ -217,6 +217,18 @@ router.post(
 );
 
 router.post(
+  '/check-phone',
+  authRateLimiter,
+  authController.checkPhone
+);
+
+router.get(
+  '/check-phone',
+  authRateLimiter,
+  authController.checkPhone
+);
+
+router.post(
   '/login',
   loginRateLimiter,
   validate([

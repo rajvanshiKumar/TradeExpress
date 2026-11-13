@@ -25,7 +25,9 @@ export async function getNotifications(req, res, next) {
 export async function createNotification(req, res, next) {
   try {
     const { userId, title, message, type, link } = req.body;
-    const targetUserId = userId || req.user?.id;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user?.role?.toUpperCase?.());
+    // Only administrators can assign notifications to other users; otherwise use the authenticated user's own ID
+    const targetUserId = (isAdmin && userId) ? userId : req.user?.id;
 
     if (!targetUserId || !title || !message) {
       return res.status(400).json({

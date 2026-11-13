@@ -42,7 +42,7 @@ const signIn = (name, pathname, role, userId) => {
   return token;
 };
 
-describe('Independent sessions for Buyer, Supplier and Super Admin', () => {
+describe('Independent sessions for Buyer, Supplier, Exporter and Super Admin', () => {
   let tokens;
   beforeEach(() => {
     shared.data.clear();
@@ -51,31 +51,51 @@ describe('Independent sessions for Buyer, Supplier and Super Admin', () => {
     tokens = {
       buyer: signIn('w1', '/login', 'BUYER', 'B1'),
       supplier: signIn('w2', '/login', 'SUPPLIER', 'S1'),
-      admin: signIn('w3', '/super-admin/login', 'SUPER_ADMIN', 'A1'),
+      exporter: signIn('w3', '/login', 'EXPORTER', 'E1'),
+      admin: signIn('w4', '/super-admin/login', 'SUPER_ADMIN', 'A1'),
     };
   });
   const tokenIn = (name, path) => { openWindow(name, path); return auth.getAuthToken(); };
 
-  it('gives each window the token of its own role, also after a refresh', () => {
+  it('gives each window the token of its own role, also after a refresh across 4 windows', () => {
     assert.equal(tokenIn('w1', '/buyer'), tokens.buyer);
     assert.equal(tokenIn('w2', '/supplier/dashboard'), tokens.supplier);
-    assert.equal(tokenIn('w3', '/super-admin'), tokens.admin);
+    assert.equal(tokenIn('w3', '/exporter/dashboard'), tokens.exporter);
+    assert.equal(tokenIn('w4', '/super-admin'), tokens.admin);
     // Public page: the window keeps its own role instead of the last one used elsewhere
     assert.equal(tokenIn('w1', '/products'), tokens.buyer);
+    assert.equal(tokenIn('w3', '/products'), tokens.exporter);
   });
 
-  for (const [who, name, path] of [['buyer', 'w1', '/buyer'], ['supplier', 'w2', '/supplier'], ['admin', 'w3', '/super-admin']]) {
+  for (const [who, name, path] of [['buyer', 'w1', '/buyer'], ['supplier', 'w2', '/supplier'], ['exporter', 'w3', '/exporter'], ['admin', 'w4', '/super-admin']]) {
     it(`signing out as ${who} signs out only ${who}`, () => {
       openWindow(name, path);
       assert.equal(auth.signOutWindow(), who);
       assert.equal(auth.getAuthToken(), '');
       assert.equal(shared.getItem(auth.TOKEN_KEYS[who]), null);
-      for (const other of ['buyer', 'supplier', 'admin'].filter((s) => s !== who)) {
+      for (const other of ['buyer', 'supplier', 'exporter', 'admin'].filter((s) => s !== who)) {
         assert.equal(auth.getTokenForSlot(other), tokens[other]);
         assert.ok(auth.readRoleSession(other).userId);
       }
     });
   }
+
+  it('logging out from the Supplier window leaves Buyer, Exporter, and Super Admin sessions active', () => {
+    openWindow('w2', '/supplier/dashboard');
+    assert.equal(auth.signOutWindow(), 'supplier');
+    assert.equal(tokenIn('w2', '/supplier/dashboard'), '');
+    assert.equal(tokenIn('w1', '/buyer'), tokens.buyer);
+    assert.equal(tokenIn('w3', '/exporter/dashboard'), tokens.exporter);
+    assert.equal(tokenIn('w4', '/super-admin'), tokens.admin);
+  });
+
+  it('new window on root / starts unauthenticated and is never auto-hijacked by last role', () => {
+    openWindow('w1', '/buyer');
+    auth.rememberActiveSlot('buyer');
+    // A fresh window opens http://localhost:5000/
+    assert.equal(openWindow('freshWindow', '/'), null);
+    assert.equal(auth.getAuthToken(), '');
+  });
 
   it('stays signed out after a refresh on a public page, while other roles stay signed in', () => {
     openWindow('w1', '/buyer');

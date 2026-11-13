@@ -138,7 +138,20 @@ export default function SupplierSidebar() {
 
   const isActiveRoute = (itemTo) => {
     if (itemTo === '/supplier') {
-      return location.pathname === '/supplier' || location.pathname === '/supplier/' || location.pathname === '/supplier/dashboard';
+      return (
+        location.pathname === '/supplier' ||
+        location.pathname === '/supplier/' ||
+        location.pathname === '/supplier/dashboard'
+      );
+    }
+    if (itemTo === '/supplier/products') {
+      // "Product Catalogue" should NOT be selected when on "Add New Product" (/supplier/products/new)
+      return (
+        (location.pathname === '/supplier/products' ||
+          location.pathname === '/supplier/products/' ||
+          location.pathname.startsWith('/supplier/products/')) &&
+        !location.pathname.startsWith('/supplier/products/new')
+      );
     }
     return location.pathname === itemTo || location.pathname.startsWith(`${itemTo}/`);
   };

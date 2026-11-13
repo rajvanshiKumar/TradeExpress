@@ -1,0 +1,44 @@
+.env
+.env.*
+!.env.example
+*.env
+backend/.env
+backend/.env.*
+
+# Python
+.venv/
+backend/.venv/
+venv/
+env/
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node / Next.js
+node_modules/
+frontend/node_modules/
+frontend/.next/
+.next/
+dist/
+build/
+*.tsbuildinfo
+
+# Database / Storage / Testing
+.devdb/
+.devdb.log
+.pytest_cache/
+backend/.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+storage/
+backend/storage/
+backend/storage/*
+backend/.e2e-storage/
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db

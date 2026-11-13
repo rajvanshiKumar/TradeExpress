@@ -12,23 +12,11 @@ export function InquiryProvider({ children }) {
   const { addNotification } = useContext(NotificationContext);
 
   const submitInquiry = useCallback(async (values, related) => {
+    // createInquiry already saves the RFQ on the server (with its product, target suppliers and delivery details).
+    // A second, partial POST used to be sent here too, which created an extra RFQ with no target supplier that
+    // every supplier could see.
     const record = await inquiryService.createInquiry(values, related);
     setItems((previous) => [record, ...previous]);
-
-    // Dual persistence to backend if available
-    try {
-      apiPost('rfq', {
-        title: values.productName || record.productName,
-        quantity: record.quantity,
-        unit: record.unit,
-        targetPrice: record.targetPrice,
-        specifications: record.specifications,
-        destinationCountry: record.destinationCountry,
-        deliveryPincode: values.pincode || null,
-        buyerName: record.buyerName,
-        buyerEmail: record.buyerEmail,
-      }).catch(() => {});
-    } catch {}
 
     if (record.companyId) {
       addNotification({ audience: `company:${record.companyId}`, type: 'quotes', title: 'New quote request', body: `${record.buyerName} requested ${record.quantity} × ${record.productName}.`, link: '/supplier/inquiries' });
@@ -72,6 +60,17 @@ export function InquiryProvider({ children }) {
         ? { ...item, status: 'Quoted', quote }
         : item
     )));
+
+    // Backend persistence
+    if (inquiry?.rfqId || inquiry?.id) {
+      apiPost(`rfq/${inquiry.rfqId || inquiry.id}/quote`, {
+        unitPrice: Number(quoteData.unitPrice),
+        leadTimeDays: Number(quoteData.leadTimeDays),
+        freightCharge: Number(quoteData.freightCharge || 0),
+        notes: quoteData.note || '',
+        shippingMethod: quoteData.shippingMethod || 'Road Express',
+      }).catch(() => {});
+    }
 
     if (inquiry && inquiry.buyerId !== 'guest') {
       addNotification({ audience: inquiry.buyerId, type: 'quotes', title: 'Quote received', body: `A quote was added to ${inquiry.id} (${inquiry.productName}).`, link: '/buyer/quotes' });
@@ -120,6 +119,18 @@ export function InquiryProvider({ children }) {
         : item
     )));
 
+    // Backend counter offer persistence
+    const targetQuoteId = inquiry.quote?.id;
+    if (targetQuoteId) {
+      apiPost(`rfq/quotes/${targetQuoteId}/counter`, {
+        unitPrice: Number(counterData.unitPrice),
+        leadTimeDays: Number(counterData.leadTimeDays || inquiry.quote.leadTimeDays),
+        freightCharge: Number(counterData.freightCharge || inquiry.quote.freightCharge || 0),
+        notes: counterData.note || '',
+        role: proposedBy,
+      }).catch(() => {});
+    }
+
     const audience = proposedBy === 'BUYER' ? `company:${inquiry.companyId}` : inquiry.buyerId;
     addNotification({
       audience,
@@ -138,6 +149,9 @@ export function InquiryProvider({ children }) {
         : item
     )));
     const inquiry = inquiries.find((item) => item.id === id);
+    if (inquiry?.quote?.id) {
+      apiPost(`rfq/quotes/${inquiry.quote.id}/accept`).catch(() => {});
+    }
     if (inquiry && inquiry.companyId) {
       addNotification({
         audience: `company:${inquiry.companyId}`,
@@ -156,7 +170,11 @@ export function InquiryProvider({ children }) {
         ? { ...item, status: 'Declined', rejectionReason: reason }
         : item
     )));
-  }, [setItems]);
+    const inquiry = inquiries.find((item) => item.id === id);
+    if (inquiry?.quote?.id) {
+      apiPost(`rfq/quotes/${inquiry.quote.id}/reject`, { reason }).catch(() => {});
+    }
+  }, [inquiries, setItems]);
 
   const value = useMemo(() => ({
     inquiries,

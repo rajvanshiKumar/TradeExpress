@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { FileText, Send } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { FileText, MessageSquare, Send } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Button from '../../components/common/Button';
 import { StatusBadge } from '../../components/common/Badge';
@@ -137,19 +138,31 @@ function Inquiries({ company }) {
   const { inquiries, loading, error, reload, respondToInquiry, setInquiryStatus } = useInquiries();
   const { money } = useCurrency();
   const { showToast } = useNotifications();
+  const navigate = useNavigate();
   const [tab, setTab] = useState('open');
   const [quoting, setQuoting] = useState(null);
 
-  const mine = inquiries.filter((inquiry) => inquiry.companyId === company.id);
+  const mine = inquiries.filter((inquiry) => {
+    if (!company) return true;
+    if (inquiry.companyId === company.id) return true;
+    if (inquiry.targetSupplierIds && (inquiry.targetSupplierIds.includes(company.id) || inquiry.targetSupplierIds.includes(company.userId))) return true;
+    if (inquiry.quote?.supplierId === company.id || inquiry.quote?.supplier?.id === company.id) return true;
+    if (inquiry.quotations?.some((q) => q.supplierId === company.id)) return true;
+    if (!inquiry.companyId && (!inquiry.targetSupplierIds || inquiry.targetSupplierIds.length === 0)) return true;
+    return false;
+  });
+
   const groups = {
     open: mine.filter((inquiry) => ['Submitted', 'Viewed'].includes(inquiry.status)),
-    quoted: mine.filter((inquiry) => ['Quoted', 'Negotiating', 'Accepted'].includes(inquiry.status)),
+    quoted: mine.filter((inquiry) => ['Quoted', 'Negotiating'].includes(inquiry.status)),
+    accepted: mine.filter((inquiry) => inquiry.status === 'Accepted'),
     closed: mine.filter((inquiry) => ['Closed', 'Declined'].includes(inquiry.status)),
   };
   const tabs = [
-    { id: 'open', label: 'Needs a quote', count: groups.open.length },
+    { id: 'open', label: 'RFQ Inbox (Needs a quote)', count: groups.open.length },
     { id: 'quoted', label: 'Quoted & Negotiating', count: groups.quoted.length },
-    { id: 'closed', label: 'Closed', count: groups.closed.length },
+    { id: 'accepted', label: 'Accepted Offers', count: groups.accepted.length },
+    { id: 'closed', label: 'Closed / Rejected', count: groups.closed.length },
   ];
 
   const sendQuote = (quote) => {
@@ -232,6 +245,19 @@ function Inquiries({ company }) {
                             {inquiry.quote ? `Update / Counter (Round ${Math.min(3, roundNum + 1)})` : 'Send Quote'}
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          icon={MessageSquare}
+                          onClick={() => {
+                            const rfqKey = inquiry.rfqId || inquiry.rfqNumber || inquiry.id;
+                            const buyerKey = inquiry.buyerId || '';
+                            const prodKey = inquiry.productId || '';
+                            navigate(`/messages?rfq=${encodeURIComponent(rfqKey)}&buyerId=${encodeURIComponent(buyerKey)}&product=${encodeURIComponent(prodKey)}`);
+                          }}
+                        >
+                          Contact Buyer
+                        </Button>
                         {inquiry.status === 'Submitted' ? <Button size="sm" variant="outline" onClick={() => { setInquiryStatus(inquiry.id, 'Viewed'); showToast('Marked as viewed.', 'info'); }}>Mark as viewed</Button> : null}
                         {inquiry.status === 'Quoted' ? <Button size="sm" variant="outline" onClick={() => { setInquiryStatus(inquiry.id, 'Negotiating'); showToast('Marked as negotiating.', 'info'); }}>Mark as negotiating</Button> : null}
                         {inquiry.status !== 'Closed'

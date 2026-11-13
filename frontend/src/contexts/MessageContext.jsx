@@ -4,10 +4,9 @@ import messageService from '../services/messageService';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socketService';
 import { AuthContext } from './AuthContext';
 
-export { MessageContext };
+import { sideFor } from '../utils/messageUtils';
 
-/** Which side of a conversation the signed-in user is on. */
-export const sideFor = (user) => (user?.role === 'supplier' ? 'supplier' : 'buyer');
+export { MessageContext, sideFor };
 
 export function MessageProvider({ children }) {
   const { user } = useContext(AuthContext);
@@ -90,9 +89,29 @@ export function MessageProvider({ children }) {
 
     const handleConversationUpdated = (updatedConv) => {
       setConversations((prev) => {
-        const exists = prev.find((c) => c.id === updatedConv.id);
-        if (exists) {
-          return prev.map((c) => (c.id === updatedConv.id ? { ...exists, ...updatedConv } : c));
+        const existsIndex = prev.findIndex((c) => c.id === updatedConv.id);
+        if (existsIndex !== -1) {
+          const current = prev[existsIndex];
+          const existingMessages = current.messages || [];
+          const incomingMessages = updatedConv.messages || [];
+          const messageMap = new Map();
+          existingMessages.forEach((m) => messageMap.set(m.id, m));
+          incomingMessages.forEach((m) => messageMap.set(m.id, m));
+          const mergedMessages = Array.from(messageMap.values()).sort(
+            (a, b) => new Date(a.createdAt || a.at) - new Date(b.createdAt || b.at)
+          );
+
+          const merged = {
+            ...current,
+            ...updatedConv,
+            messages: mergedMessages.length > 0 ? mergedMessages : current.messages,
+            unread: {
+              ...current.unread,
+              ...updatedConv.unread,
+            },
+          };
+          const remaining = prev.filter((_, idx) => idx !== existsIndex);
+          return [merged, ...remaining];
         }
         return [updatedConv, ...prev];
       });
@@ -126,21 +145,34 @@ export function MessageProvider({ children }) {
     socket.on('messages_read', handleMessagesRead);
     socket.on('user_typing', handleUserTyping);
 
-    // Reliable fallback polling: sync every 6 seconds as backup
-    const pollInterval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        messageService.listConversations().then((data) => {
-          if (Array.isArray(data)) {
-            setConversations((prev) => {
-              // Only update if there are newer messages or count changes
-              const prevTotal = prev.reduce((sum, c) => sum + (c.messages?.length || 0), 0);
-              const newTotal = data.reduce((sum, c) => sum + (c.messages?.length || 0), 0);
-              return prevTotal !== newTotal ? data : prev;
-            });
-          }
-        }).catch(() => {});
+    // Reliable fallback polling: sync every 45 seconds as backup (Socket.io provides real-time updates)
+    let inFlight = false;
+    let lastPollAt = Date.now();
+    const pollConversations = () => {
+      if (document.visibilityState !== 'visible' || inFlight) return;
+      inFlight = true;
+      messageService.listConversations().then((data) => {
+        lastPollAt = Date.now();
+        if (Array.isArray(data)) {
+          setConversations((prev) => {
+            const prevTotal = prev.reduce((sum, c) => sum + (c.messages?.length || 0), 0);
+            const newTotal = data.reduce((sum, c) => sum + (c.messages?.length || 0), 0);
+            return prevTotal !== newTotal ? data : prev;
+          });
+        }
+      }).catch(() => {}).finally(() => {
+        inFlight = false;
+      });
+    };
+
+    const pollInterval = window.setInterval(pollConversations, 45000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && (Date.now() - lastPollAt) >= 30000) {
+        pollConversations();
       }
-    }, 6000);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       socket.off('new_message', handleNewMessage);
@@ -148,6 +180,7 @@ export function MessageProvider({ children }) {
       socket.off('messages_read', handleMessagesRead);
       socket.off('user_typing', handleUserTyping);
       window.clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [user, side, reload]);
 
@@ -157,17 +190,32 @@ export function MessageProvider({ children }) {
     return conversations.reduce((sum, item) => sum + (item.unread?.[side] ?? 0), 0);
   }, [conversations, side, user]);
 
-  /** Opens or creates a thread with a supplier / product and returns its ID. */
+  /** Opens or creates a thread between buyer and supplier and returns its ID. */
   const startConversation = useCallback(
-    async ({ company, product = null, subject = '', initialMessage = '' }) => {
+    async ({
+      buyerId = null,
+      supplierId = null,
+      company = null,
+      companyId = null,
+      product = null,
+      productId = null,
+      productSlug = null,
+      rfqId = null,
+      orderId = null,
+      subject = '',
+      initialMessage = '',
+    }) => {
       if (!user) return null;
 
       try {
         const conv = await messageService.createOrGetConversation({
-          companyId: company?.id || null,
-          supplierId: product?.supplierId || company?.supplierId || null,
-          productId: product?.id || null,
-          productSlug: product?.slug || null,
+          buyerId: buyerId || null,
+          supplierId: supplierId || product?.supplierId || company?.supplierId || null,
+          companyId: companyId || company?.id || null,
+          productId: productId || product?.id || null,
+          productSlug: productSlug || product?.slug || null,
+          rfqId: rfqId || null,
+          orderId: orderId || null,
           subject: subject || (product ? product.name : `Inquiry for ${company?.name || 'Supplier'}`),
           initialMessage,
         });

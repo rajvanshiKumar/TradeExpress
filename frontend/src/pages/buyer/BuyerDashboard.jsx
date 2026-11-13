@@ -7,6 +7,7 @@ import {
   FileText,
   Heart,
   MapPin,
+  MessageSquare,
   Package,
   Receipt,
   Scale,
@@ -24,6 +25,7 @@ import useAuth from '../../hooks/useAuth';
 import useOrders from '../../hooks/useOrders';
 import useInquiries from '../../hooks/useInquiries';
 import useWishlist from '../../hooks/useWishlist';
+import useMessages from '../../hooks/useMessages';
 import useProducts from '../../hooks/useProducts';
 import useCurrency from '../../hooks/useCurrency';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -81,6 +83,7 @@ export default function BuyerDashboard() {
   const { user, addresses, addressesLoading } = useAuth();
   const { orders, loading: ordersLoading } = useOrders();
   const { inquiries, loading: inquiriesLoading } = useInquiries();
+  const { conversations: myConversations, unreadCount: unreadMessages, loading: messagesLoading } = useMessages();
   const { count: savedCount } = useWishlist();
   const { products, recentlyViewed, loading: productsLoading } = useProducts();
   const { money } = useCurrency();
@@ -106,15 +109,10 @@ export default function BuyerDashboard() {
       <SectionHeading
         title={`Welcome back, ${user.name.split(' ')[0]}`}
         description={`${user.company || 'Enterprise Procurement Account'} · Verified Buyer`}
-        actions={
-          <Button to="/rfq" size="sm" icon={FileText} variant="primary">
-            Request a Quote
-          </Button>
-        }
       />
 
       {/* Quick Navigation Shortcuts */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Link
           to="/products"
           className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
@@ -133,6 +131,21 @@ export default function BuyerDashboard() {
             <Scale className="size-3.5" />
           </div>
           <span className="truncate">Compare Items</span>
+        </Link>
+
+        <Link
+          to="/messages"
+          className="relative flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
+        >
+          <div className="size-7 rounded-lg bg-emerald-100 text-emerald-900 flex items-center justify-center shrink-0">
+            <MessageSquare className="size-3.5" />
+          </div>
+          <span className="truncate">Messages & Inbox</span>
+          {unreadMessages > 0 ? (
+            <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white shrink-0">
+              {unreadMessages}
+            </span>
+          ) : null}
         </Link>
 
         <Link
@@ -166,9 +179,10 @@ export default function BuyerDashboard() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Package} label="Orders" value={ordersLoading ? '…' : myOrders.length} hint={`${myOrders.filter((order) => !['Delivered', 'Cancelled'].includes(order.status)).length} in progress`} to="/buyer/orders" />
         <StatCard icon={FileText} tone="brand" label="Open quote requests" value={inquiriesLoading ? '…' : openQuotes.length} hint={`${myQuotes.filter((inquiry) => inquiry.quote).length} with a quote`} to="/buyer/quotes" />
+        <StatCard icon={MessageSquare} tone={unreadMessages > 0 ? "brand" : "default"} label="Messages" value={messagesLoading ? '…' : myConversations.length} hint={unreadMessages > 0 ? `${unreadMessages} unread from suppliers` : 'Direct supplier inbox'} to="/messages" />
         <StatCard icon={Heart} tone="warning" label="Saved products" value={savedCount} hint="In your wishlist" to="/buyer/wishlist" />
       </div>
 
@@ -207,7 +221,7 @@ export default function BuyerDashboard() {
           <Link to="/buyer/quotes" className="text-sm font-semibold text-brand-600 hover:text-brand-700">View all</Link>
         </div>
         {inquiriesLoading ? <TableSkeleton rows={3} /> : myQuotes.length === 0 ? (
-          <EmptyState icon={FileText} className="!py-10" title="No quote requests yet" text="Ask a supplier for pricing on your exact quantity." action={<Button to="/rfq" variant="navy" size="sm">Request a Quote</Button>} />
+          <EmptyState icon={FileText} className="!py-10" title="No quote requests yet" text="Ask a supplier for pricing on your exact quantity." action={<Button to="/products" variant="navy" size="sm">Browse Products to Request Quote</Button>} />
         ) : (
           <ul className="divide-y border-t">
             {myQuotes.slice(0, 4).map((inquiry) => (
@@ -222,6 +236,66 @@ export default function BuyerDashboard() {
                 </div>
               </li>
             ))}
+          </ul>
+        )}
+      </section>
+
+      <section aria-labelledby="recent-messages-title" className="ts-card overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-5 py-4">
+          <div className="flex items-center gap-2">
+            <h2 id="recent-messages-title" className="text-base font-bold">Supplier Messages & Inbox</h2>
+            {unreadMessages > 0 && (
+              <span className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-bold">
+                {unreadMessages} unread
+              </span>
+            )}
+          </div>
+          <Link to="/messages" className="text-sm font-semibold text-brand-600 hover:text-brand-700">View all</Link>
+        </div>
+        {messagesLoading ? (
+          <TableSkeleton rows={2} />
+        ) : myConversations.length === 0 ? (
+          <EmptyState
+            icon={MessageSquare}
+            className="!py-8"
+            title="No supplier messages yet"
+            text="When suppliers message you regarding your inquiries or orders, their direct messages will appear here."
+            action={<Button to="/products" variant="navy" size="sm">Browse Products to Contact Suppliers</Button>}
+          />
+        ) : (
+          <ul className="divide-y border-t">
+            {myConversations.slice(0, 3).map((conv) => {
+              const lastMsg = conv.messages?.[conv.messages.length - 1];
+              const supplierName = conv.supplierName || conv.supplier?.company || conv.supplier?.name || 'Supplier';
+              const unread = (conv.unread?.buyer ?? 0) > 0;
+              return (
+                <li key={conv.id} className={`flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 transition-colors ${unread ? 'bg-emerald-50/40' : 'hover:bg-slate-50/50'}`}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm ${unread ? 'font-bold text-navy-950' : 'font-semibold text-slate-900'}`}>
+                        {supplierName}
+                      </span>
+                      {unread && (
+                        <span className="inline-flex items-center rounded-full bg-emerald-600 px-1.5 py-0.2 text-[10px] font-bold text-white">
+                          New
+                        </span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted mt-0.5">
+                      <span className="font-medium text-slate-700">{conv.subject}:</span> {lastMsg ? (lastMsg.text || lastMsg.content) : 'No messages'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <span className="text-xs text-muted">
+                      {formatDate(conv.lastMessageAt || conv.createdAt)}
+                    </span>
+                    <Button to={`/messages?c=${conv.id}`} size="sm" variant={unread ? 'navy' : 'outline'}>
+                      Reply
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

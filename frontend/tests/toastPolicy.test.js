@@ -32,7 +32,6 @@ describe('Pop-up notifications', () => {
   });
 
   it('keeps guidance visible, so these buttons do not seem to do nothing', () => {
-    assert.match(read('hooks/useContactSupplier.js'), /Switch to a buyer account[^\n]*'warning'/);
     assert.match(read('pages/supplier/SupplierPayments.jsx'), /No transaction records available to export\.', 'warning'/);
     assert.match(read('components/forms/SupplierRegisterForm.jsx'), /Logo upload failed\.', 'error'/);
   });

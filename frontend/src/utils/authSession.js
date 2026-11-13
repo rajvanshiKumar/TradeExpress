@@ -8,15 +8,21 @@ import { STORAGE_KEYS } from './constants.js';
 import { readStorage, removeStorage, writeStorage } from './storage.js';
 
 export const EMPTY_SESSION = { userId: null, role: null, expiresAt: 0 };
-export const TOKEN_KEYS = { buyer: 'buyer_token', supplier: 'supplier_token', admin: 'admin_token' };
+export const TOKEN_KEYS = {
+  buyer: 'buyer_token',
+  supplier: 'supplier_token',
+  exporter: 'exporter_token',
+  admin: 'admin_token',
+};
 export const AUTH_CHANGED_EVENT = 'tradeexpress:auth-changed';
 
 const WINDOW_SLOT_KEY = 'tradeexpress_window_role';
+const WINDOW_TOKEN_KEY = 'tradeexpress_window_token';
 const LAST_SLOT_KEY = 'tradeexpress_last_role';
 const NO_SLOT = 'none';
 const LEGACY_TOKEN_KEYS = ['tradeexpress_auth_token', 'tradesphere_auth_token'];
 // Pages where a new window must show the form, even if another window of this browser is signed in
-const SIGN_IN_PATHS = /^\/(login|register|signup|forgot-password)(\/|$)|^\/(buyer|supplier|super-admin|superadmin|admin)\/(login|register)(\/|$)/;
+const SIGN_IN_PATHS = /^\/(login|register|signup|forgot-password)(\/|$)|^\/(buyer|supplier|exporter|super-admin|superadmin|admin)\/(login|register)(\/|$)/;
 
 let windowSlot; // undefined until this window has been resolved
 
@@ -73,15 +79,21 @@ export function sessionMatchesToken(session, token) {
   const payload = readTokenPayload(token);
   if (!payload) return false;
   if (tokenExpired(payload)) return false;
-  if (String(payload.role || '').toLowerCase() !== session.role) return false;
-  if (session.role === 'super_admin' || session.role === 'admin') return true;
+  const payloadRole = String(payload.role || '').toLowerCase();
+  const sessionRole = String(session.role || '').toLowerCase();
+  if (payloadRole !== sessionRole) {
+    if (!(sessionRole === 'exporter' && payloadRole === 'supplier')) {
+      return false;
+    }
+  }
+  if (sessionRole === 'super_admin' || sessionRole === 'admin') return true;
   return payload.userId === session.userId;
 }
 
 /** The storage slot for a role: Admin and Super Admin share one. */
 export function slotForRole(role) {
   const clean = String(role || '').toLowerCase();
-  if (clean === 'buyer' || clean === 'supplier') return clean;
+  if (clean === 'buyer' || clean === 'supplier' || clean === 'exporter') return clean;
   return clean === 'admin' || clean === 'super_admin' ? 'admin' : null;
 }
 
@@ -91,6 +103,7 @@ export function slotForPath(pathname) {
   // A supplier's public profile (/supplier/TE-SEL-000123) is opened by anyone, so it never changes a window's role
   if (/^\/supplier\/(TE-SEL-|SUP-)/i.test(path)) return null;
   if (/^\/buyer(\/|$)/.test(path)) return 'buyer';
+  if (/^\/exporter(\/|$)/.test(path)) return 'exporter';
   if (/^\/supplier(\/|$)/.test(path)) return 'supplier';
   return /^\/(super-admin|superadmin|admin)(\/|$)/.test(path) ? 'admin' : null;
 }
@@ -141,7 +154,13 @@ export const writeRoleSession = (slot, session) => writeStorage(sessionKey(slot)
 export function bindWindow(slot) {
   windowSlot = slot || null;
   safeSet(storageOf('sessionStorage'), WINDOW_SLOT_KEY, slot || NO_SLOT);
-  if (slot) safeSet(storageOf('localStorage'), LAST_SLOT_KEY, slot);
+  if (!slot) {
+    safeRemove(storageOf('sessionStorage'), WINDOW_TOKEN_KEY);
+  } else {
+    const slotToken = safeGet(storageOf('localStorage'), TOKEN_KEYS[slot]);
+    if (slotToken) safeSet(storageOf('sessionStorage'), WINDOW_TOKEN_KEY, slotToken);
+    safeSet(storageOf('localStorage'), LAST_SLOT_KEY, slot);
+  }
 }
 
 /** Notes the role of the window in use, so a link opened in a new tab from it continues as the same role. */
@@ -156,7 +175,8 @@ export function rememberActiveSlot(slot) {
  */
 export function resolveWindowSlot(pathname) {
   migrateLegacySession();
-  const fromPath = slotForPath(pathname);
+  const path = String(pathname || '');
+  const fromPath = slotForPath(path);
   if (fromPath && readRoleSession(fromPath).userId) {
     bindWindow(fromPath);
     return fromPath;
@@ -166,7 +186,7 @@ export function resolveWindowSlot(pathname) {
     windowSlot = TOKEN_KEYS[own] ? own : null;
     return windowSlot;
   }
-  if (fromPath || SIGN_IN_PATHS.test(String(pathname || ''))) {
+  if (fromPath || SIGN_IN_PATHS.test(path) || path === '/' || path === '') {
     windowSlot = null;
     return null;
   }
@@ -193,13 +213,31 @@ export function getTokenForSlot(slot) {
 }
 
 /** The token this window should send with its API requests. */
-export const getAuthToken = () => getTokenForSlot(currentSlot());
+export function getAuthToken() {
+  const slot = currentSlot();
+  if (!slot) return '';
+  const ownToken = safeGet(storageOf('sessionStorage'), WINDOW_TOKEN_KEY);
+  if (ownToken && !tokenExpired(readTokenPayload(ownToken))) {
+    const payloadRole = String(readTokenPayload(ownToken)?.role || '').toLowerCase();
+    const cleanSlot = slotForRole(slot);
+    if (cleanSlot === 'admin') {
+      if (payloadRole === 'admin' || payloadRole === 'super_admin') return ownToken;
+    } else if (cleanSlot === 'exporter') {
+      if (payloadRole === 'exporter' || payloadRole === 'supplier') return ownToken;
+    } else if (payloadRole === cleanSlot) {
+      return ownToken;
+    }
+  }
+  return getTokenForSlot(slot);
+}
 
 /** Saves a new login token under its own role and makes this window act as that role. */
-export function storeAuthToken(token) {
-  const slot = slotForRole(readTokenPayload(token)?.role);
+export function storeAuthToken(token, explicitSlot = null) {
+  const payloadRole = readTokenPayload(token)?.role;
+  const slot = explicitSlot || slotForRole(payloadRole);
   if (!slot) return;
   safeSet(storageOf('localStorage'), TOKEN_KEYS[slot], token);
+  safeSet(storageOf('sessionStorage'), WINDOW_TOKEN_KEY, token);
   bindWindow(slot);
 }
 
@@ -207,6 +245,7 @@ export function storeAuthToken(token) {
 export function signOutWindow() {
   const slot = currentSlot();
   if (slot) clearSlot(slot);
+  safeRemove(storageOf('sessionStorage'), WINDOW_TOKEN_KEY);
   bindWindow(null);
   return slot;
 }

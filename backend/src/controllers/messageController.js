@@ -7,10 +7,32 @@ import { broadcastNewMessage, broadcastMessagesRead } from '../services/socketSe
  */
 export async function createOrGetConversation(req, res, next) {
   try {
-    const buyerId = req.user.id;
-    const { supplierId, companyId, productId, productSlug, rfqId, orderId, subject, initialMessage } = req.body;
+    const callerUser = req.user;
+    const { buyerId: reqBuyerId, supplierId: reqSupplierId, companyId, productId, productSlug, rfqId, orderId, subject, initialMessage } = req.body;
+
+    let buyerId = reqBuyerId || null;
+    let supplierId = reqSupplierId || null;
+
+    if (callerUser.role === 'BUYER') {
+      buyerId = callerUser.id;
+    } else if (callerUser.role === 'SUPPLIER') {
+      if (reqBuyerId) {
+        // Supplier replying to or contacting an identified buyer
+        buyerId = reqBuyerId;
+        supplierId = callerUser.id;
+      } else {
+        // Supplier inquiring with another supplier/company
+        buyerId = callerUser.id;
+      }
+    } else {
+      // ADMIN or other role
+      if (!buyerId && !supplierId) {
+        buyerId = callerUser.id;
+      }
+    }
 
     const result = await messageService.createOrGetConversation({
+      callerUser,
       buyerId,
       supplierId,
       companyId,

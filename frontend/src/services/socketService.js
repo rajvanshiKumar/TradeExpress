@@ -23,8 +23,8 @@ export function connectSocket() {
     return null;
   }
 
-  // If already connected with same token, reuse. A different token means this window changed role.
-  if (socket?.connected && socketToken === token) {
+  // If already connected or connecting with same token, reuse. A different token means this window changed role.
+  if (socket && socketToken === token && !socket.disconnected) {
     return socket;
   }
   if (socket) socket.disconnect();

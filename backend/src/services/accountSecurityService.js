@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { ENV } from '../config/env.js';
-import { reissueCurrentToken } from './sessionService.js';
+import { reissueCurrentToken, invalidateSessionCache } from './sessionService.js';
 import { getRequestContext } from '../utils/requestContext.js';
 import { validatePassword } from '../utils/passwordValidator.js';
 import { isDevOtpAllowed, normalizeMobile, validateVerifiedMobile } from './otpService.js';
@@ -188,6 +188,8 @@ export async function changePasswordWithGrant(userId, { grant, newPassword, conf
     // Any other password-change codes still pending are no longer needed
     await tx.accountVerification.updateMany({ where: { userId, purpose: 'PASSWORD_CHANGE', consumedAt: null }, data: { consumedAt: new Date() } });
   }, { maxWait: 10000, timeout: 20000 });
+
+  invalidateSessionCache(null, userId);
 
   await prisma.auditLog.create({ data: { actorId: userId, actorEmail: user.email, actorRole: user.role, action: 'PASSWORD_CHANGE', resource: 'ACCOUNT', targetId: userId, result: 'SUCCESS' } }).catch(() => {});
   sendAccountSecurityEmail({ email: user.email, name: user.name, subject: 'Your TradeExpress password was changed', message: 'The password for your TradeExpress account was just changed, and other devices were signed out.' });

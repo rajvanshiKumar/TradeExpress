@@ -7,7 +7,7 @@ import { daysAgo } from '../utils/formatDate.js';
 const rows = [
   {
     name: 'Shenzhen NovaTech Electronics', city: 'Shenzhen', country: 'China', flag: '🇨🇳', industry: 'Consumer Electronics', businessType: 'Manufacturer',
-    established: 2012, employees: '201–500', color: '#1D4ED8', responseTime: 'Within 6 hours', rating: 4.7,
+    established: 2012, employees: '201–500', color: '#1D4ED8', responseTime: 'Within 6 hours', rating: 0,
     description: 'NovaTech designs and assembles audio devices, wearables and mobile accessories for brands that want OEM or ODM production. The team runs four SMT lines and an in-house acoustics lab, and supports custom firmware, packaging and logo printing.',
     mainProducts: ['Wireless headphones', 'Earbuds', 'Bluetooth speakers', 'Smart watches', 'Power banks'],
     moqInfo: 'From 100 pieces per model. Mixed colours allowed in one order.',
@@ -16,7 +16,7 @@ const rows = [
   },
   {
     name: 'Pearl River Garments Co.', city: 'Guangzhou', country: 'China', flag: '🇨🇳', industry: 'Fashion and Textiles', businessType: 'Manufacturer',
-    established: 2008, employees: '501–1000', color: '#BE185D', responseTime: 'Within 12 hours', rating: 4.5,
+    established: 2008, employees: '501–1000', color: '#BE185D', responseTime: 'Within 12 hours', rating: 0,
     description: 'Pearl River Garments is a cut-and-sew factory producing T-shirts, hoodies and outerwear for private-label buyers. Services include pattern making, fabric sourcing, screen and DTG printing, embroidery and retail-ready packing.',
     mainProducts: ['Blank T-shirts', 'Hoodies', 'Denim jackets', 'Blazers'],
     moqInfo: 'From 150 pieces per style and colour. Size ratios on request.',
@@ -25,7 +25,7 @@ const rows = [
   },
   {
     name: 'Jaipur Craft & Home Exports', city: 'Jaipur', country: 'India', flag: '🇮🇳', industry: 'Home Decor and Handicrafts', businessType: 'Exporter',
-    established: 2010, employees: '51–200', color: '#B45309', responseTime: 'Within 8 hours', rating: 4.6,
+    established: 2010, employees: '51–200', color: '#B45309', responseTime: 'Within 8 hours', rating: 0,
     description: 'Jaipur Craft & Home works with artisan workshops across Rajasthan to export ceramics, tableware, candles and wooden décor. Each order is consolidated, quality-checked and export-packed at the company’s Jaipur warehouse.',
     mainProducts: ['Ceramic vases', 'Stoneware dinnerware', 'Soy candles', 'Wall clocks', 'Wooden toys'],
     moqInfo: 'From 50 sets or 100 pieces. Assorted designs can be combined.',
@@ -34,7 +34,7 @@ const rows = [
   },
   {
     name: 'Mumbai Industrial Solutions', city: 'Mumbai', country: 'India', flag: '🇮🇳', industry: 'Industrial Machinery and Tools', businessType: 'Manufacturer',
-    established: 2004, employees: '201–500', color: '#334155', responseTime: 'Within 24 hours', rating: 4.4,
+    established: 2004, employees: '201–500', color: '#334155', responseTime: 'Within 24 hours', rating: 0,
     description: 'Mumbai Industrial Solutions builds power tools, workshop machinery, garage equipment and safety gear for contractors and distributors. The plant covers casting, machining, assembly and load testing under one roof.',
     mainProducts: ['Cordless drills', 'CNC engraving machines', 'Hydraulic jacks', 'Sprayers', 'Safety helmets', 'Wrench sets'],
     moqInfo: 'Machines from 1 unit. Tools and safety gear from 50 pieces.',
@@ -43,7 +43,7 @@ const rows = [
   },
   {
     name: 'Seoul BeautySource Trading', city: 'Seoul', country: 'South Korea', flag: '🇰🇷', industry: 'Beauty and Personal Care', businessType: 'Trading Company',
-    established: 2015, employees: '11–50', color: '#DB2777', responseTime: 'Within 4 hours', rating: 4.8,
+    established: 2015, employees: '11–50', color: '#DB2777', responseTime: 'Within 4 hours', rating: 0,
     description: 'Seoul BeautySource sources skincare, makeup and beauty tools from partner laboratories in Korea and manages formulation choice, private-label artwork and export documents for small and mid-size brands.',
     mainProducts: ['Serums', 'Gel creams', 'Lipsticks', 'Makeup brushes', 'Sunscreen'],
     moqInfo: 'From 300 pieces per SKU. Private label from 1,000 pieces.',
@@ -52,7 +52,7 @@ const rows = [
   },
   {
     name: 'Ho Chi Minh Packaging Works', city: 'Ho Chi Minh City', country: 'Vietnam', flag: '🇻🇳', industry: 'Packaging and Supplies', businessType: 'Manufacturer',
-    established: 2011, employees: '201–500', color: '#0F766E', responseTime: 'Within 10 hours', rating: 4.5,
+    established: 2011, employees: '201–500', color: '#0F766E', responseTime: 'Within 10 hours', rating: 0,
     description: 'Ho Chi Minh Packaging Works produces paper bags, glass containers, cosmetic bottles and corrugated cartons with custom sizes and printing. Sampling takes around a week and artwork support is included.',
     mainProducts: ['Kraft paper bags', 'Glass jars', 'Glass bottles', 'Dropper bottles', 'Shipping cartons'],
     moqInfo: 'From 2,000 pieces. Custom print from 5,000 pieces.',
@@ -61,7 +61,7 @@ const rows = [
   },
   {
     name: 'Istanbul Leather & Fashion', city: 'Istanbul', country: 'Türkiye', flag: '🇹🇷', industry: 'Bags and Fashion Accessories', businessType: 'Manufacturer',
-    established: 2006, employees: '51–200', color: '#7C2D12', responseTime: 'Within 8 hours', rating: 4.6,
+    established: 2006, employees: '51–200', color: '#7C2D12', responseTime: 'Within 8 hours', rating: 0,
     description: 'Istanbul Leather & Fashion crafts full-grain leather bags, wallets and belts in a family-run atelier. Buyers can choose leather, lining, hardware and embossing, and approve a pre-production sample before the run.',
     mainProducts: ['Leather totes', 'Wallets', 'Belts', 'Briefcases'],
     moqInfo: 'From 30 pieces for bags and 200 pieces for small leather goods.',
@@ -70,7 +70,7 @@ const rows = [
   },
   {
     name: 'Dhaka Cotton Industries', city: 'Dhaka', country: 'Bangladesh', flag: '🇧🇩', industry: 'Garments and Fabrics', businessType: 'Manufacturer',
-    established: 2001, employees: '1000+', color: '#15803D', responseTime: 'Within 12 hours', rating: 4.3,
+    established: 2001, employees: '1000+', color: '#15803D', responseTime: 'Within 12 hours', rating: 0,
     description: 'Dhaka Cotton Industries is a vertically integrated mill and garment maker covering knitting, dyeing and sewing. It produces knitwear, woven shirts, denim and bed linen in large volumes for retail programmes.',
     mainProducts: ['Sweaters', 'Woven shirts', 'Denim jeans', 'Bed linen'],
     moqInfo: 'From 300 pieces per style. Lower minimums for stock fabrics.',
@@ -79,7 +79,7 @@ const rows = [
   },
   {
     name: 'Milan Living & Furniture', city: 'Milan', country: 'Italy', flag: '🇮🇹', industry: 'Furniture and Interiors', businessType: 'Manufacturer',
-    established: 1998, employees: '51–200', color: '#4338CA', responseTime: 'Within 24 hours', rating: 4.7,
+    established: 1998, employees: '51–200', color: '#4338CA', responseTime: 'Within 24 hours', rating: 0,
     description: 'Milan Living & Furniture designs and builds upholstered seating, office chairs and lighting for hospitality projects and retailers. Frames, fabrics and finishes can be specified per project.',
     mainProducts: ['Fabric sofas', 'Leather sofas', 'Armchairs', 'Office chairs', 'Floor lamps'],
     moqInfo: 'Sofas from 2 pieces. Chairs and lighting from 10 pieces.',
@@ -88,7 +88,7 @@ const rows = [
   },
   {
     name: 'Austin GreenSupply Co.', city: 'Austin', country: 'USA', flag: '🇺🇸', industry: 'Sustainable Products', businessType: 'Wholesaler',
-    established: 2017, employees: '11–50', color: '#166534', responseTime: 'Within 6 hours', rating: 4.6,
+    established: 2017, employees: '11–50', color: '#166534', responseTime: 'Within 6 hours', rating: 0,
     description: 'Austin GreenSupply wholesales lower-impact everyday goods: soy candles, organic cotton bedding, refillable glass, recycled-material outdoor gear and gardening supplies. Orders ship from its Texas warehouse.',
     mainProducts: ['Soy candles', 'Organic cotton bedding', 'Refillable bottles', 'Trail shoes', 'Backpacks', 'Seed trays'],
     moqInfo: 'From 100 pieces. Mixed cartons available for stocked lines.',
@@ -119,7 +119,8 @@ const companies = rows.map((row, index) => {
     isSample: true,
     coverIllustration: 'cover-default',
     ...row,
-    reviewCount: 18 + number * 7,
+    rating: 0,
+    reviewCount: 0,
     // Verification starts as "not submitted". Two sample companies have documents waiting
     // for review so the admin review screen has something to show. None is pre-approved.
     verification: number === 4 || number === 9
@@ -130,13 +131,7 @@ const companies = rows.map((row, index) => {
       : { status: 'not-submitted', submittedAt: null, reviewedAt: null, note: '', documents: [] },
     // Illustrative examples only: these are not real certificates.
     certificates: ['Quality management system (example)', 'Social compliance audit (example)', 'Product safety test report (example)'].slice(0, 2 + (number % 2)),
-    reviews: [0, 1, 2].map((offset) => ({
-      id: `TS-CO-${number}-R${offset + 1}`,
-      author: REVIEWERS[(index + offset) % REVIEWERS.length],
-      rating: [5, 4, 5][(index + offset) % 3],
-      text: REVIEW_TEXT[(index * 2 + offset) % REVIEW_TEXT.length],
-      date: daysAgo(12 + offset * 19 + index * 3),
-    })),
+    reviews: [],
   };
 });
 

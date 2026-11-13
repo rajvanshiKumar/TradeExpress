@@ -23,7 +23,6 @@ import {
 import Button from '../common/Button';
 import CustomSelect from '../common/CustomSelect';
 import Badge from '../common/Badge';
-import Rating from '../common/Rating';
 import VerificationBadge from '../common/VerificationBadge';
 import CompanyLogo from '../common/CompanyLogo';
 import Modal from '../common/Modal';
@@ -40,7 +39,9 @@ import { formatNumber } from '../../utils/formatCurrency';
 import { quantityLabel } from '../../utils/units';
 
 export default function ProductSupplierListing({ product }) {
-  const { money } = useCurrency();
+  const { displayMoney } = useCurrency();
+  // Browsing price, shown in the buyer's currency ("≈" when converted); checkout and orders keep the real currency
+  const money = (value) => displayMoney(value, product?.currency || 'INR');
   const contact = useContactSupplier();
   const { showToast } = useNotifications();
   const { user } = useAuth();
@@ -125,8 +126,8 @@ export default function ProductSupplierListing({ product }) {
             productName: product.name,
             profileSlug: primaryCompany.slug,
             profileUrl: `/suppliers/${primaryCompany.slug}`,
-            rating: primaryCompany.rating || 4.8,
-            reviewCount: primaryCompany.reviewCount || 24,
+            rating: Number(primaryCompany.rating || 0),
+            reviewCount: Number(primaryCompany.reviewCount || 0),
           });
         }
 
@@ -178,8 +179,8 @@ export default function ProductSupplierListing({ product }) {
               productName: sibling.name,
               profileSlug: company.slug,
               profileUrl: `/suppliers/${company.slug}`,
-              rating: company.rating || 4.7,
-              reviewCount: company.reviewCount || 18,
+              rating: Number(company.rating || 0),
+              reviewCount: Number(company.reviewCount || 0),
             });
           }
         });
@@ -482,13 +483,6 @@ export default function ProductSupplierListing({ product }) {
                           <Truck className="size-3.5 text-navy-600 shrink-0" />
                           <span>Est. Shipping: {money(supplier.shippingCost || 500)}</span>
                         </span>
-
-                        {supplier.rating > 0 && (
-                          <span className="inline-flex items-center gap-1.5">
-                            <Rating value={supplier.rating} showValue={true} />
-                            <span className="text-muted">({supplier.reviewCount})</span>
-                          </span>
-                        )}
                       </div>
 
                       {/* Escrow payment terms */}

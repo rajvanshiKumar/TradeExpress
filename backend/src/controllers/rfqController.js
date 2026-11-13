@@ -7,13 +7,41 @@ export async function createRfq(req, res, next) {
       buyerId: req.user?.id || req.body.buyerId || null,
       buyerName: req.body.buyerName || req.user?.name,
       buyerEmail: req.body.buyerEmail || req.user?.email,
-      buyerCompany: req.body.buyerCompany || req.user?.companyName,
+      buyerCompany: req.body.buyerCompany || req.user?.company || req.user?.companyName,
     });
     res.status(201).json({
       success: true,
       message: 'RFQ created successfully.',
       data: rfq,
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getMatchingSuppliers(req, res, next) {
+  try {
+    const { productId, category, search, productNames } = req.query;
+    let parsedProductNames = [];
+    if (productNames) {
+      if (Array.isArray(productNames)) {
+        parsedProductNames = productNames;
+      } else {
+        try {
+          parsedProductNames = JSON.parse(productNames);
+        } catch {
+          parsedProductNames = String(productNames).split(',').map((s) => s.trim());
+        }
+      }
+    }
+    const suppliers = await rfqService.getMatchingSuppliers({
+      productId,
+      categorySlug: category,
+      search,
+      productNames: parsedProductNames,
+      excludeUserId: req.user?.id,
+    });
+    res.json({ success: true, count: suppliers.length, data: suppliers });
   } catch (error) {
     next(error);
   }

@@ -1,0 +1,1497 @@
+{
+ "common_attributes": [
+  {
+   "key": "brand",
+   "label": "Brand",
+   "data_type": "string",
+   "required": false,
+   "ocr_extractable": true
+  },
+  {
+   "key": "model_number",
+   "label": "Model number",
+   "data_type": "string",
+   "required": false,
+   "ocr_extractable": true,
+   "validation_rules": {
+    "max_length": 80
+   }
+  },
+  {
+   "key": "color",
+   "label": "Color",
+   "data_type": "string",
+   "required": false
+  },
+  {
+   "key": "material",
+   "label": "Material",
+   "data_type": "string",
+   "required": false
+  },
+  {
+   "key": "barcode",
+   "label": "Barcode (EAN/UPC)",
+   "data_type": "string",
+   "required": false,
+   "ocr_extractable": true,
+   "validation_rules": {
+    "regex": "\\d{8,14}"
+   }
+  },
+  {
+   "key": "country_of_origin",
+   "label": "Country of origin",
+   "data_type": "string",
+   "required": false,
+   "ocr_extractable": true,
+   "validation_rules": {
+    "regex": "[A-Z]{2}"
+   }
+  },
+  {
+   "key": "net_weight",
+   "label": "Net weight",
+   "data_type": "weight",
+   "required": false
+  },
+  {
+   "key": "package_dimensions",
+   "label": "Package dimensions",
+   "data_type": "dimension",
+   "required": false
+  }
+ ],
+ "categories": [
+  {
+   "slug": "clothing-fashion",
+   "name": "Clothing and Fashion",
+   "attributes": [
+    {
+     "key": "size",
+     "label": "Size",
+     "data_type": "enum",
+     "required": true,
+     "options": [
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+     ],
+     "ocr_extractable": true
+    },
+    {
+     "key": "gender",
+     "label": "Gender",
+     "data_type": "enum",
+     "required": true,
+     "options": [
+      "men",
+      "women",
+      "unisex",
+      "boys",
+      "girls"
+     ]
+    },
+    {
+     "key": "fabric",
+     "label": "Fabric composition",
+     "data_type": "string",
+     "required": false
+    },
+    {
+     "key": "pattern",
+     "label": "Pattern",
+     "data_type": "enum",
+     "required": false,
+     "options": [
+      "solid",
+      "striped",
+      "checked",
+      "printed",
+      "floral"
+     ]
+    },
+    {
+     "key": "fit",
+     "label": "Fit",
+     "data_type": "enum",
+     "required": false,
+     "options": [
+      "slim",
+      "regular",
+      "relaxed",
+      "oversized"
+     ]
+    }
+   ],
+   "children": [
+    {
+     "slug": "mens-clothing",
+     "name": "Men's Clothing",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "mens-tshirts",
+       "name": "T-Shirts",
+       "attributes": [
+        {
+         "key": "neck_type",
+         "label": "Neck type",
+         "data_type": "enum",
+         "required": false,
+         "options": [
+          "round",
+          "v-neck",
+          "polo",
+          "henley"
+         ]
+        },
+        {
+         "key": "sleeve_length",
+         "label": "Sleeve length",
+         "data_type": "enum",
+         "required": false,
+         "options": [
+          "short",
+          "long",
+          "sleeveless"
+         ]
+        }
+       ],
+       "children": []
+      },
+      {
+       "slug": "mens-jeans",
+       "name": "Jeans",
+       "attributes": [
+        {
+         "key": "waist_size",
+         "label": "Waist size",
+         "data_type": "measurement",
+         "required": false,
+         "validation_rules": {
+          "units": [
+           "in",
+           "cm"
+          ]
+         }
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "womens-clothing",
+     "name": "Women's Clothing",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "womens-dresses",
+       "name": "Dresses",
+       "attributes": [
+        {
+         "key": "dress_length",
+         "label": "Dress length",
+         "data_type": "enum",
+         "required": false,
+         "options": [
+          "mini",
+          "midi",
+          "maxi"
+         ]
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "footwear",
+     "name": "Footwear",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "sneakers",
+       "name": "Sneakers",
+       "attributes": [
+        {
+         "key": "shoe_size",
+         "label": "Shoe size",
+         "data_type": "string",
+         "required": true,
+         "ocr_extractable": true
+        }
+       ],
+       "children": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "slug": "electronics",
+   "name": "Electronics",
+   "attributes": [
+    {
+     "key": "warranty_months",
+     "label": "Warranty (months)",
+     "data_type": "integer",
+     "required": false,
+     "validation_rules": {
+      "min": 0,
+      "max": 120
+     }
+    },
+    {
+     "key": "power_rating",
+     "label": "Power rating",
+     "data_type": "measurement",
+     "required": false,
+     "ocr_extractable": true,
+     "validation_rules": {
+      "units": [
+       "W",
+       "kW",
+       "hp"
+      ]
+     }
+    },
+    {
+     "key": "voltage",
+     "label": "Voltage",
+     "data_type": "measurement",
+     "required": false,
+     "ocr_extractable": true,
+     "validation_rules": {
+      "units": [
+       "V"
+      ]
+     }
+    }
+   ],
+   "children": [
+    {
+     "slug": "audio",
+     "name": "Audio",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "headphones",
+       "name": "Headphones",
+       "attributes": [
+        {
+         "key": "connectivity",
+         "label": "Connectivity",
+         "data_type": "multi_select",
+         "required": false,
+         "options": [
+          "wired",
+          "bluetooth",
+          "usb-c"
+         ]
+        },
+        {
+         "key": "battery_life",
+         "label": "Battery life (hours)",
+         "data_type": "decimal",
+         "required": false,
+         "validation_rules": {
+          "min": 0
+         }
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "cameras",
+     "name": "Cameras",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "televisions",
+     "name": "Televisions",
+     "attributes": [
+      {
+       "key": "screen_size",
+       "label": "Screen size",
+       "data_type": "measurement",
+       "required": false,
+       "validation_rules": {
+        "units": [
+         "in",
+         "cm"
+        ]
+       }
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "mobile-accessories",
+   "name": "Mobile Accessories",
+   "attributes": [
+    {
+     "key": "compatible_models",
+     "label": "Compatible models",
+     "data_type": "array",
+     "required": false
+    }
+   ],
+   "children": [
+    {
+     "slug": "phone-cases",
+     "name": "Phone Cases",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "chargers-cables",
+     "name": "Chargers and Cables",
+     "attributes": [
+      {
+       "key": "connector_type",
+       "label": "Connector type",
+       "data_type": "enum",
+       "required": false,
+       "options": [
+        "usb-c",
+        "lightning",
+        "micro-usb"
+       ]
+      },
+      {
+       "key": "cable_length",
+       "label": "Cable length",
+       "data_type": "measurement",
+       "required": false,
+       "validation_rules": {
+        "units": [
+         "m",
+         "cm"
+        ]
+       }
+      }
+     ],
+     "children": []
+    },
+    {
+     "slug": "power-banks",
+     "name": "Power Banks",
+     "attributes": [
+      {
+       "key": "capacity_mah",
+       "label": "Capacity (mAh)",
+       "data_type": "integer",
+       "required": false,
+       "ocr_extractable": true,
+       "validation_rules": {
+        "min": 0
+       }
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "computers",
+   "name": "Computers",
+   "attributes": [
+    {
+     "key": "processor",
+     "label": "Processor",
+     "data_type": "string",
+     "required": false,
+     "ocr_extractable": true
+    },
+    {
+     "key": "ram_gb",
+     "label": "RAM (GB)",
+     "data_type": "integer",
+     "required": false,
+     "validation_rules": {
+      "min": 1
+     }
+    },
+    {
+     "key": "storage_gb",
+     "label": "Storage (GB)",
+     "data_type": "integer",
+     "required": false,
+     "validation_rules": {
+      "min": 1
+     }
+    }
+   ],
+   "children": [
+    {
+     "slug": "laptops",
+     "name": "Laptops",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "gaming-laptops",
+       "name": "Gaming Laptops",
+       "attributes": [
+        {
+         "key": "gpu",
+         "label": "Graphics card",
+         "data_type": "string",
+         "required": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "desktops",
+     "name": "Desktops",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "computer-peripherals",
+     "name": "Peripherals",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "home-kitchen",
+   "name": "Home and Kitchen",
+   "attributes": [
+    {
+     "key": "capacity",
+     "label": "Capacity",
+     "data_type": "measurement",
+     "required": false
+    },
+    {
+     "key": "dishwasher_safe",
+     "label": "Dishwasher safe",
+     "data_type": "boolean",
+     "required": false
+    }
+   ],
+   "children": [
+    {
+     "slug": "cookware",
+     "name": "Cookware",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "frying-pans",
+       "name": "Frying Pans",
+       "attributes": [
+        {
+         "key": "diameter",
+         "label": "Diameter",
+         "data_type": "measurement",
+         "required": false,
+         "validation_rules": {
+          "units": [
+           "cm",
+           "in"
+          ]
+         }
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "small-appliances",
+     "name": "Small Appliances",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "home-decor",
+     "name": "Home Decor",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "furniture",
+   "name": "Furniture",
+   "attributes": [
+    {
+     "key": "assembly_required",
+     "label": "Assembly required",
+     "data_type": "boolean",
+     "required": false
+    },
+    {
+     "key": "max_load_kg",
+     "label": "Maximum load (kg)",
+     "data_type": "decimal",
+     "required": false,
+     "validation_rules": {
+      "min": 0
+     }
+    }
+   ],
+   "children": [
+    {
+     "slug": "living-room-furniture",
+     "name": "Living Room",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "sofas",
+       "name": "Sofas",
+       "attributes": [
+        {
+         "key": "seating_capacity",
+         "label": "Seating capacity",
+         "data_type": "integer",
+         "required": false,
+         "validation_rules": {
+          "min": 1
+         }
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "office-furniture",
+     "name": "Office Furniture",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "bedroom-furniture",
+     "name": "Bedroom",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "beauty-personal-care",
+   "name": "Beauty and Personal Care",
+   "attributes": [
+    {
+     "key": "volume",
+     "label": "Volume",
+     "data_type": "measurement",
+     "required": false,
+     "ocr_extractable": true
+    },
+    {
+     "key": "ingredients",
+     "label": "Ingredients",
+     "data_type": "array",
+     "required": false,
+     "ocr_extractable": true
+    },
+    {
+     "key": "skin_type",
+     "label": "Skin type",
+     "data_type": "multi_select",
+     "required": false,
+     "options": [
+      "dry",
+      "oily",
+      "combination",
+      "sensitive",
+      "normal"
+     ]
+    },
+    {
+     "key": "expiry_date",
+     "label": "Expiry date",
+     "data_type": "date",
+     "required": false,
+     "ocr_extractable": true
+    }
+   ],
+   "children": [
+    {
+     "slug": "skincare",
+     "name": "Skincare",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "face-creams",
+       "name": "Face Creams",
+       "attributes": [],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "haircare",
+     "name": "Haircare",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "makeup",
+     "name": "Makeup",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "health-wellness",
+   "name": "Health and Wellness",
+   "attributes": [
+    {
+     "key": "dosage_form",
+     "label": "Dosage form",
+     "data_type": "string",
+     "required": false
+    },
+    {
+     "key": "expiry_date",
+     "label": "Expiry date",
+     "data_type": "date",
+     "required": false,
+     "ocr_extractable": true
+    },
+    {
+     "key": "ingredients",
+     "label": "Ingredients",
+     "data_type": "array",
+     "required": false,
+     "ocr_extractable": true
+    }
+   ],
+   "children": [
+    {
+     "slug": "supplements",
+     "name": "Supplements",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "medical-devices",
+     "name": "Medical Devices",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "first-aid",
+     "name": "First Aid",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "sports-fitness",
+   "name": "Sports and Fitness",
+   "attributes": [
+    {
+     "key": "sport",
+     "label": "Sport",
+     "data_type": "string",
+     "required": false
+    },
+    {
+     "key": "size",
+     "label": "Size",
+     "data_type": "string",
+     "required": false
+    }
+   ],
+   "children": [
+    {
+     "slug": "gym-equipment",
+     "name": "Gym Equipment",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "dumbbells",
+       "name": "Dumbbells",
+       "attributes": [
+        {
+         "key": "weight_per_unit",
+         "label": "Weight per unit",
+         "data_type": "weight",
+         "required": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "team-sports",
+     "name": "Team Sports",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "yoga",
+     "name": "Yoga",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "automotive",
+   "name": "Automotive",
+   "attributes": [
+    {
+     "key": "vehicle_compatibility",
+     "label": "Vehicle compatibility",
+     "data_type": "array",
+     "required": false
+    },
+    {
+     "key": "part_number",
+     "label": "Part number",
+     "data_type": "string",
+     "required": false,
+     "ocr_extractable": true
+    }
+   ],
+   "children": [
+    {
+     "slug": "car-accessories",
+     "name": "Car Accessories",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "spare-parts",
+     "name": "Spare Parts",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "motorcycle-accessories",
+     "name": "Motorcycle Accessories",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "industrial-machinery",
+   "name": "Industrial Machinery",
+   "attributes": [
+    {
+     "key": "power_rating",
+     "label": "Power rating",
+     "data_type": "measurement",
+     "required": false,
+     "ocr_extractable": true,
+     "validation_rules": {
+      "units": [
+       "W",
+       "kW",
+       "hp"
+      ]
+     }
+    },
+    {
+     "key": "voltage",
+     "label": "Voltage",
+     "data_type": "measurement",
+     "required": false,
+     "ocr_extractable": true,
+     "validation_rules": {
+      "units": [
+       "V"
+      ]
+     }
+    },
+    {
+     "key": "certifications",
+     "label": "Certifications",
+     "data_type": "array",
+     "required": false,
+     "ocr_extractable": true
+    }
+   ],
+   "children": [
+    {
+     "slug": "cnc-machines",
+     "name": "CNC Machines",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "packaging-machinery",
+     "name": "Packaging Machinery",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "pumps-compressors",
+     "name": "Pumps and Compressors",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "tools-hardware",
+   "name": "Tools and Hardware",
+   "attributes": [
+    {
+     "key": "power_source",
+     "label": "Power source",
+     "data_type": "enum",
+     "required": false,
+     "options": [
+      "manual",
+      "corded",
+      "battery",
+      "pneumatic"
+     ]
+    }
+   ],
+   "children": [
+    {
+     "slug": "power-tools",
+     "name": "Power Tools",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "drills",
+       "name": "Drills",
+       "attributes": [
+        {
+         "key": "chuck_size",
+         "label": "Chuck size",
+         "data_type": "measurement",
+         "required": false,
+         "validation_rules": {
+          "units": [
+           "mm",
+           "in"
+          ]
+         }
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "hand-tools",
+     "name": "Hand Tools",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "fasteners",
+     "name": "Fasteners",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "grocery-food",
+   "name": "Grocery and Food",
+   "attributes": [
+    {
+     "key": "net_content",
+     "label": "Net content",
+     "data_type": "measurement",
+     "required": true,
+     "ocr_extractable": true
+    },
+    {
+     "key": "ingredients",
+     "label": "Ingredients",
+     "data_type": "array",
+     "required": false,
+     "ocr_extractable": true
+    },
+    {
+     "key": "expiry_date",
+     "label": "Expiry date",
+     "data_type": "date",
+     "required": false,
+     "ocr_extractable": true
+    },
+    {
+     "key": "dietary_type",
+     "label": "Dietary type",
+     "data_type": "enum",
+     "required": false,
+     "options": [
+      "vegetarian",
+      "vegan",
+      "non-vegetarian"
+     ]
+    },
+    {
+     "key": "allergens",
+     "label": "Allergens",
+     "data_type": "multi_select",
+     "required": false,
+     "options": [
+      "gluten",
+      "dairy",
+      "nuts",
+      "soy",
+      "eggs",
+      "fish",
+      "none"
+     ]
+    }
+   ],
+   "children": [
+    {
+     "slug": "snacks",
+     "name": "Snacks",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "beverages",
+     "name": "Beverages",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "staples",
+     "name": "Staples and Grains",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "toys-games",
+   "name": "Toys and Games",
+   "attributes": [
+    {
+     "key": "age_range",
+     "label": "Recommended age",
+     "data_type": "string",
+     "required": true
+    },
+    {
+     "key": "battery_required",
+     "label": "Batteries required",
+     "data_type": "boolean",
+     "required": false
+    }
+   ],
+   "children": [
+    {
+     "slug": "action-toys",
+     "name": "Action Figures",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "board-games",
+     "name": "Board Games",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "educational-toys",
+     "name": "Educational Toys",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "books-stationery",
+   "name": "Books and Stationery",
+   "attributes": [
+    {
+     "key": "author",
+     "label": "Author",
+     "data_type": "string",
+     "required": false
+    },
+    {
+     "key": "isbn",
+     "label": "ISBN",
+     "data_type": "string",
+     "required": false,
+     "ocr_extractable": true,
+     "validation_rules": {
+      "regex": "\\d{10}|\\d{13}"
+     }
+    },
+    {
+     "key": "language",
+     "label": "Language",
+     "data_type": "string",
+     "required": false
+    }
+   ],
+   "children": [
+    {
+     "slug": "books",
+     "name": "Books",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "notebooks",
+     "name": "Notebooks",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "writing-instruments",
+     "name": "Writing Instruments",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "jewelry-accessories",
+   "name": "Jewelry and Accessories",
+   "attributes": [
+    {
+     "key": "metal_type",
+     "label": "Metal type",
+     "data_type": "string",
+     "required": false
+    },
+    {
+     "key": "gemstone",
+     "label": "Gemstone",
+     "data_type": "string",
+     "required": false
+    },
+    {
+     "key": "purity",
+     "label": "Purity",
+     "data_type": "string",
+     "required": false,
+     "ocr_extractable": true
+    }
+   ],
+   "children": [
+    {
+     "slug": "necklaces",
+     "name": "Necklaces",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "rings",
+     "name": "Rings",
+     "attributes": [
+      {
+       "key": "ring_size",
+       "label": "Ring size",
+       "data_type": "string",
+       "required": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "slug": "watches",
+     "name": "Watches",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "baby-products",
+   "name": "Baby Products",
+   "attributes": [
+    {
+     "key": "age_range",
+     "label": "Recommended age",
+     "data_type": "string",
+     "required": true
+    },
+    {
+     "key": "bpa_free",
+     "label": "BPA free",
+     "data_type": "boolean",
+     "required": false
+    }
+   ],
+   "children": [
+    {
+     "slug": "baby-feeding",
+     "name": "Feeding",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "diapers",
+     "name": "Diapers",
+     "attributes": [
+      {
+       "key": "pack_count",
+       "label": "Pack count",
+       "data_type": "integer",
+       "required": false,
+       "validation_rules": {
+        "min": 1
+       }
+      }
+     ],
+     "children": []
+    },
+    {
+     "slug": "baby-clothing",
+     "name": "Baby Clothing",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "pet-supplies",
+   "name": "Pet Supplies",
+   "attributes": [
+    {
+     "key": "pet_type",
+     "label": "Pet type",
+     "data_type": "enum",
+     "required": true,
+     "options": [
+      "dog",
+      "cat",
+      "bird",
+      "fish",
+      "small-animal"
+     ]
+    }
+   ],
+   "children": [
+    {
+     "slug": "pet-food",
+     "name": "Pet Food",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "pet-toys",
+     "name": "Pet Toys",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "pet-grooming",
+     "name": "Grooming",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "agriculture",
+   "name": "Agriculture",
+   "attributes": [
+    {
+     "key": "net_content",
+     "label": "Net content",
+     "data_type": "measurement",
+     "required": false
+    },
+    {
+     "key": "crop_type",
+     "label": "Suitable crops",
+     "data_type": "array",
+     "required": false
+    }
+   ],
+   "children": [
+    {
+     "slug": "seeds",
+     "name": "Seeds",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "fertilizers",
+     "name": "Fertilizers",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "farm-equipment",
+     "name": "Farm Equipment",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "office-supplies",
+   "name": "Office Supplies",
+   "attributes": [
+    {
+     "key": "pack_count",
+     "label": "Pack count",
+     "data_type": "integer",
+     "required": false,
+     "validation_rules": {
+      "min": 1
+     }
+    }
+   ],
+   "children": [
+    {
+     "slug": "paper-products",
+     "name": "Paper Products",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "desk-accessories",
+     "name": "Desk Accessories",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "printer-supplies",
+     "name": "Printer Supplies",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "construction-materials",
+   "name": "Construction Materials",
+   "attributes": [
+    {
+     "key": "grade",
+     "label": "Grade",
+     "data_type": "string",
+     "required": false,
+     "ocr_extractable": true
+    },
+    {
+     "key": "standard_compliance",
+     "label": "Standards",
+     "data_type": "array",
+     "required": false,
+     "ocr_extractable": true
+    }
+   ],
+   "children": [
+    {
+     "slug": "cement-concrete",
+     "name": "Cement and Concrete",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "tiles-flooring",
+     "name": "Tiles and Flooring",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "plumbing",
+     "name": "Plumbing",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "art-crafts",
+   "name": "Art and Crafts",
+   "attributes": [
+    {
+     "key": "medium",
+     "label": "Medium",
+     "data_type": "string",
+     "required": false
+    }
+   ],
+   "children": [
+    {
+     "slug": "paints",
+     "name": "Paints",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "craft-supplies",
+     "name": "Craft Supplies",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "drawing-supplies",
+     "name": "Drawing Supplies",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "musical-instruments",
+   "name": "Musical Instruments",
+   "attributes": [
+    {
+     "key": "instrument_type",
+     "label": "Instrument type",
+     "data_type": "string",
+     "required": false
+    }
+   ],
+   "children": [
+    {
+     "slug": "guitars",
+     "name": "Guitars",
+     "attributes": [
+      {
+       "key": "string_count",
+       "label": "Number of strings",
+       "data_type": "integer",
+       "required": false,
+       "validation_rules": {
+        "min": 1
+       }
+      }
+     ],
+     "children": []
+    },
+    {
+     "slug": "keyboards",
+     "name": "Keyboards",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "percussion",
+     "name": "Percussion",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "outdoor-products",
+   "name": "Outdoor Products",
+   "attributes": [
+    {
+     "key": "water_resistant",
+     "label": "Water resistant",
+     "data_type": "boolean",
+     "required": false
+    }
+   ],
+   "children": [
+    {
+     "slug": "camping",
+     "name": "Camping",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "tents",
+       "name": "Tents",
+       "attributes": [
+        {
+         "key": "capacity_persons",
+         "label": "Capacity (persons)",
+         "data_type": "integer",
+         "required": false,
+         "validation_rules": {
+          "min": 1
+         }
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "hiking",
+     "name": "Hiking",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "garden-outdoor",
+     "name": "Garden",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  },
+  {
+   "slug": "travel-accessories",
+   "name": "Travel Accessories",
+   "attributes": [
+    {
+     "key": "capacity_litres",
+     "label": "Capacity (litres)",
+     "data_type": "decimal",
+     "required": false,
+     "validation_rules": {
+      "min": 0
+     }
+    }
+   ],
+   "children": [
+    {
+     "slug": "luggage",
+     "name": "Luggage",
+     "attributes": [],
+     "children": [
+      {
+       "slug": "suitcases",
+       "name": "Suitcases",
+       "attributes": [
+        {
+         "key": "lock_type",
+         "label": "Lock type",
+         "data_type": "enum",
+         "required": false,
+         "options": [
+          "none",
+          "tsa",
+          "combination",
+          "key"
+         ]
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "slug": "travel-bags",
+     "name": "Travel Bags",
+     "attributes": [],
+     "children": []
+    },
+    {
+     "slug": "travel-organizers",
+     "name": "Organizers",
+     "attributes": [],
+     "children": []
+    }
+   ]
+  }
+ ]
+}

@@ -35,7 +35,6 @@ const QUICK_LINKS = [
   { label: 'Explore Products', to: '/products' },
   { label: 'All Categories', to: '/categories' },
   { label: 'Verified Suppliers', to: '/suppliers' },
-  { label: 'Indian Exporters', to: '/exporters' },
   { label: 'Ready to Ship', to: '/products?ready=true' },
   { label: 'Help Center & FAQs', to: '/help' },
   { label: 'Terms & Conditions', to: '/terms' },
@@ -173,7 +172,7 @@ export default function Footer() {
 
             <p className="mt-2 text-xs leading-relaxed text-slate-700 max-w-sm">
               TradeExpress connects verified buyers, wholesale importers, manufacturers, and
-              exporters across India with secure escrow protection.
+              suppliers across India with secure escrow protection.
             </p>
 
             {/* Trust Badges */}

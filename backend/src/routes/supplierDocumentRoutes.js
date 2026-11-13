@@ -33,5 +33,6 @@ publicSupplierRouter.use(rateLimit({
   legacyHeaders: false,
   message: { success: false, message: 'Too many requests. Please wait a minute and try again.' },
 }));
+publicSupplierRouter.get('/', controller.listPublicSuppliers);
 publicSupplierRouter.get('/:code', controller.publicProfile);
 publicSupplierRouter.get('/:code/photo', controller.publicPhoto);

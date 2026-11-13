@@ -6,6 +6,7 @@ import {
   Building2,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Clock,
   ExternalLink,
@@ -17,7 +18,10 @@ import {
   MessageSquare,
   Package,
   PackageCheck,
+  Palette,
   Plus,
+  RotateCcw,
+  Ruler,
   Scale,
   Search,
   ShieldCheck,
@@ -139,6 +143,104 @@ const parseNumeric = (val, fallback = 0) => {
   return fallback;
 };
 
+const COLOR_HEX_MAP = {
+  black: '#111827',
+  'jet black': '#000000',
+  white: '#ffffff',
+  'pure white': '#ffffff',
+  'cream white': '#fef9c3',
+  navy: '#1e3a8a',
+  'navy blue': '#1e3a8a',
+  blue: '#3b82f6',
+  'sky blue': '#38bdf8',
+  'mid blue': '#2563eb',
+  'indigo blue': '#4338ca',
+  red: '#ef4444',
+  'classic red': '#dc2626',
+  yellow: '#eab308',
+  'ochre yellow': '#ca8a04',
+  green: '#22c55e',
+  'forest green': '#15803d',
+  'sage green': '#84cc16',
+  emerald: '#10b981',
+  grey: '#6b7280',
+  gray: '#6b7280',
+  'stone grey': '#78716c',
+  'heather grey': '#9ca3af',
+  brown: '#78350f',
+  chestnut: '#92400e',
+  sand: '#d97706',
+  tan: '#b45309',
+  pink: '#ec4899',
+  'soft pink': '#f472b6',
+  rose: '#f43f5e',
+  burgundy: '#831843',
+  berry: '#be185d',
+  nude: '#fed7aa',
+  orange: '#f97316',
+  'safety orange': '#ea580c',
+  charcoal: '#374151',
+  olive: '#65a30d',
+  gold: '#eab308',
+  brass: '#d97706',
+  walnut: '#713f12',
+  oatmeal: '#e5e7eb',
+  cognac: '#9a3412',
+  oxblood: '#4c0519',
+};
+
+const resolveColorHex = (colorName) => {
+  if (!colorName) return '#94a3b8';
+  const key = String(colorName).trim().toLowerCase();
+  return COLOR_HEX_MAP[key] || '#64748b';
+};
+
+const extractProductColors = (product) => {
+  if (!product) return [];
+  const colors = new Set();
+  const v = product.variants || {};
+  for (const [k, val] of Object.entries(v)) {
+    if (/colou?r|shade|wash|fabric|leather/i.test(k)) {
+      (Array.isArray(val) ? val : [val]).forEach((c) => c && colors.add(String(c).trim()));
+    }
+  }
+  const s = product.specifications || {};
+  for (const [k, val] of Object.entries(s)) {
+    if (/colou?r/i.test(k)) {
+      (Array.isArray(val) ? val : [val]).forEach((c) => c && colors.add(String(c).trim()));
+    }
+  }
+  if (Array.isArray(product.colors)) {
+    product.colors.forEach((c) => c && colors.add(String(c).trim()));
+  } else if (typeof product.color === 'string') {
+    product.color.split(',').forEach((c) => c && colors.add(c.trim()));
+  }
+  return Array.from(colors);
+};
+
+const extractProductSizes = (product) => {
+  if (!product) return [];
+  const sizes = new Set();
+  const v = product.variants || {};
+  for (const [k, val] of Object.entries(v)) {
+    if (/size|capacity|volume|fit|length|height|dimension/i.test(k)) {
+      (Array.isArray(val) ? val : [val]).forEach((s) => s && sizes.add(String(s).trim()));
+    }
+  }
+  const s = product.specifications || {};
+  for (const [k, val] of Object.entries(s)) {
+    if (/size|capacity|volume|dimension/i.test(k)) {
+      (Array.isArray(val) ? val : [val]).forEach((s) => s && sizes.add(String(s).trim()));
+    }
+  }
+  if (Array.isArray(product.sizes)) {
+    product.sizes.forEach((s) => s && sizes.add(String(s).trim()));
+  } else if (typeof product.size === 'string') {
+    product.size.split(',').forEach((s) => s && sizes.add(s.trim()));
+  }
+  return Array.from(sizes);
+};
+
 const POPULAR_SEARCH_SUGGESTIONS = [
   { label: 'Cotton T-Shirt (10 Sellers)', query: 'Cotton T-Shirt' },
   { label: 'Wireless Earbuds', query: 'Wireless Earbuds' },
@@ -153,7 +255,9 @@ export default function ProductComparison() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const { money } = useCurrency();
+  // Browsing prices, shown in the buyer's currency ("≈" when converted); checkout and orders keep the real currency
+  const { user } = useAuth();
+  const { displayMoney: money } = useCurrency();
   const { addToCart, removeFromCart, inCart } = useCart();
   const { showToast } = useNotifications();
   const { products, companies, getCompany, getProduct } = useProducts();
@@ -170,10 +274,14 @@ export default function ProductComparison() {
 
   // Compared Products matching search
   const [comparedProducts, setComparedProducts] = useState([]);
-  const [sortBy, setSortBy] = useState('relevance'); // 'relevance' | 'price-asc' | 'price-desc' | 'moq-asc' | 'delivery-asc' | 'rating-desc'
+  const [sortBy, setSortBy] = useState('relevance'); // 'relevance' | 'price-asc' | 'price-desc' | 'moq-asc' | 'moq-desc' | 'delivery-asc' | 'rating-desc'
+  const [selectedColor, setSelectedColor] = useState('');
+  const [selectedSize, setSelectedSize] = useState('');
+  const [maxMoq, setMaxMoq] = useState(null); // null | 100 | 200 | 500
   const [filterVerifiedOnly, setFilterVerifiedOnly] = useState(false);
   const [filterSampleOnly, setFilterSampleOnly] = useState(false);
   const [filterReadyToShip, setFilterReadyToShip] = useState(false);
+  const [showFiltersPanel, setShowFiltersPanel] = useState(true);
   const [cartQuantities, setCartQuantities] = useState({});
 
   // Execute Search for products across all suppliers
@@ -187,6 +295,12 @@ export default function ProductComparison() {
     setSearching(true);
     setHasSearched(true);
     setSearchQuerySubmitted(query);
+    setSelectedColor('');
+    setSelectedSize('');
+    setMaxMoq(null);
+    setFilterVerifiedOnly(false);
+    setFilterSampleOnly(false);
+    setFilterReadyToShip(false);
 
     try {
       // 1. Fetch matching products from backend API (real-time live database)
@@ -249,8 +363,8 @@ export default function ProductComparison() {
         const country = company?.country || supRaw.country || detected?.country || 'India';
         const city = company?.city || supRaw.city || detected?.city || 'Mumbai';
         const flag = company?.flag || (supRaw.flag && supRaw.flag !== '🇮🇳' ? supRaw.flag : null) || resolveCountryFlag(country, detected?.flag || '🌐');
-        const rating = parseNumeric(company?.rating ?? supRaw.rating ?? item.rating, 4.6);
-        const reviewCount = parseNumeric(company?.reviewCount ?? supRaw.reviewCount ?? item.reviewCount, 25);
+        const rating = parseNumeric(company?.rating ?? supRaw.rating ?? item.rating, 0);
+        const reviewCount = parseNumeric(company?.reviewCount ?? supRaw.reviewCount ?? item.reviewCount, 0);
         const isVerified = Boolean(
           company?.verification?.status === 'reviewed' ||
           company?.isSample ||
@@ -312,7 +426,7 @@ export default function ProductComparison() {
           .filter((p) => p && p.name && (p.name.toLowerCase().includes(qLower) || (p.categoryName || '').toLowerCase().includes(qLower)))
           .map((p) => ({
             ...p,
-            supplier: p.supplier || { company: 'Verified Supplier', country: 'India', flag: '🇮🇳', isVerified: true, rating: 4.6, reviewCount: 20 },
+            supplier: p.supplier || { company: 'Verified Supplier', country: 'India', flag: '🇮🇳', isVerified: true, rating: 0, reviewCount: 0 },
             price: parseNumeric(p.price, 0),
             moq: parseNumeric(p.moq, 1),
             stock: parseNumeric(p.stock, 100),
@@ -371,11 +485,89 @@ export default function ProductComparison() {
     setCartQuantities((prev) => ({ ...prev, [productId]: val }));
   };
 
+  // Discovered Filter Options across all compared products
+  const { availableColors, availableSizes } = useMemo(() => {
+    const colorCounts = new Map();
+    const sizeCounts = new Map();
+
+    (comparedProducts || []).forEach((p) => {
+      const pColors = extractProductColors(p);
+      pColors.forEach((c) => {
+        colorCounts.set(c, (colorCounts.get(c) || 0) + 1);
+      });
+
+      const pSizes = extractProductSizes(p);
+      pSizes.forEach((s) => {
+        sizeCounts.set(s, (sizeCounts.get(s) || 0) + 1);
+      });
+    });
+
+    return {
+      availableColors: Array.from(colorCounts.entries())
+        .map(([name, count]) => ({ name, count, hex: resolveColorHex(name) }))
+        .sort((a, b) => b.count - a.count),
+      availableSizes: Array.from(sizeCounts.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count),
+    };
+  }, [comparedProducts]);
+
+  // Active filters count
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (selectedColor) count++;
+    if (selectedSize) count++;
+    if (maxMoq !== null) count++;
+    if (filterVerifiedOnly) count++;
+    if (filterSampleOnly) count++;
+    if (filterReadyToShip) count++;
+    return count;
+  }, [
+    selectedColor,
+    selectedSize,
+    maxMoq,
+    filterVerifiedOnly,
+    filterSampleOnly,
+    filterReadyToShip,
+  ]);
+
+  const resetAllFilters = () => {
+    setSelectedColor('');
+    setSelectedSize('');
+    setMaxMoq(null);
+    setFilterVerifiedOnly(false);
+    setFilterSampleOnly(false);
+    setFilterReadyToShip(false);
+  };
+
   // Filter and Sort Compared Products with robust numeric sorting
   const processedProducts = useMemo(() => {
     let list = [...comparedProducts];
 
-    // Filters
+    // Filter by Color
+    if (selectedColor) {
+      const targetColor = selectedColor.toLowerCase();
+      list = list.filter((p) => {
+        const pColors = extractProductColors(p).map((c) => c.toLowerCase());
+        return pColors.some((c) => c === targetColor || c.includes(targetColor) || targetColor.includes(c));
+      });
+    }
+
+    // Filter by Size
+    if (selectedSize) {
+      const targetSize = selectedSize.toLowerCase();
+      list = list.filter((p) => {
+        const pSizes = extractProductSizes(p).map((s) => s.toLowerCase());
+        return pSizes.some((s) => s === targetSize || s.includes(targetSize) || targetSize.includes(s));
+      });
+    }
+
+    // Filter by Max MOQ
+    if (maxMoq !== null && maxMoq !== undefined) {
+      list = list.filter((p) => parseNumeric(p.moq, 1) <= maxMoq);
+    }
+
+    // Verified Only
     if (filterVerifiedOnly) {
       list = list.filter((p) => p.supplier?.isVerified);
     }
@@ -422,7 +614,16 @@ export default function ProductComparison() {
     });
 
     return list;
-  }, [comparedProducts, sortBy, filterVerifiedOnly, filterSampleOnly, filterReadyToShip]);
+  }, [
+    comparedProducts,
+    sortBy,
+    selectedColor,
+    selectedSize,
+    maxMoq,
+    filterVerifiedOnly,
+    filterSampleOnly,
+    filterReadyToShip,
+  ]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
@@ -552,8 +753,8 @@ export default function ProductComparison() {
         </div>
       )}
 
-      {/* Case 1: Searched, but 0 products match */}
-      {hasSearched && !searching && processedProducts.length === 0 && (
+      {/* Case 1: Searched, but 0 products match search query */}
+      {hasSearched && !searching && comparedProducts.length === 0 && (
         <div className="rounded-3xl border border-navy-900/[0.08] bg-white p-8 sm:p-12 text-center shadow-xs">
           <div className="mx-auto size-14 rounded-2xl bg-navy-50 text-navy-400 flex items-center justify-center mb-4">
             <Search className="size-7" />
@@ -577,16 +778,16 @@ export default function ProductComparison() {
       )}
 
       {/* Case 2: Matching products found across suppliers */}
-      {hasSearched && processedProducts.length > 0 && (
-        <section aria-labelledby="comparison-results-heading" className="space-y-6">
+      {hasSearched && comparedProducts.length > 0 && (
+        <section aria-labelledby="comparison-results-heading" className="space-y-5">
           
           {/* Controls Bar: Sort, Filter, and Counter */}
-          <div className="rounded-2xl border border-navy-900/[0.08] bg-white p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="rounded-2xl border border-navy-900/[0.08] bg-white p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 id="comparison-results-heading" className="text-base sm:text-lg font-extrabold text-navy-950 flex flex-wrap items-center gap-2">
                 <span>Comparing</span>
                 <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 font-black text-sm border border-brand-200">
-                  {processedProducts.length} Distinct Sellers
+                  {processedProducts.length} of {comparedProducts.length} Distinct Sellers
                 </span>
                 <span className="text-navy-600 font-normal text-sm">for</span>
                 <span className="text-brand-600 font-bold">"{searchQuerySubmitted}"</span>
@@ -596,11 +797,10 @@ export default function ProductComparison() {
               </p>
             </div>
 
-            {/* Filter and Sort Dropdowns */}
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Sort By Dropdown */}
-              <div className="flex items-center gap-1.5 min-w-[11rem]">
-                <span className="text-xs font-semibold text-navy-600">Sort:</span>
+            {/* Sort Dropdown (Full width, right-aligned, no cutoff with ellipsis) */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-semibold text-navy-600 shrink-0">Sort:</span>
+              <div className="min-w-[14.5rem] sm:min-w-[16.5rem]">
                 <CustomSelect
                   id="sort-products-by"
                   value={sortBy}
@@ -615,62 +815,330 @@ export default function ProductComparison() {
                     { value: 'rating-desc', label: 'Top Rated Supplier' },
                   ]}
                   compact
+                  align="right"
                   searchable={false}
                 />
               </div>
-
-              {/* Verified Filter Pill */}
-              <button
-                type="button"
-                onClick={() => setFilterVerifiedOnly(!filterVerifiedOnly)}
-                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  filterVerifiedOnly
-                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-900 ring-1 ring-emerald-500/30'
-                    : 'bg-white border-navy-200 text-navy-700 hover:bg-navy-50'
-                }`}
-              >
-                <ShieldCheck className={`size-3.5 ${filterVerifiedOnly ? 'text-emerald-600' : 'text-navy-400'}`} />
-                <span>Verified Only</span>
-              </button>
-
-              {/* Sample Filter Pill */}
-              <button
-                type="button"
-                onClick={() => setFilterSampleOnly(!filterSampleOnly)}
-                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  filterSampleOnly
-                    ? 'bg-brand-500/15 border-brand-500/40 text-brand-900 ring-1 ring-brand-500/30'
-                    : 'bg-white border-navy-200 text-navy-700 hover:bg-navy-50'
-                }`}
-              >
-                <PackageCheck className={`size-3.5 ${filterSampleOnly ? 'text-brand-600' : 'text-navy-400'}`} />
-                <span>Sample Available</span>
-              </button>
-
-              {/* Ready to Ship Pill */}
-              <button
-                type="button"
-                onClick={() => setFilterReadyToShip(!filterReadyToShip)}
-                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  filterReadyToShip
-                    ? 'bg-blue-500/15 border-blue-500/40 text-blue-900 ring-1 ring-blue-500/30'
-                    : 'bg-white border-navy-200 text-navy-700 hover:bg-navy-50'
-                }`}
-              >
-                <Truck className={`size-3.5 ${filterReadyToShip ? 'text-blue-600' : 'text-navy-400'}`} />
-                <span>Ready to Ship</span>
-              </button>
             </div>
+          </div>
+
+          {/* Interactive Filters Panel: Color, Size, MOQ, and Badges */}
+          <div className="rounded-2xl border border-navy-900/[0.08] bg-white p-4 sm:p-5 shadow-xs space-y-4">
+            {/* Filter Section Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                  <Filter className="size-4" />
+                </span>
+                <h3 className="text-sm font-bold text-navy-950">Filter Comparison</h3>
+                {activeFiltersCount > 0 && (
+                  <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-black text-brand-700 border border-brand-200">
+                    {activeFiltersCount} Active
+                  </span>
+                )}
+                <span className="text-xs text-navy-500 hidden sm:inline">
+                  Showing <strong className="text-navy-900 font-bold">{processedProducts.length}</strong> of {comparedProducts.length} Sellers
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {activeFiltersCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="size-3" />
+                    <span>Reset Filters</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowFiltersPanel(!showFiltersPanel)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-navy-600 hover:text-navy-900 px-2.5 py-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <span>{showFiltersPanel ? 'Hide Filters' : 'Show Filters'}</span>
+                  <ChevronDown className={`size-3.5 transition-transform duration-200 ${showFiltersPanel ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {showFiltersPanel && (
+              <div className="space-y-4 pt-1">
+                {/* 1. Color Filter */}
+                {availableColors.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-navy-800">
+                      <Palette className="size-3.5 text-brand-600" />
+                      <span>Filter by Color:</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedColor('')}
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                          !selectedColor
+                            ? 'bg-navy-900 text-white border-navy-900 shadow-xs'
+                            : 'bg-white text-navy-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>All Colors</span>
+                      </button>
+                      {availableColors.map((col) => {
+                        const isActive = selectedColor && (col.name.toLowerCase() === selectedColor.toLowerCase() || col.name.toLowerCase().includes(selectedColor.toLowerCase()));
+                        return (
+                          <button
+                            key={col.name}
+                            type="button"
+                            onClick={() => setSelectedColor(isActive ? '' : col.name)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                              isActive
+                                ? 'bg-emerald-50 text-emerald-950 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs font-bold'
+                                : 'bg-white text-navy-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span
+                              className="size-3 rounded-full shrink-0 border border-black/15 shadow-2xs"
+                              style={{ backgroundColor: col.hex }}
+                            />
+                            <span>{col.name}</span>
+                            <span className={`text-[10px] ml-0.5 ${isActive ? 'text-emerald-700 font-bold' : 'text-slate-400 font-normal'}`}>
+                              ({col.count})
+                            </span>
+                            {isActive && <Check className="size-3 text-emerald-600 stroke-[3]" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Size Filter */}
+                {availableSizes.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-navy-800">
+                      <Ruler className="size-3.5 text-brand-600" />
+                      <span>Filter by Size / Capacity:</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSize('')}
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                          !selectedSize
+                            ? 'bg-navy-900 text-white border-navy-900 shadow-xs'
+                            : 'bg-white text-navy-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>All Sizes</span>
+                      </button>
+                      {availableSizes.map((sz) => {
+                        const isActive = selectedSize && (sz.name.toLowerCase() === selectedSize.toLowerCase() || sz.name.toLowerCase().includes(selectedSize.toLowerCase()));
+                        return (
+                          <button
+                            key={sz.name}
+                            type="button"
+                            onClick={() => setSelectedSize(isActive ? '' : sz.name)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                              isActive
+                                ? 'bg-emerald-50 text-emerald-950 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs font-bold'
+                                : 'bg-white text-navy-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span>{sz.name}</span>
+                            <span className={`text-[10px] ml-0.5 ${isActive ? 'text-emerald-700 font-bold' : 'text-slate-400 font-normal'}`}>
+                              ({sz.count})
+                            </span>
+                            {isActive && <Check className="size-3 text-emerald-600 stroke-[3]" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. MOQ, Verification & Fast Logistics */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1 border-t border-slate-100">
+                  {/* MOQ Selector */}
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-bold text-navy-700 block">Maximum MOQ:</span>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {[
+                        { label: 'All', value: null },
+                        { label: '≤ 100 pcs', value: 100 },
+                        { label: '≤ 200 pcs', value: 200 },
+                        { label: '≤ 500 pcs', value: 500 },
+                      ].map((m) => (
+                        <button
+                          key={String(m.value)}
+                          type="button"
+                          onClick={() => setMaxMoq(maxMoq === m.value ? null : m.value)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                            maxMoq === m.value
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-white text-navy-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Badges and Logistics */}
+                  <div className="space-y-1 sm:col-span-2">
+                    <span className="text-[11px] font-bold text-navy-700 block">Supplier Credentials & Logistics:</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setFilterVerifiedOnly(!filterVerifiedOnly)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                          filterVerifiedOnly
+                            ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-950 font-bold ring-1 ring-emerald-500/30'
+                            : 'bg-white border-slate-200 text-navy-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <ShieldCheck className={`size-3.5 ${filterVerifiedOnly ? 'text-emerald-600' : 'text-slate-400'}`} />
+                        <span>Verified Suppliers Only</span>
+                        {filterVerifiedOnly && <Check className="size-3 text-emerald-600 stroke-[3]" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setFilterSampleOnly(!filterSampleOnly)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                          filterSampleOnly
+                            ? 'bg-brand-500/15 border-brand-500/50 text-brand-950 font-bold ring-1 ring-brand-500/30'
+                            : 'bg-white border-slate-200 text-navy-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <PackageCheck className={`size-3.5 ${filterSampleOnly ? 'text-brand-600' : 'text-slate-400'}`} />
+                        <span>Sample Available</span>
+                        {filterSampleOnly && <Check className="size-3 text-brand-600 stroke-[3]" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setFilterReadyToShip(!filterReadyToShip)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                          filterReadyToShip
+                            ? 'bg-blue-500/15 border-blue-500/50 text-blue-950 font-bold ring-1 ring-blue-500/30'
+                            : 'bg-white border-slate-200 text-navy-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Truck className={`size-3.5 ${filterReadyToShip ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <span>Ready to Ship</span>
+                        {filterReadyToShip && <Check className="size-3 text-blue-600 stroke-[3]" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Active Filters Summary Strip */}
+            {activeFiltersCount > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
+                <span className="font-semibold text-navy-500 mr-1">Active Filters:</span>
+                {selectedColor && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
+                    <span className="size-2 rounded-full border border-black/10" style={{ backgroundColor: resolveColorHex(selectedColor) }} />
+                    <span>Color: {selectedColor}</span>
+                    <button type="button" onClick={() => setSelectedColor('')} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                )}
+                {selectedSize && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
+                    <span>Size: {selectedSize}</span>
+                    <button type="button" onClick={() => setSelectedSize('')} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                )}
+                {maxMoq !== null && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
+                    <span>MOQ ≤ {maxMoq}</span>
+                    <button type="button" onClick={() => setMaxMoq(null)} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                )}
+                {filterVerifiedOnly && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
+                    <span>Verified Only</span>
+                    <button type="button" onClick={() => setFilterVerifiedOnly(false)} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                )}
+                {filterSampleOnly && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
+                    <span>Sample Available</span>
+                    <button type="button" onClick={() => setFilterSampleOnly(false)} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                )}
+                {filterReadyToShip && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
+                    <span>Ready to Ship</span>
+                    <button type="button" onClick={() => setFilterReadyToShip(false)} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={resetAllFilters}
+                  className="font-bold text-brand-600 hover:text-brand-800 underline ml-2 cursor-pointer"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ========================================================================= */}
           {/* DIV-BY-DIV COMPARISON CARDS (Stacked Div Format — Not Table Columns)       */}
           {/* ========================================================================= */}
-          <div className="space-y-4">
+          {processedProducts.length === 0 ? (
+            <div className="rounded-2xl border border-navy-900/[0.08] bg-white p-8 sm:p-12 text-center shadow-xs">
+              <div className="mx-auto size-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-3">
+                <Filter className="size-6" />
+              </div>
+              <h3 className="text-base font-bold text-navy-950 mb-1">
+                No Sellers Match Selected Filters
+              </h3>
+              <p className="text-xs text-navy-600 max-w-md mx-auto mb-4">
+                None of the {comparedProducts.length} sellers match your active filter combination ({[
+                  selectedColor && `Color: "${selectedColor}"`,
+                  selectedSize && `Size: "${selectedSize}"`,
+                  maxMoq !== null && `MOQ ≤ ${maxMoq}`,
+                  filterVerifiedOnly && 'Verified Only',
+                  filterSampleOnly && 'Sample Available',
+                  filterReadyToShip && 'Ready to Ship',
+                ].filter(Boolean).join(', ')}).
+              </p>
+              <Button variant="brand" size="sm" onClick={resetAllFilters} icon={RotateCcw}>
+                Reset All Filters (View All {comparedProducts.length} Sellers)
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
             {processedProducts.map((product, index) => {
               const sup = product.supplier;
               const alreadyInCart = inCart(product.id);
               const orderQty = cartQuantities[product.id] || product.moq || 1;
+              const productColors = extractProductColors(product);
+              const productSizes = extractProductSizes(product);
+              const matchesActiveColor = selectedColor && productColors.some(
+                (c) => c.toLowerCase() === selectedColor.toLowerCase() || c.toLowerCase().includes(selectedColor.toLowerCase())
+              );
+              const matchesActiveSize = selectedSize && productSizes.some(
+                (s) => s.toLowerCase() === selectedSize.toLowerCase() || s.toLowerCase().includes(selectedSize.toLowerCase())
+              );
 
               return (
                 <div
@@ -697,6 +1165,18 @@ export default function ProductComparison() {
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
                           <Truck className="size-3" />
                           Ready to Ship
+                        </span>
+                      )}
+                      {matchesActiveColor && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                          <CheckCircle2 className="size-3 text-emerald-600" />
+                          <span>Color: {selectedColor}</span>
+                        </span>
+                      )}
+                      {matchesActiveSize && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                          <CheckCircle2 className="size-3 text-emerald-600" />
+                          <span>Size: {selectedSize}</span>
                         </span>
                       )}
                     </div>
@@ -780,10 +1260,12 @@ export default function ProductComparison() {
                           <span className="flex items-center gap-1">
                             <span className="font-semibold text-navy-900">{sup?.location || 'India'}</span>
                           </span>
-                          <span className="flex items-center gap-1">
-                            <span className="text-amber-500 font-bold">★ {(sup?.rating || product.rating || 4.7).toFixed(1)}</span>
-                            <span className="text-muted">({sup?.reviewCount || product.reviewCount || 30} reviews)</span>
-                          </span>
+                          {Number(sup?.rating || product.rating) > 0 && Number(sup?.reviewCount || product.reviewCount) > 0 ? (
+                            <span className="flex items-center gap-1">
+                              <span className="text-amber-500 font-bold">★ {Number(sup?.rating || product.rating).toFixed(1)}</span>
+                              <span className="text-muted">({Number(sup?.reviewCount || product.reviewCount)} reviews)</span>
+                            </span>
+                          ) : null}
                           <span className="text-muted">
                             Response: <span className="font-medium text-navy-800">{sup?.responseTime || 'Within 12 hours'}</span>
                           </span>
@@ -828,6 +1310,64 @@ export default function ProductComparison() {
                           </span>
                         </div>
                       </div>
+
+                      {/* Available Colors on this product */}
+                      {productColors.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-muted block text-[11px] font-semibold">Available Colors:</span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {productColors.map((c) => {
+                              const isMatched = selectedColor && (c.toLowerCase() === selectedColor.toLowerCase() || c.toLowerCase().includes(selectedColor.toLowerCase()));
+                              return (
+                                <button
+                                  key={c}
+                                  type="button"
+                                  onClick={() => setSelectedColor(selectedColor === c ? '' : c)}
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
+                                    isMatched
+                                      ? 'bg-emerald-50 text-emerald-950 border-emerald-500 ring-1 ring-emerald-500/20 font-bold shadow-2xs'
+                                      : 'bg-white text-navy-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                  }`}
+                                  title={`Filter comparison by ${c}`}
+                                >
+                                  <span
+                                    className="size-2 rounded-full shrink-0 border border-black/15 shadow-2xs"
+                                    style={{ backgroundColor: resolveColorHex(c) }}
+                                  />
+                                  <span>{c}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Available Sizes on this product */}
+                      {productSizes.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-muted block text-[11px] font-semibold">Available Sizes / Capacities:</span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {productSizes.map((s) => {
+                              const isMatched = selectedSize && (s.toLowerCase() === selectedSize.toLowerCase() || s.toLowerCase().includes(selectedSize.toLowerCase()));
+                              return (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  onClick={() => setSelectedSize(selectedSize === s ? '' : s)}
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
+                                    isMatched
+                                      ? 'bg-emerald-50 text-emerald-950 border-emerald-500 ring-1 ring-emerald-500/20 font-bold shadow-2xs'
+                                      : 'bg-white text-navy-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                  }`}
+                                  title={`Filter comparison by ${s}`}
+                                >
+                                  {s}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Product Specifications Preview */}
                       {product.specifications && typeof product.specifications === 'object' && Object.keys(product.specifications).length > 0 && (
@@ -887,8 +1427,8 @@ export default function ProductComparison() {
                         <div className="grid grid-cols-2 gap-2">
                           <Button
                             size="sm"
-                            variant="brand"
-                            icon={alreadyInCart ? CheckCircle2 : ShoppingCart}
+                            variant="outline"
+                            icon={ShoppingCart}
                             onClick={() => {
                               if (alreadyInCart) {
                                 removeFromCart(product.id);
@@ -898,11 +1438,13 @@ export default function ProductComparison() {
                                 showToast(`Added ${orderQty} units of ${product.name} to cart.`, 'success');
                               }
                             }}
-                            className={`text-xs font-bold justify-center ${
-                              alreadyInCart ? '!bg-emerald-600 hover:!bg-emerald-700 !text-white' : ''
+                            className={`text-xs font-bold justify-center transition-all select-none active:scale-[0.98] ${
+                              alreadyInCart
+                                ? '!bg-emerald-700 !text-white !border-emerald-800 hover:!bg-emerald-800'
+                                : '!bg-emerald-50 !text-emerald-800 !border !border-emerald-300/90 hover:!bg-emerald-100 hover:!border-emerald-400'
                             }`}
                           >
-                            {alreadyInCart ? 'In Cart' : 'Add to Cart'}
+                            {alreadyInCart ? 'Added to Cart' : 'Add to Cart'}
                           </Button>
 
                           <Button
@@ -910,9 +1452,9 @@ export default function ProductComparison() {
                             variant="outline"
                             icon={FileText}
                             to={`/rfq?product=${product.id}&supplier=${sup?.id || ''}`}
-                            className="text-xs font-semibold justify-center"
+                            className="text-xs font-semibold justify-center hover:!border-emerald-500 hover:!text-emerald-800"
                           >
-                            Request Quote
+                            Request a Quote
                           </Button>
                         </div>
 
@@ -922,9 +1464,9 @@ export default function ProductComparison() {
                             variant="outline"
                             icon={MessageSquare}
                             onClick={() => sup && contact(sup, product)}
-                            className="flex-1 text-xs font-medium justify-center"
+                            className="flex-1 text-xs font-medium justify-center hover:!border-emerald-500 hover:!text-emerald-800"
                           >
-                            Contact Seller
+                            Contact Supplier
                           </Button>
 
                           <Button
@@ -946,8 +1488,9 @@ export default function ProductComparison() {
               );
             })}
           </div>
+        )}
 
-        </section>
+      </section>
       )}
 
       {/* Bottom Info Banner */}
@@ -967,11 +1510,11 @@ export default function ProductComparison() {
         <Button
           variant="outline"
           size="sm"
-          to="/rfq"
-          icon={FileText}
+          to="/products"
+          icon={Search}
           className="shrink-0 text-xs font-bold"
         >
-          Post a Customized RFQ
+          Explore Catalog
         </Button>
       </div>
 

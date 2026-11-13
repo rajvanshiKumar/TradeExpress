@@ -391,7 +391,7 @@ const EXPORT_STATS = [
   { number: '100,000+', label: 'Export Categories & Catalogs', icon: PackageCheck },
   { number: '15,000+', label: 'Daily Export RFQs Handled', icon: Coins },
   { number: '150+', label: 'Destination Countries Served', icon: Ship },
-  { number: '4.8 / 5', label: 'Global Importer Trust Score', icon: Star },
+  { number: '100% Escrow', label: 'Payment Protection Guarantee', icon: ShieldCheck },
 ];
 
 export default function Exporters() {
@@ -627,7 +627,7 @@ export default function Exporters() {
                 onClick={() => handleOpenRfqModal('Multi-Category Sourcing')}
                 className="font-semibold text-xs"
               >
-                Post General RFQ
+                Request Export Quote
               </Button>
               <Button
                 to="/suppliers?type=Exporter"
@@ -748,10 +748,12 @@ export default function Exporters() {
                     <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800 ring-1 ring-emerald-600/20">
                       <ShieldCheck className="size-3" /> IEC Verified
                     </span>
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-950">
-                      <Star className="size-3.5 fill-amber-400 text-amber-500" />
-                      {company.rating || 4.7}
-                    </span>
+                    {Number(company.rating) > 0 && Number(company.reviewCount) > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-950">
+                        <Star className="size-3.5 fill-amber-400 text-amber-500" />
+                        {Number(company.rating).toFixed(1)}
+                      </span>
+                    ) : null}
                   </div>
 
                   <h3 className="font-display text-base font-bold text-navy-900 mt-2.5 line-clamp-1">

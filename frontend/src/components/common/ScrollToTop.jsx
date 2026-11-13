@@ -1,11 +1,46 @@
-import { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { useLocation, useNavigationType } from 'react-router-dom';
 
-/** Scrolls to the top on page changes, or to the #hash target when the URL has one. */
+/**
+ * Scroll position on page changes:
+ * - a new page starts at the top (or at the #hash target when the URL has one);
+ * - Back and Forward return to exactly where the reader was on that page, instantly.
+ * Filter changes that keep the same page (only the ?query changes) leave the position alone.
+ */
 export default function ScrollToTop() {
-  const { pathname, hash } = useLocation();
+  const { pathname, hash, key } = useLocation();
+  const navigationType = useNavigationType();
+  const positions = useRef(new Map());
+  const currentKey = useRef(key);
+  const lastPath = useRef(pathname);
+
+  // The browser's own restoration would scroll the old page, then this component would jump again
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+  }, []);
+
+  // Remembers where the reader is on each history entry
+  useEffect(() => {
+    let frame = 0;
+    const save = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        positions.current.set(currentKey.current, window.scrollY);
+      });
+    };
+    window.addEventListener('scroll', save, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', save);
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   useEffect(() => {
+    currentKey.current = key;
+    const pageChanged = lastPath.current !== pathname;
+    lastPath.current = pathname;
+
     if (hash) {
       const timer = window.setTimeout(
         () => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
@@ -13,9 +48,28 @@ export default function ScrollToTop() {
       );
       return () => window.clearTimeout(timer);
     }
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+
+    const saved = navigationType === 'POP' ? positions.current.get(key) : undefined;
+    if (saved !== undefined) {
+      // Back/Forward: wait until the page is tall enough to hold the old position, for up to about a second
+      let tries = 0;
+      let frame = 0;
+      const restore = () => {
+        const reachable = document.documentElement.scrollHeight - window.innerHeight >= saved - 1;
+        if (reachable || tries >= 60) {
+          window.scrollTo({ top: saved, left: 0, behavior: 'instant' });
+          return;
+        }
+        tries += 1;
+        frame = window.requestAnimationFrame(restore);
+      };
+      frame = window.requestAnimationFrame(restore);
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    if (pageChanged) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     return undefined;
-  }, [pathname, hash]);
+  }, [pathname, hash, key, navigationType]);
 
   return null;
 }

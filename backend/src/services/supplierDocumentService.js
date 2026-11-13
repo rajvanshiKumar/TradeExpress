@@ -591,3 +591,73 @@ export async function getPublicPhoto(code) {
   if (!['VERIFIED', 'PENDING'].includes(verificationStatus(user))) throw notFound();
   return getOwnPhoto(doc.userId);
 }
+
+/** Lists all active registered suppliers (both verified and unverified) for the public supplier directory */
+export async function listPublicSuppliers() {
+  const users = await prisma.user.findMany({
+    where: {
+      role: 'SUPPLIER',
+      status: { not: 'SUSPENDED' },
+      isActive: true,
+    },
+    select: {
+      ...SUPPLIER_SELECT,
+      isVerified: true,
+      updatedAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return users.map((user) => {
+    const companyName = (user.company || user.name || '').trim();
+    const isVer = Boolean(user.isVerified || user.kycStatus === 'VERIFIED');
+    const slug = String(companyName || user.id)
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    return {
+      id: user.id,
+      status: 'Active',
+      name: companyName,
+      slug: slug || user.id,
+      flag: '',
+      initials: companyName.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'TE',
+      industry: user.businessType || 'General Trade',
+      businessType: user.businessType || 'Supplier',
+      country: user.country || 'India',
+      city: user.city || '',
+      state: user.state || '',
+      established: user.yearEstablished || new Date(user.createdAt).getFullYear(),
+      rating: 0,
+      reviewCount: 0,
+      verified: isVer,
+      isVerified: isVer,
+      kycStatus: user.kycStatus || 'NOT_SUBMITTED',
+      supplierCode: user.supplierCode || '',
+      responseTime: 'Within 24 hours',
+      description: user.companyDescription || `${companyName} is a supplier on TradeExpress.`,
+      logoUrl: user.logoUrl || null,
+      cover: null,
+      coverIllustration: 'cover-default',
+      mainProducts: [],
+      contact: {
+        person: user.name || '',
+        email: user.email || '',
+        phone: user.businessPhone || user.phone || '',
+        address: user.businessAddress || '',
+      },
+      verification: {
+        status: isVer
+          ? 'reviewed'
+          : (user.kycStatus === 'PENDING' ? 'under-review' : 'not-submitted'),
+        label: isVer ? 'Verified Supplier' : (user.kycStatus === 'PENDING' ? 'Verification Pending' : 'Not verified'),
+        submittedAt: user.createdAt,
+        reviewedAt: isVer ? user.updatedAt : null,
+        documents: [],
+      },
+    };
+  });
+}

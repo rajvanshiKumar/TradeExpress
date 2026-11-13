@@ -98,8 +98,8 @@ export function filterProducts(products, companies, filters = {}) {
     if (filters.deal && !product.deal) return false;
     if (filters.isNew && !product.isNew) return false;
     if (filters.verifiedOnly) {
-      const isVer = Boolean(company?.isVerified || company?.kycStatus === 'VERIFIED' || company?.verification?.status === 'reviewed');
-      if (!isVer) return false;
+      // Same rule as the "Verified Supplier" badge on product cards: the supplier's KYC was approved
+      if (product.supplier?.kycStatus !== 'VERIFIED') return false;
     }
     return true;
   });

@@ -10,7 +10,7 @@ import useNotifications from './useNotifications';
  */
 export default function useContactSupplier() {
   const { user } = useAuth();
-  const { startConversation } = useMessages();
+  const { startConversation, conversations } = useMessages();
   const { showToast } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
@@ -21,22 +21,49 @@ export default function useContactSupplier() {
         navigate('/login', { state: { from: `${location.pathname}${location.search}` } });
         return;
       }
-      if (user.role !== 'buyer' && user.role !== 'admin' && user.role !== 'super_admin') {
-        showToast('Switch to a buyer account to start a conversation with a supplier.', 'warning');
+
+      const targetCompanyId = company?.id || product?.companyId || null;
+      const targetSupplierId = company?.supplierId || product?.supplierId || null;
+      const targetProductId = product?.id || null;
+
+      // 1. Instant cache match: check if a thread for this supplier/product already exists in memory
+      const existing = (conversations || []).find((c) => {
+        if (targetProductId && (c.productId === targetProductId || c.product?.id === targetProductId || c.product?.slug === targetProductId)) return true;
+        if (targetSupplierId && (c.supplierId === targetSupplierId || c.supplier?.id === targetSupplierId)) return true;
+        if (targetCompanyId && (c.companyId === targetCompanyId || c.company?.id === targetCompanyId)) return true;
+        return false;
+      });
+
+      if (existing?.id) {
+        navigate(`/messages?c=${existing.id}`);
         return;
       }
 
+      // 2. Instant responsive navigation: navigate immediately to Messages with context params
+      const searchParams = new URLSearchParams();
+      if (targetCompanyId) searchParams.set('company', targetCompanyId);
+      if (targetSupplierId) searchParams.set('supplier', targetSupplierId);
+      if (targetProductId) searchParams.set('product', targetProductId);
+
+      navigate(`/messages?${searchParams.toString()}`);
+
+      // 3. Initiate or retrieve thread in background and switch to conversation id
       try {
-        const id = await startConversation({ company, product, initialMessage });
+        const id = await startConversation({
+          company,
+          product,
+          companyId: targetCompanyId,
+          supplierId: targetSupplierId,
+          productId: targetProductId,
+          initialMessage,
+        });
         if (id) {
-          navigate(`/messages?c=${id}`);
-        } else {
-          navigate('/messages');
+          navigate(`/messages?c=${id}`, { replace: true });
         }
       } catch (err) {
-        showToast(err.message || 'Unable to open conversation with supplier.', 'error');
+        console.warn('Start conversation error:', err);
       }
     },
-    [user, startConversation, showToast, navigate, location.pathname, location.search]
+    [user, conversations, startConversation, navigate, location.pathname, location.search]
   );
 }

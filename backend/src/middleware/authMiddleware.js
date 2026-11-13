@@ -1,6 +1,6 @@
 import { verifyJwt } from '../utils/jwt.js';
 import prisma from '../config/db.js';
-import { isSessionActive } from '../services/sessionService.js';
+import { isSessionActive, getCachedUser, invalidateSessionCache } from '../services/sessionService.js';
 
 /** True when the token was issued before the account's last password change (or "sign out everywhere"). */
 function isRevokedToken(user, payload) {
@@ -21,39 +21,28 @@ export async function authenticateJWT(req, res, next) {
   }
 
   try {
-    const [user, sessionActive] = await Promise.all([prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        adminRole: true,
-        adminPermissions: true,
-        isActive: true,
-        status: true,
-        statusReason: true,
-        company: true,
-        phone: true,
-        city: true,
-        country: true,
-        sessionsValidAfter: true,
-      },
-    }), isSessionActive(payload)]);
+    const [user, sessionActive] = await Promise.all([
+      getCachedUser(payload.userId),
+      isSessionActive(payload),
+    ]);
 
     if (!user) {
+      invalidateSessionCache(payload.sid, payload.userId);
       return res.status(401).json({ success: false, message: 'User not found.' });
     }
 
     if (!sessionActive) {
+      invalidateSessionCache(payload.sid, payload.userId);
       return res.status(401).json({ success: false, message: 'You were signed out on this device. Please sign in again.', code: 'SESSION_REVOKED' });
     }
 
     if (user.status === 'DEACTIVATED') {
+      invalidateSessionCache(payload.sid, payload.userId);
       return res.status(401).json({ success: false, message: 'This account has been closed.' });
     }
 
     if (isRevokedToken(user, payload)) {
+      invalidateSessionCache(payload.sid, payload.userId);
       return res.status(401).json({ success: false, message: 'Your session has ended. Please sign in again.' });
     }
 

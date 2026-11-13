@@ -247,6 +247,7 @@ const products = rows.map(([name, companyNumber, category, subcategory, price, u
   const isNew = flags.includes('N');
   const isPhoto = image.startsWith('photo-');
   const readyToShip = flags.includes('R');
+  const offersVolumePricing = (flags.includes('D') && flags.includes('R')) || flags.includes('FTR');
 
   return {
     id: `TS-P-${number}`,
@@ -262,7 +263,7 @@ const products = rows.map(([name, companyNumber, category, subcategory, price, u
     illustration: isPhoto ? image : 'photo-1586528116311-ad8dd3c8310d',
     currency: 'INR',
     price,
-    priceTiers: buildPriceTiers(price, moq),
+    priceTiers: offersVolumePricing ? buildPriceTiers(price, moq) : [],
     unit,
     moq,
     stock,
@@ -282,9 +283,9 @@ const products = rows.map(([name, companyNumber, category, subcategory, price, u
     },
     leadTimeDays,
     shippingEstimate: readyToShip ? 'Ships in 3–5 days from stock' : `Ships ${leadTimeDays}–${leadTimeDays + 7} days after order confirmation`,
-    // Generated sample values: they are not collected from real buyers.
-    rating: Math.round((4.2 + ((index * 7) % 8) / 10) * 10) / 10,
-    reviewCount: 12 + ((index * 37) % 180),
+    // Sample / dummy products have no genuine reviews or ratings
+    rating: 0,
+    reviewCount: 0,
     orderCount: 40 + ((index * 53) % 900),
     featured: flags.includes('F'),
     trending: flags.includes('T'),

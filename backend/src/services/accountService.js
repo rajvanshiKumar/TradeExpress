@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import prisma from '../config/db.js';
 import { uploadDir } from '../middleware/uploadMiddleware.js';
+import { invalidateSessionCache } from './sessionService.js';
 
 /*
  * Account Settings for the signed-in user (Buyer, Supplier or Super Admin).
@@ -152,6 +153,7 @@ export async function updateAccountProfile(userId, role, { name, company, city }
   }
 
   await prisma.user.update({ where: { id: userId }, data });
+  invalidateSessionCache(null, userId);
   return getAccountSettings(userId);
 }
 

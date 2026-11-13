@@ -8,6 +8,7 @@ import seedProducts, { buildPriceTiers } from '../data/products';
 import { MAX_RECENTLY_VIEWED, STORAGE_KEYS } from '../utils/constants';
 import { slugify } from '../utils/validators';
 import makeId from '../utils/ids';
+import { readStorage } from '../utils/storage';
 import { getSocket } from '../services/socketService';
 
 // The shared catalogue: products, companies and categories. Supplier and admin screens
@@ -34,6 +35,72 @@ export function ProductProvider({ children }) {
   const setProducts = productState.setItems;
   const setCompanies = companyState.setItems;
   const setCategories = categoryState.setItems;
+
+  // Sync registered supplier accounts into the shared companies catalogue
+  useEffect(() => {
+    const syncSupplierAccounts = () => {
+      try {
+        const localAccounts = readStorage(STORAGE_KEYS.accounts, []) || [];
+        const supplierAccounts = localAccounts.filter(
+          (a) => a && String(a.role || '').toLowerCase() === 'supplier' && (a.company || a.companyName || a.name)
+        );
+        if (supplierAccounts.length > 0) {
+          setCompanies((prev) => {
+            const existingNames = new Set(prev.map((c) => (c.name || '').toLowerCase().trim()));
+            const toAdd = [];
+            supplierAccounts.forEach((acc) => {
+              const cName = (acc.company || acc.companyName || acc.name || '').trim();
+              if (cName && !existingNames.has(cName.toLowerCase())) {
+                existingNames.add(cName.toLowerCase());
+                const isVer = Boolean(acc.isVerified || acc.kycStatus === 'VERIFIED');
+                const kyc = acc.kycStatus || (isVer ? 'VERIFIED' : 'NOT_SUBMITTED');
+                toAdd.push({
+                  id: acc.companyId || acc.id || makeId('TS-CO'),
+                  status: acc.status === 'Suspended' ? 'Suspended' : 'Active',
+                  name: cName,
+                  slug: slugify(cName) || 'supplier',
+                  flag: '',
+                  initials: cName.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase(),
+                  industry: acc.businessType || 'General Trade',
+                  businessType: acc.businessType || 'Supplier',
+                  country: acc.country || 'India',
+                  city: acc.city || '',
+                  state: acc.state || '',
+                  established: acc.established || acc.yearEstablished || new Date().getFullYear(),
+                  verified: isVer,
+                  isVerified: isVer,
+                  kycStatus: kyc,
+                  verification: {
+                    status: isVer ? 'reviewed' : (kyc === 'PENDING' ? 'under-review' : 'not-submitted'),
+                    label: isVer ? 'Verified Supplier' : (kyc === 'PENDING' ? 'Verification Pending' : 'Not verified'),
+                    submittedAt: acc.joinedAt || acc.createdAt || null,
+                    reviewedAt: isVer ? new Date().toISOString() : null,
+                    documents: [],
+                  },
+                  rating: 5.0,
+                  reviewCount: 0,
+                  responseTime: 'Within 24 hours',
+                  mainProducts: [],
+                  contact: { person: acc.name || '', email: acc.email || '', phone: acc.phone || '', address: acc.businessAddress || '' },
+                });
+              }
+            });
+            return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+          });
+        }
+      } catch (err) {
+        console.warn('Error syncing supplier accounts to companies:', err);
+      }
+    };
+
+    syncSupplierAccounts();
+    window.addEventListener('storage', syncSupplierAccounts);
+    window.addEventListener('tradeexpress_auth_changed', syncSupplierAccounts);
+    return () => {
+      window.removeEventListener('storage', syncSupplierAccounts);
+      window.removeEventListener('tradeexpress_auth_changed', syncSupplierAccounts);
+    };
+  }, [setCompanies]);
 
   // Real-time product stock synchronization from Socket.IO events
   useEffect(() => {

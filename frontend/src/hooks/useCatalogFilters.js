@@ -4,10 +4,11 @@ import { useSearchParams } from 'react-router-dom';
 // Maps filter names to short URL parameter names.
 const PARAMS = {
   q: 'q', category: 'category', subcategory: 'sub', minPrice: 'min', maxPrice: 'max', maxMoq: 'moq', countries: 'country',
-  businessTypes: 'type', condition: 'condition', ready: 'ready', inStock: 'stock', sample: 'sample', deal: 'deal', isNew: 'new', sort: 'sort', page: 'page',
+  businessTypes: 'type', condition: 'condition', ready: 'ready', inStock: 'stock', sample: 'sample', deal: 'deal', isNew: 'new', verifiedOnly: 'verified', sort: 'sort', page: 'page',
 };
 const LISTS = ['countries', 'businessTypes'];
-const FLAGS = ['ready', 'inStock', 'sample', 'deal', 'isNew'];
+// verifiedOnly was missing here, so the "Verified suppliers only" box could never be switched on
+const FLAGS = ['ready', 'inStock', 'sample', 'deal', 'isNew', 'verifiedOnly'];
 
 /**
  * Catalogue filters stored in the URL, so results can be shared, bookmarked and

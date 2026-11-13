@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FileText,
   Printer,
@@ -13,6 +14,28 @@ import { generateTaxInvoiceHtml, printTaxInvoice } from '../../utils/taxInvoiceG
 export default function TaxInvoiceModal({ order, isOpen, onClose, defaultRole = 'buyer' }) {
   const [role, setRole] = useState(defaultRole);
 
+  // Prevent background scrolling while modal is active
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   const invoiceHtml = useMemo(() => {
     if (!order) return '';
     return generateTaxInvoiceHtml(order, { role, toolbar: false });
@@ -26,9 +49,16 @@ export default function TaxInvoiceModal({ order, isOpen, onClose, defaultRole = 
     printTaxInvoice(order, { role });
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl w-full max-w-4xl h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+  const modalContent = (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
+    >
+      <div className="bg-white rounded-2xl w-full max-w-4xl h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden relative z-10 animate-in zoom-in-95 duration-200">
         {/* Modal Top Bar */}
         <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -130,5 +160,9 @@ export default function TaxInvoiceModal({ order, isOpen, onClose, defaultRole = 
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 }
 

@@ -21,10 +21,11 @@ const messageService = {
   },
 
   /**
-   * Create or retrieve an existing conversation with a supplier.
+   * Create or retrieve an existing conversation with a supplier or buyer.
    */
-  async createOrGetConversation({ supplierId, companyId, productId, productSlug, rfqId, orderId, subject, initialMessage }) {
+  async createOrGetConversation({ buyerId, supplierId, companyId, productId, productSlug, rfqId, orderId, subject, initialMessage }) {
     const res = await apiPost('messages/conversations', {
+      buyerId,
       supplierId,
       companyId,
       productId,

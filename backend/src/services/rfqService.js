@@ -1,5 +1,6 @@
 import prisma from '../config/db.js';
 import { createNotification } from './notificationService.js';
+import * as productService from './productService.js';
 
 export async function createRfq({
   buyerId = null,
@@ -17,14 +18,223 @@ export async function createRfq({
   specifications = '',
   attachmentUrl = null,
   items = [],
+  products = [],
+  supplierId = null,
+  supplierIds = [],
+  targetSupplierIds = [],
+  targetSuppliers = [],
+  deliveryLocation = null,
+  deliveryAddress = null,
+  deliveryTime = null,
+  expectedDeliveryDate = null,
+  paymentPreference = null,
+  additionalMessage = null,
+  supplierSelectionMethod = null,
+  source = null,
+  customProduct = null,
+  savedComparison = null,
+  productId = null,
+  variant = null,
 }) {
+  const cleanEmail = (buyerEmail || '').trim().toLowerCase();
+
+  // Combine products / items array
+  const inputProducts = Array.isArray(products) && products.length > 0
+    ? products
+    : (Array.isArray(items) && items.length > 0 ? items : []);
+
+  let cleanTitle = (title || '').trim();
+  if (!cleanTitle && inputProducts.length > 0) {
+    cleanTitle = `RFQ for ${inputProducts.map((p) => p.name || p.productName).filter(Boolean).join(', ')}`;
+  }
+  if (!cleanTitle) {
+    cleanTitle = 'Wholesale Request for Quotation';
+  }
+
+  let qty = Number(quantity);
+  if ((!qty || isNaN(qty) || qty < 1) && inputProducts.length > 0) {
+    qty = inputProducts.reduce((sum, p) => sum + (Number(p.quantity) || 1), 0);
+  }
+  if (!qty || isNaN(qty) || qty < 1) {
+    qty = 1;
+  }
+
+  // 1. Prevent duplicate submissions within a 5-second window
+  const fiveSecondsAgo = new Date(Date.now() - 5000);
+  if (cleanEmail && cleanTitle) {
+    const duplicate = await prisma.rfq.findFirst({
+      where: {
+        OR: [
+          ...(buyerId ? [{ buyerId }] : []),
+          { buyerEmail: { equals: cleanEmail } },
+        ],
+        title: cleanTitle,
+        quantity: qty,
+        createdAt: { gte: fiveSecondsAgo },
+      },
+      include: {
+        items: { include: { product: true } },
+        quotations: {
+          include: {
+            supplier: {
+              select: { id: true, name: true, email: true, company: true, isVerified: true, kycStatus: true, phone: true },
+            },
+            versions: { orderBy: { versionNumber: 'desc' } },
+          },
+        },
+      },
+    });
+
+    if (duplicate) {
+      return duplicate;
+    }
+  }
+
+  // 2. Compile targeted suppliers & exclude buyer's own ID
+  const rawTargetSupplierIds = Array.from(
+    new Set([
+      ...(Array.isArray(targetSupplierIds) ? targetSupplierIds : []),
+      ...(Array.isArray(supplierIds) ? supplierIds : []),
+      ...(supplierId ? [supplierId] : []),
+    ].filter(Boolean))
+  ).filter((sId) => !buyerId || sId !== buyerId);
+
+  // Validate product, supplier, variant and MOQ on backend
+  const primaryProductId = productId || inputProducts.find((p) => p.productId)?.productId;
+  if (primaryProductId) {
+    try {
+      const dbProduct = await prisma.product.findUnique({
+        where: { id: primaryProductId },
+        include: { supplier: true },
+      });
+      if (dbProduct) {
+        if (dbProduct.status === 'ARCHIVED' || dbProduct.status === 'INACTIVE') {
+          const err = new Error(`The selected product "${dbProduct.name}" is currently inactive.`);
+          err.statusCode = 400;
+          throw err;
+        }
+
+        const productMoq = Number(dbProduct.moq) || 1;
+        if (qty < productMoq) {
+          const err = new Error(
+            `Requested quantity (${qty}) must meet or exceed the minimum order quantity (${productMoq} ${dbProduct.unit || 'unit'}s).`
+          );
+          err.statusCode = 400;
+          throw err;
+        }
+
+        if (dbProduct.supplierId && !rawTargetSupplierIds.includes(dbProduct.supplierId)) {
+          rawTargetSupplierIds.push(dbProduct.supplierId);
+        }
+
+        const selectedVariant = variant || inputProducts[0]?.variant;
+        if (selectedVariant && typeof selectedVariant === 'object' && dbProduct.variants && typeof dbProduct.variants === 'object') {
+          for (const [varName, varVal] of Object.entries(selectedVariant)) {
+            if (varVal && Array.isArray(dbProduct.variants[varName])) {
+              if (!dbProduct.variants[varName].includes(varVal)) {
+                const err = new Error(
+                  `Invalid option "${varVal}" for variant "${varName}". Available options: ${dbProduct.variants[varName].join(', ')}`
+                );
+                err.statusCode = 400;
+                throw err;
+              }
+            }
+          }
+        }
+      }
+    } catch (valErr) {
+      if (valErr.statusCode) throw valErr;
+    }
+  }
+
+  // Validate supplier IDs against real database suppliers (exclude suspended/ineligible)
+  let confirmedSuppliers = [];
+  if (rawTargetSupplierIds.length > 0) {
+    confirmedSuppliers = await prisma.user.findMany({
+      where: {
+        id: { in: rawTargetSupplierIds },
+        role: 'SUPPLIER',
+        status: { not: 'SUSPENDED' },
+      },
+      select: {
+        id: true,
+        name: true,
+        company: true,
+        email: true,
+        city: true,
+        country: true,
+        isVerified: true,
+        kycStatus: true,
+      },
+    });
+  }
+
+  const allTargetSupplierIds = confirmedSuppliers.map((s) => s.id);
+
   const rfqNumber = `TS-RFQ-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
 
   let reqDate = null;
-  if (requiredByDate) {
-    const parsed = new Date(requiredByDate);
+  const targetDateStr = requiredByDate || expectedDeliveryDate;
+  if (targetDateStr) {
+    const parsed = new Date(targetDateStr);
     if (!isNaN(parsed.getTime())) reqDate = parsed;
   }
+
+  // Format combined specifications
+  let finalSpecs = (specifications || '').trim();
+  if (!finalSpecs && inputProducts.length > 0) {
+    finalSpecs = inputProducts
+      .map((p, idx) => `Product ${idx + 1} (${p.name || p.productName}): ${p.specifications || 'Standard wholesale inquiry'}`)
+      .join('\n');
+  }
+  if (!finalSpecs) {
+    finalSpecs = 'Standard wholesale inquiry.';
+  }
+
+  // Map individual items for multi-product RFQ
+  const finalItems = inputProducts.length > 0
+    ? inputProducts.map((p) => {
+        const pQty = Number(p.quantity) || 1;
+        const pUnit = p.unit || unit || 'piece';
+        const pPrice = p.targetPrice ? Number(p.targetPrice) : null;
+        const notesArr = [
+          p.specifications ? `Specs: ${p.specifications}` : '',
+          p.brand || p.preferredBrand ? `Brand: ${p.brand || p.preferredBrand}` : '',
+          p.quality || p.qualityRequirements ? `Quality: ${p.quality || p.qualityRequirements}` : '',
+          p.packaging || p.packagingRequirements ? `Packaging: ${p.packaging || p.packagingRequirements}` : '',
+        ].filter(Boolean);
+
+        return {
+          productId: p.productId || null,
+          productName: (p.name || p.productName || cleanTitle).trim(),
+          quantity: pQty,
+          unit: pUnit,
+          targetPrice: pPrice,
+          notes: notesArr.length > 0 ? notesArr.join(' | ') : null,
+        };
+      })
+    : [];
+
+  const comparisonData = {
+    ...(savedComparison && typeof savedComparison === 'object' ? savedComparison : {}),
+    targetSupplierIds: allTargetSupplierIds,
+    targetSuppliers: confirmedSuppliers.map((s) => ({
+      id: s.id,
+      name: s.name,
+      company: s.company || s.name,
+      isVerified: Boolean(s.isVerified || s.kycStatus === 'VERIFIED'),
+      location: [s.city, s.country || 'India'].filter(Boolean).join(', '),
+    })),
+    supplierSelectionMethod: supplierSelectionMethod || (allTargetSupplierIds.length === 1 ? 'specific' : 'multiple'),
+    deliveryLocation: deliveryLocation || null,
+    deliveryAddress: deliveryAddress || null,
+    paymentPreference: paymentPreference || null,
+    additionalMessage: additionalMessage || null,
+    products: inputProducts,
+    deliveryTime: deliveryTime || null,
+    source: source || (allTargetSupplierIds.length === 1 ? 'product_page' : 'header_rfq'),
+    customProduct: customProduct || null,
+  };
 
   const rfq = await prisma.rfq.create({
     data: {
@@ -33,34 +243,35 @@ export async function createRfq({
       buyerName: buyerName?.trim() || 'Anonymous Buyer',
       buyerEmail: buyerEmail?.trim() || 'buyer@example.com',
       buyerCompany: buyerCompany?.trim() || null,
-      title: title?.trim() || `Inquiry for ${quantity} ${unit}s`,
+      title: cleanTitle,
       categorySlug: categorySlug || null,
       targetPrice: targetPrice !== null && targetPrice !== undefined && targetPrice !== '' ? Number(targetPrice) : null,
-      quantity: Number(quantity) || 1,
+      quantity: qty,
       unit: unit || 'piece',
       deliveryPincode: deliveryPincode ? String(deliveryPincode).trim() : null,
       destinationCountry: destinationCountry || 'India',
       requiredByDate: reqDate,
-      specifications: specifications?.trim() || 'Standard wholesale inquiry.',
+      specifications: finalSpecs,
       attachmentUrl: attachmentUrl || null,
+      savedComparison: comparisonData,
       status: 'OPEN',
-      items: items && items.length > 0 ? {
-        create: items.map((it) => ({
+      items: finalItems.length > 0 ? {
+        create: finalItems.map((it) => ({
           productId: it.productId || null,
-          productName: it.productName || title,
-          quantity: Number(it.quantity) || Number(quantity) || 1,
-          unit: it.unit || unit || 'piece',
-          targetPrice: it.targetPrice ? Number(it.targetPrice) : null,
-          notes: it.notes || null,
+          productName: it.productName,
+          quantity: it.quantity,
+          unit: it.unit,
+          targetPrice: it.targetPrice,
+          notes: it.notes,
         })),
       } : undefined,
     },
     include: {
-      items: true,
+      items: { include: { product: true } },
       quotations: {
         include: {
           supplier: {
-            select: { id: true, name: true, email: true, company: true },
+            select: { id: true, name: true, email: true, company: true, isVerified: true, kycStatus: true, phone: true },
           },
           versions: { orderBy: { versionNumber: 'desc' } },
         },
@@ -68,7 +279,177 @@ export async function createRfq({
     },
   });
 
+  // 3. Send independent RFQ notification to each targeted confirmed supplier
+  for (const supId of allTargetSupplierIds) {
+    try {
+      await createNotification({
+        userId: supId,
+        type: 'RFQ_RECEIVED',
+        title: 'New RFQ Received',
+        message: `${rfq.buyerCompany || rfq.buyerName} requested a quote for ${rfq.title}.`,
+        link: '/supplier/inquiries',
+      });
+    } catch (notifErr) {
+      console.error(`[RFQ] Failed to notify supplier ${supId}:`, notifErr?.message);
+    }
+  }
+
   return rfq;
+}
+
+export async function getMatchingSuppliers({ productId, categorySlug, search, productNames = [], excludeUserId = null }) {
+  // If productId is provided, use the established productService.getProductSuppliers
+  if (productId) {
+    try {
+      const productSuppliers = await productService.getProductSuppliers(productId);
+      if (productSuppliers && productSuppliers.length > 0) {
+        return productSuppliers
+          .filter((s) => !excludeUserId || s.supplierId !== excludeUserId)
+          .map((s) => ({
+            id: s.supplierId,
+            supplierId: s.supplierId,
+            companyName: s.companyName,
+            name: s.contactPerson || s.companyName,
+            email: s.email,
+            phone: s.phone,
+            isVerified: s.isVerified,
+            kycStatus: s.kycStatus,
+            location: s.location,
+            city: s.city,
+            country: s.country,
+            rating: s.averageRating,
+            reviewCount: s.reviewCount,
+            price: s.price,
+            moq: s.moq,
+            leadTimeDays: s.leadTimeDays,
+            productId: s.productId,
+            productName: s.productName,
+          }));
+      }
+    } catch {
+      // Fall through to general query
+    }
+  }
+
+  // 1. Identify suppliers matching product keywords from Step 1
+  let matchedSupplierIdsFromProducts = [];
+  if (Array.isArray(productNames) && productNames.length > 0) {
+    const keywords = productNames
+      .flatMap((p) => String(p).toLowerCase().split(/[\s,]+/))
+      .filter((w) => w.length >= 3 && !['and', 'for', 'the', 'with', 'set', 'box'].includes(w));
+
+    if (keywords.length > 0) {
+      try {
+        const matchingProducts = await prisma.product.findMany({
+          where: {
+            status: 'Active',
+            OR: keywords.map((k) => ({
+              OR: [
+                { name: { contains: k } },
+                { description: { contains: k } },
+                { categorySlug: { contains: k } },
+              ],
+            })),
+          },
+          select: { supplierId: true, name: true },
+          take: 50,
+        });
+
+        matchedSupplierIdsFromProducts = Array.from(
+          new Set(matchingProducts.map((p) => p.supplierId).filter(Boolean))
+        );
+      } catch (err) {
+        console.warn('Error matching products for suppliers:', err?.message);
+      }
+    }
+  }
+
+  const where = {
+    role: 'SUPPLIER',
+    status: { not: 'SUSPENDED' },
+    ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
+    ...(search
+      ? {
+          OR: [
+            { company: { contains: search } },
+            { name: { contains: search } },
+            { city: { contains: search } },
+          ],
+        }
+      : {}),
+  };
+
+  const suppliers = await prisma.user.findMany({
+    where,
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      company: true,
+      city: true,
+      country: true,
+      isVerified: true,
+      kycStatus: true,
+      warehouseAddress: true,
+      products: {
+        where: {
+          status: 'Active',
+          ...(categorySlug ? { categorySlug } : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          moq: true,
+          unit: true,
+          leadTimeDays: true,
+        },
+        take: 3,
+      },
+    },
+    take: 30,
+  });
+
+  // Rank: product matches first, then verified, then name
+  suppliers.sort((a, b) => {
+    const aProductMatch = matchedSupplierIdsFromProducts.includes(a.id) ? 1 : 0;
+    const bProductMatch = matchedSupplierIdsFromProducts.includes(b.id) ? 1 : 0;
+    if (aProductMatch !== bProductMatch) return bProductMatch - aProductMatch;
+
+    const aVer = (a.isVerified || a.kycStatus === 'VERIFIED') ? 1 : 0;
+    const bVer = (b.isVerified || b.kycStatus === 'VERIFIED') ? 1 : 0;
+    return bVer - aVer;
+  });
+
+  return suppliers.map((sup) => {
+    const isVerified = Boolean(sup.isVerified || sup.kycStatus === 'VERIFIED');
+    const matchedProduct = sup.products[0];
+    const isProductMatch = matchedSupplierIdsFromProducts.includes(sup.id);
+
+    return {
+      id: sup.id,
+      supplierId: sup.id,
+      companyName: sup.company || sup.name,
+      name: sup.name,
+      email: sup.email,
+      phone: sup.phone,
+      isVerified,
+      kycStatus: sup.kycStatus || 'NOT_SUBMITTED',
+      location: [sup.city, sup.country || 'India'].filter(Boolean).join(', '),
+      city: sup.city,
+      country: sup.country || 'India',
+      rating: 0,
+      reviewCount: 0,
+      price: matchedProduct ? Number(matchedProduct.price) : null,
+      moq: matchedProduct ? matchedProduct.moq : 1,
+      leadTimeDays: matchedProduct?.leadTimeDays || 14,
+      productId: matchedProduct?.id || null,
+      productName: matchedProduct?.name || null,
+      productCount: sup.products.length,
+      isProductMatch,
+    };
+  });
 }
 
 export async function listRfqs({ buyerId, supplierId, status, categorySlug, search }) {
@@ -90,11 +471,25 @@ export async function listRfqs({ buyerId, supplierId, status, categorySlug, sear
     where,
     orderBy: { createdAt: 'desc' },
     include: {
-      items: true,
+      items: {
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              photo: true,
+              unit: true,
+              moq: true,
+              price: true,
+              supplierId: true,
+            },
+          },
+        },
+      },
       quotations: {
         include: {
           supplier: {
-            select: { id: true, name: true, email: true, company: true },
+            select: { id: true, name: true, email: true, company: true, isVerified: true, kycStatus: true, phone: true },
           },
           versions: { orderBy: { versionNumber: 'desc' } },
         },
@@ -102,11 +497,47 @@ export async function listRfqs({ buyerId, supplierId, status, categorySlug, sear
     },
   });
 
-  // If filtered for supplier, annotate which quotes belong to this supplier
+  // If filtered for supplier, filter and annotate RFQs for this supplier
+  if (supplierId) {
+    const filtered = rfqs.filter((r) => {
+      // 1. Supplier has already submitted a quotation
+      if (r.quotations.some((q) => q.supplierId === supplierId)) return true;
+      // 2. An item's product belongs to this supplier
+      if (r.items.some((it) => it.product?.supplierId === supplierId)) return true;
+      // 3. The RFQ explicitly targeted this supplier
+      const saved = r.savedComparison;
+      if (saved && typeof saved === 'object') {
+        const targets = saved.targetSupplierIds;
+        if (Array.isArray(targets) && targets.length > 0) {
+          return targets.includes(supplierId);
+        }
+      }
+      // 4. Open public RFQ without specific target suppliers (visible to all suppliers)
+      const hasSpecificTargets = saved && Array.isArray(saved.targetSupplierIds) && saved.targetSupplierIds.length > 0;
+      if (!hasSpecificTargets) {
+        return true;
+      }
+      return false;
+    });
+
+    return filtered.map((r) => ({
+      ...r,
+      quotationCount: r.quotations.length,
+      myQuote: r.quotations.find((q) => q.supplierId === supplierId) || null,
+      targetSuppliers: r.savedComparison?.targetSuppliers || [],
+      deliveryTime: r.savedComparison?.deliveryTime || null,
+      additionalMessage: r.savedComparison?.additionalMessage || null,
+      source: r.savedComparison?.source || null,
+    }));
+  }
+
   return rfqs.map((r) => ({
     ...r,
     quotationCount: r.quotations.length,
-    myQuote: supplierId ? r.quotations.find((q) => q.supplierId === supplierId) || null : undefined,
+    targetSuppliers: r.savedComparison?.targetSuppliers || [],
+    deliveryTime: r.savedComparison?.deliveryTime || null,
+    additionalMessage: r.savedComparison?.additionalMessage || null,
+    source: r.savedComparison?.source || null,
   }));
 }
 
@@ -318,7 +749,7 @@ export async function submitQuote(rfqId, {
       title: `Quotation Received: ${rfq.title}`,
       message: `A supplier submitted a quote of ₹${Number(unitPrice).toLocaleString('en-IN')}/unit for your RFQ #${rfq.rfqNumber}.`,
       type: 'QUOTE',
-      link: `/inquiries`,
+      link: `/buyer/quotes`,
     }).catch(() => {});
   }
 
@@ -402,7 +833,7 @@ export async function counterOffer(quoteId, {
       title: `Revised Quote: #${quotation.quoteNumber}`,
       message: `Supplier revised Quote #${quotation.quoteNumber} to ₹${Number(unitPrice).toLocaleString('en-IN')}/unit (Round ${nextVer} of 3).`,
       type: 'QUOTE',
-      link: `/inquiries`,
+      link: `/buyer/quotes`,
     }).catch(() => {});
   }
 

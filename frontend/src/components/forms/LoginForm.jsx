@@ -33,6 +33,7 @@ import { GoogleSignInCancelled, isGoogleSignInConfigured, signInWithGoogle } fro
 const ROLE_NAMES = {
   buyer: "Buyer",
   supplier: "Supplier",
+  exporter: "Exporter",
   admin: "Admin",
   super_admin: "Super Admin",
 };
@@ -432,7 +433,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       // Never return to another role's dashboard: that would switch this window to that role
       (!slotForPath(from) || slotForPath(from) === slotForRole(authUser.role));
 
-    const targetHome = ROLE_HOME[authUser.role] || (authUser.role === "supplier" ? "/supplier" : "/buyer");
+    const targetHome = ROLE_HOME[authUser.role] || (authUser.role === "supplier" || authUser.role === "exporter" ? "/supplier" : "/buyer");
     startTransition(() => {
       navigate(allowed ? from : targetHome, { replace: true });
     });

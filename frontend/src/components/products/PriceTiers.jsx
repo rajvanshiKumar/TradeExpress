@@ -5,7 +5,9 @@ import { formatNumber } from '../../utils/formatCurrency';
 
 /** Quantity price tiers. Highlights the tier that applies to `quantity` and allows clicking to jump directly to that tier's quantity. */
 export default function PriceTiers({ product, quantity, onSelectTier, compact = false }) {
-  const { money } = useCurrency();
+  const { displayMoney } = useCurrency();
+  // Browsing price, shown in the buyer's currency ("≈" when converted); checkout and orders keep the real currency
+  const money = (value) => displayMoney(value, product?.currency || 'INR');
   const tiers = [...(product?.priceTiers ?? [])].sort((a, b) => a.minQty - b.minQty);
   const active = quantity ? getActiveTier(product, quantity) : null;
   if (!tiers.length) return null;
@@ -44,21 +46,21 @@ export default function PriceTiers({ product, quantity, onSelectTier, compact = 
                 isInteractive ? 'cursor-pointer hover:-translate-y-0.5 active:scale-[0.98]' : ''
               } ${
                 isActive
-                  ? 'border-brand-500 bg-brand-50/90 shadow-sm ring-2 ring-brand-500/25'
-                  : 'border-slate-200/90 bg-white hover:border-brand-400 hover:bg-slate-50/80 hover:shadow-xs'
+                  ? 'border border-emerald-500 bg-emerald-50/80 shadow-xs'
+                  : 'border-slate-200/90 bg-white hover:border-emerald-400 hover:bg-emerald-50/40 hover:shadow-xs'
               }`}
             >
               <div className="flex items-center justify-between gap-1">
-                <span className={`text-xs font-semibold ${isActive ? 'text-brand-900 font-bold' : 'text-slate-600'}`}>
+                <span className={`text-xs font-semibold ${isActive ? 'text-emerald-950 font-bold' : 'text-slate-600'}`}>
                   {range} {compact ? '' : `${product?.unit || 'piece'}s`}
                 </span>
                 {isActive ? (
-                  <span className="inline-flex items-center gap-0.5 rounded-full bg-brand-600 px-1.5 py-0.5 text-[0.625rem] font-bold text-white shadow-xs">
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-700 px-1.5 py-0.5 text-[0.625rem] font-bold text-white shadow-xs">
                     <Check className="size-2.5 stroke-[3.5]" aria-hidden="true" />
                     Active
                   </span>
                 ) : isInteractive ? (
-                  <span className="text-[0.6875rem] font-medium text-brand-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-[0.6875rem] font-medium text-emerald-700 opacity-0 group-hover:opacity-100 transition-opacity">
                     Select
                   </span>
                 ) : null}

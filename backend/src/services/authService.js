@@ -146,12 +146,24 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
     await validateVerifiedMobile({ phone: storedPhone, country: country || 'India', verificationToken });
   }
 
+  const phoneValues = [...new Set([
+    storedPhone,
+    normalized.msg91Mobile,
+    normalized.msg91Mobile ? `+${normalized.msg91Mobile}` : null,
+    normalized.national,
+  ].filter(Boolean))];
+
   // Double check mobile uniqueness
   const existingPhone = await prisma.user.findFirst({
     where: {
       OR: [
-        { phone: storedPhone },
-        ...(normalized.msg91Mobile ? [{ phone: normalized.msg91Mobile }, { phone: `+${normalized.msg91Mobile}` }] : []),
+        { phone: { in: phoneValues } },
+        ...(normalized.national ? [
+          { phone: { endsWith: normalized.national } },
+          { businessPhone: normalized.national },
+          { businessPhone: { endsWith: normalized.national } },
+        ] : []),
+        { businessPhone: { in: phoneValues } },
       ],
     },
   });
@@ -360,7 +372,17 @@ export async function registerBuyer({
       select: SIGNUP_STATUS_SELECT,
     }),
     prisma.user.findFirst({
-      where: { phone: { in: phoneValues } },
+      where: {
+        OR: [
+          { phone: { in: phoneValues } },
+          ...(normalized.national ? [
+            { phone: { endsWith: normalized.national } },
+            { businessPhone: normalized.national },
+            { businessPhone: { endsWith: normalized.national } },
+          ] : []),
+          { businessPhone: { in: phoneValues } },
+        ],
+      },
       select: { id: true },
     }),
   ]);
@@ -565,6 +587,65 @@ export async function registerBuyer({
 }
 
 /**
+ * Checks whether a phone number (mobile or official business phone) is already registered
+ * to any existing buyer or supplier account.
+ */
+export async function checkPhoneAvailability({ phone, country = 'India', excludeUserId = null }) {
+  const cleanDigits = String(phone || '').replace(/\D/g, '');
+  if (!cleanDigits) {
+    const error = new Error('Phone number is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalized = normalizeMobile(phone, country);
+  const last10 = cleanDigits.slice(-10);
+  const searchValues = [...new Set([
+    cleanDigits,
+    last10,
+    `+91${last10}`,
+    `91${last10}`,
+    normalized.formattedPhone,
+    normalized.msg91Mobile,
+    normalized.msg91Mobile ? `+${normalized.msg91Mobile}` : null,
+    normalized.national,
+  ].filter(Boolean))];
+
+  const orConditions = [
+    { phone: { in: searchValues } },
+    { businessPhone: { in: searchValues } },
+  ];
+  if (last10.length === 10) {
+    orConditions.push({ phone: { endsWith: last10 } });
+    orConditions.push({ businessPhone: { endsWith: last10 } });
+  }
+
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      OR: orConditions,
+      ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
+    },
+    select: { id: true, role: true, phone: true, businessPhone: true },
+  });
+
+  if (existingUser) {
+    const roleLabel = (existingUser.role || '').toUpperCase() === 'BUYER' ? 'buyer' : 'supplier';
+    return {
+      available: false,
+      registered: true,
+      role: existingUser.role,
+      message: `This official phone number is already registered to a ${roleLabel} account.`,
+    };
+  }
+
+  return {
+    available: true,
+    registered: false,
+    message: 'Phone number is available.',
+  };
+}
+
+/**
  * Production-ready Enterprise Supplier Registration
  */
 export async function registerSupplier({
@@ -640,6 +721,13 @@ export async function registerSupplier({
   const normalized = normalizeMobile(phone, country);
   const storedPhone = normalized.ok ? normalized.formattedPhone : phone;
 
+  const phoneValues = [...new Set([
+    storedPhone,
+    normalized.msg91Mobile,
+    normalized.msg91Mobile ? `+${normalized.msg91Mobile}` : null,
+    normalized.national,
+  ].filter(Boolean))];
+
   // Run uniqueness checks concurrently with minimized payload
   const [existingEmail, existingPhone] = await Promise.all([
     prisma.user.findUnique({
@@ -649,8 +737,13 @@ export async function registerSupplier({
     prisma.user.findFirst({
       where: {
         OR: [
-          { phone: storedPhone },
-          ...(normalized.msg91Mobile ? [{ phone: normalized.msg91Mobile }, { phone: `+${normalized.msg91Mobile}` }] : []),
+          { phone: { in: phoneValues } },
+          ...(normalized.national ? [
+            { phone: { endsWith: normalized.national } },
+            { businessPhone: normalized.national },
+            { businessPhone: { endsWith: normalized.national } },
+          ] : []),
+          { businessPhone: { in: phoneValues } },
         ],
       },
       select: { id: true },
@@ -811,12 +904,33 @@ export async function registerSupplier({
     }
   }
 
-  // Office phone (optional): digits only, 10 digits
+  // Official phone (optional): digits only, 10 digits, unique across buyers and suppliers
   const cleanBusinessPhone = businessPhone ? String(businessPhone).replace(/\D/g, '') : '';
-  if (cleanBusinessPhone && cleanBusinessPhone.length !== 10) {
-    const error = new Error('Office phone number must be exactly 10 digits.');
-    error.statusCode = 400;
-    throw error;
+  if (cleanBusinessPhone) {
+    if (cleanBusinessPhone.length !== 10) {
+      const error = new Error('Office phone number must be exactly 10 digits.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const repPhoneDigits = String(storedPhone || phone || '').replace(/\D/g, '').slice(-10);
+    if (cleanBusinessPhone === repPhoneDigits) {
+      const error = new Error('Official phone number cannot be the same as your representative mobile number.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const phoneAvailability = await checkPhoneAvailability({
+      phone: cleanBusinessPhone,
+      country,
+      excludeUserId: resumeUser?.id,
+    });
+
+    if (!phoneAvailability.available) {
+      const error = new Error(phoneAvailability.message || 'This official phone number is already registered to another account.');
+      error.statusCode = 409;
+      throw error;
+    }
   }
 
   // Year established validation

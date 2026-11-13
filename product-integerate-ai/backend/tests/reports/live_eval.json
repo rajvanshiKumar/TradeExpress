@@ -1,0 +1,896 @@
+{
+ "summary": {
+  "model": "gemini-3.5-flash-lite",
+  "images": 8,
+  "category_accuracy": 0.875,
+  "completed": 8,
+  "total_tokens": 70979
+ },
+ "results": [
+  {
+   "image": "headphones.jpg",
+   "expected": "headphones",
+   "got": "headphones",
+   "correct": true,
+   "status": "awaiting_review",
+   "error": null,
+   "title": "AKG Wired Over-Ear Headphones White Grey Brown with Velour Ear Pads",
+   "ocr_text": "AKG",
+   "attributes": {
+    "brand": [
+     "AKG",
+     0.95,
+     "prefill",
+     "ocr"
+    ],
+    "color": [
+     "white, grey, brown",
+     0.9,
+     "prefill",
+     "image"
+    ],
+    "connectivity": [
+     [
+      "wired"
+     ],
+     0.9,
+     "prefill",
+     "image"
+    ]
+   },
+   "unsupported_claims": {},
+   "missing_required": [],
+   "all_attributes": {
+    "barcode": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "battery_life": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "brand": [
+     "AKG",
+     0.95,
+     "prefill",
+     "high confidence"
+    ],
+    "color": [
+     "white, grey, brown",
+     0.9,
+     "prefill",
+     "high confidence"
+    ],
+    "connectivity": [
+     [
+      "wired"
+     ],
+     0.9,
+     "prefill",
+     "high confidence"
+    ],
+    "country_of_origin": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "material": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "model_number": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "net_weight": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "package_dimensions": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "power_rating": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "voltage": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "warranty_months": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ]
+   },
+   "usage": {
+    "calls": 7,
+    "input_tokens": 7629,
+    "output_tokens": 1738,
+    "cost_usd": null
+   }
+  },
+  {
+   "image": "tshirt.jpg",
+   "expected": "mens-tshirts",
+   "got": "womens-clothing",
+   "correct": false,
+   "status": "awaiting_review",
+   "error": null,
+   "title": "Womens Red Heathered V-Neck Short Sleeve Knit T-Shirt",
+   "ocr_text": "",
+   "attributes": {
+    "color": [
+     "red",
+     0.9,
+     "prefill",
+     "image"
+    ],
+    "gender": [
+     "women",
+     0.85,
+     "prefill",
+     "image"
+    ]
+   },
+   "unsupported_claims": {},
+   "missing_required": [
+    "size"
+   ],
+   "all_attributes": {
+    "barcode": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "brand": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "color": [
+     "red",
+     0.9,
+     "prefill",
+     "high confidence"
+    ],
+    "country_of_origin": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "fabric": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "fit": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "gender": [
+     "women",
+     0.85,
+     "prefill",
+     "high confidence"
+    ],
+    "material": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "model_number": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "net_weight": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "package_dimensions": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "pattern": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "size": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ]
+   },
+   "usage": {
+    "calls": 7,
+    "input_tokens": 7266,
+    "output_tokens": 1480,
+    "cost_usd": null
+   }
+  },
+  {
+   "image": "chips.jpg",
+   "expected": "snacks",
+   "got": "snacks",
+   "correct": true,
+   "status": "awaiting_review",
+   "error": null,
+   "title": "Crispy Potato Chips Sliced Potato Snack",
+   "ocr_text": "",
+   "attributes": {
+    "color": [
+     "yellow, beige",
+     0.9,
+     "prefill",
+     "image"
+    ],
+    "material": [
+     "potato",
+     0.8,
+     "prefill",
+     "image"
+    ]
+   },
+   "unsupported_claims": {},
+   "missing_required": [
+    "net_content"
+   ],
+   "all_attributes": {
+    "allergens": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "barcode": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "brand": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "color": [
+     "yellow, beige",
+     0.9,
+     "prefill",
+     "high confidence"
+    ],
+    "country_of_origin": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "dietary_type": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "expiry_date": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "ingredients": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "material": [
+     "potato",
+     0.8,
+     "prefill",
+     "high confidence"
+    ],
+    "model_number": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "net_content": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "net_weight": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "package_dimensions": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ]
+   },
+   "usage": {
+    "calls": 7,
+    "input_tokens": 7290,
+    "output_tokens": 1268,
+    "cost_usd": null
+   }
+  },
+  {
+   "image": "frying_pan.jpg",
+   "expected": "frying-pans",
+   "got": "frying-pans",
+   "correct": true,
+   "status": "awaiting_review",
+   "error": null,
+   "title": "Silver Metal Frying Pan Round Cookware",
+   "ocr_text": "",
+   "attributes": {
+    "color": [
+     "silver",
+     0.8,
+     "prefill",
+     "image"
+    ],
+    "material": [
+     "metal",
+     0.7,
+     "confirm",
+     "image"
+    ]
+   },
+   "unsupported_claims": {},
+   "missing_required": [],
+   "all_attributes": {
+    "barcode": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "brand": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "capacity": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "color": [
+     "silver",
+     0.8,
+     "prefill",
+     "high confidence"
+    ],
+    "country_of_origin": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "diameter": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "dishwasher_safe": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "material": [
+     "metal",
+     0.7,
+     "confirm",
+     "medium confidence"
+    ],
+    "model_number": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "net_weight": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "package_dimensions": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ]
+   },
+   "usage": {
+    "calls": 7,
+    "input_tokens": 7159,
+    "output_tokens": 1330,
+    "cost_usd": null
+   }
+  },
+  {
+   "image": "dumbbell.jpg",
+   "expected": "dumbbells",
+   "got": "dumbbells",
+   "correct": true,
+   "status": "awaiting_review",
+   "error": null,
+   "title": "Silver and Black Metal Fitness Dumbbells with Spinlock Collars",
+   "ocr_text": "",
+   "attributes": {
+    "color": [
+     "silver and black",
+     0.9,
+     "prefill",
+     "image"
+    ],
+    "material": [
+     "metal",
+     0.8,
+     "prefill",
+     "image"
+    ],
+    "sport": [
+     "fitness",
+     0.7,
+     "confirm",
+     "image"
+    ]
+   },
+   "unsupported_claims": {},
+   "missing_required": [],
+   "all_attributes": {
+    "barcode": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "brand": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "color": [
+     "silver and black",
+     0.9,
+     "prefill",
+     "high confidence"
+    ],
+    "country_of_origin": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "material": [
+     "metal",
+     0.8,
+     "prefill",
+     "high confidence"
+    ],
+    "model_number": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "net_weight": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "package_dimensions": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "size": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "sport": [
+     "fitness",
+     0.7,
+     "confirm",
+     "medium confidence"
+    ],
+    "weight_per_unit": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ]
+   },
+   "usage": {
+    "calls": 7,
+    "input_tokens": 7258,
+    "output_tokens": 1467,
+    "cost_usd": null
+   }
+  },
+  {
+   "image": "laptop.jpg",
+   "expected": "laptops",
+   "got": "laptops",
+   "correct": true,
+   "status": "awaiting_review",
+   "error": null,
+   "title": "DELL acer ThinkPad laptop",
+   "ocr_text": "DELL acer ThinkPad",
+   "attributes": {
+    "brand": [
+     "DELL",
+     0.8,
+     "prefill",
+     "ocr"
+    ],
+    "color": [
+     "black",
+     0.6,
+     "confirm",
+     "image"
+    ]
+   },
+   "unsupported_claims": {},
+   "missing_required": [],
+   "all_attributes": {
+    "barcode": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "brand": [
+     "DELL",
+     0.8,
+     "prefill",
+     "high confidence"
+    ],
+    "color": [
+     "black",
+     0.6,
+     "confirm",
+     "medium confidence"
+    ],
+    "country_of_origin": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "material": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "model_number": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "net_weight": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "package_dimensions": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "processor": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "ram_gb": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "storage_gb": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ]
+   },
+   "usage": {
+    "calls": 7,
+    "input_tokens": 7306,
+    "output_tokens": 1684,
+    "cost_usd": null
+   }
+  },
+  {
+   "image": "sneakers.jpg",
+   "expected": "sneakers",
+   "got": "sneakers",
+   "correct": true,
+   "status": "awaiting_review",
+   "error": null,
+   "title": "Jordan High-Top Sneakers Red Black White",
+   "ocr_text": "",
+   "attributes": {
+    "brand": [
+     "Jordan",
+     0.95,
+     "prefill",
+     "image"
+    ],
+    "color": [
+     "red, black, white",
+     0.99,
+     "prefill",
+     "image"
+    ]
+   },
+   "unsupported_claims": {},
+   "missing_required": [
+    "size",
+    "gender",
+    "shoe_size"
+   ],
+   "all_attributes": {
+    "barcode": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "brand": [
+     "Jordan",
+     0.95,
+     "prefill",
+     "high confidence"
+    ],
+    "color": [
+     "red, black, white",
+     0.99,
+     "prefill",
+     "high confidence"
+    ],
+    "country_of_origin": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "fabric": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "fit": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "gender": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "material": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "model_number": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "net_weight": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "package_dimensions": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "pattern": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "shoe_size": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "size": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ]
+   },
+   "usage": {
+    "calls": 7,
+    "input_tokens": 7477,
+    "output_tokens": 1730,
+    "cost_usd": null
+   }
+  },
+  {
+   "image": "backpack.jpg",
+   "expected": "travel-bags",
+   "got": "travel-bags",
+   "correct": true,
+   "status": "awaiting_review",
+   "error": null,
+   "title": "deuter TRANS ALPINE 30 Grey and Blue Backpack",
+   "ocr_text": "deuter TRANS ALPINE 30 deuter",
+   "attributes": {
+    "brand": [
+     "deuter",
+     0.99,
+     "prefill",
+     "ocr"
+    ],
+    "capacity_litres": [
+     30,
+     0.9,
+     "prefill",
+     "ocr"
+    ],
+    "color": [
+     "grey and blue",
+     0.85,
+     "prefill",
+     "image"
+    ],
+    "model_number": [
+     "TRANS ALPINE 30",
+     0.99,
+     "prefill",
+     "ocr"
+    ]
+   },
+   "unsupported_claims": {
+    "keywords": [
+     "30L"
+    ],
+    "search_terms": [
+     "30L"
+    ]
+   },
+   "missing_required": [],
+   "all_attributes": {
+    "barcode": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "brand": [
+     "deuter",
+     0.99,
+     "prefill",
+     "high confidence"
+    ],
+    "capacity_litres": [
+     30,
+     0.9,
+     "prefill",
+     "high confidence"
+    ],
+    "color": [
+     "grey and blue",
+     0.85,
+     "prefill",
+     "high confidence"
+    ],
+    "country_of_origin": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "material": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "model_number": [
+     "TRANS ALPINE 30",
+     0.99,
+     "prefill",
+     "high confidence"
+    ],
+    "net_weight": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ],
+    "package_dimensions": [
+     null,
+     0.0,
+     "empty",
+     "no evidence for a value"
+    ]
+   },
+   "usage": {
+    "calls": 7,
+    "input_tokens": 7342,
+    "output_tokens": 1555,
+    "cost_usd": null
+   }
+  }
+ ]
+}

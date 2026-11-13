@@ -38,7 +38,8 @@ function extractKeywords(str) {
 export default function VisualSearchModal({ isOpen, onClose }) {
   const navigate = useNavigate();
   const { products } = useProducts();
-  const { money } = useCurrency();
+  // Browsing prices, shown in the buyer's currency ("≈" when converted); checkout and orders keep the real currency
+  const { displayMoney: money } = useCurrency();
   const panelRef = useOverlay(isOpen, onClose);
 
   const [activeTab, setActiveTab] = useState("upload"); // 'upload' | 'camera'

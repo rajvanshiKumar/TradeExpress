@@ -1,0 +1,34 @@
+{
+ "headphones.jpg": {
+  "category_slug": "headphones",
+  "source": "wikipedia:Headphones"
+ },
+ "tshirt.jpg": {
+  "category_slug": "mens-tshirts",
+  "source": "wikipedia:T-shirt"
+ },
+ "chips.jpg": {
+  "category_slug": "snacks",
+  "source": "wikipedia:Potato_chip"
+ },
+ "frying_pan.jpg": {
+  "category_slug": "frying-pans",
+  "source": "wikipedia:Frying_pan"
+ },
+ "dumbbell.jpg": {
+  "category_slug": "dumbbells",
+  "source": "wikipedia:Dumbbell"
+ },
+ "laptop.jpg": {
+  "category_slug": "laptops",
+  "source": "wikipedia:Laptop"
+ },
+ "sneakers.jpg": {
+  "category_slug": "sneakers",
+  "source": "wikipedia:Sneakers"
+ },
+ "backpack.jpg": {
+  "category_slug": "travel-bags",
+  "source": "wikipedia:Backpack"
+ }
+}

@@ -44,6 +44,7 @@ export default function Messages() {
     reload,
     side,
     sendMessage,
+    startConversation,
     markRead,
     sending,
     typingUsers,
@@ -62,6 +63,11 @@ export default function Messages() {
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const activeId = searchParams.get('c') ?? '';
+  const rfqParam = searchParams.get('rfq');
+  const buyerParam = searchParams.get('buyer') || searchParams.get('buyerId');
+  const productParam = searchParams.get('product') || searchParams.get('productId');
+  const supplierParam = searchParams.get('supplier') || searchParams.get('supplierId');
+  const companyParam = searchParams.get('company') || searchParams.get('companyId');
   const active = conversations.find((item) => item.id === activeId) ?? null;
 
   // Real-time socket room management
@@ -76,6 +82,40 @@ export default function Messages() {
     };
   }, [activeId]);
 
+  // Deep-linking: auto-open or start thread when rfq, buyer, product, supplier or company query params exist
+  useEffect(() => {
+    if (activeId || loading) return;
+
+    if (rfqParam || buyerParam || productParam || supplierParam || companyParam) {
+      const found = conversations.find((c) => {
+        if (rfqParam && (c.rfqId === rfqParam || c.rfq?.rfqNumber === rfqParam)) return true;
+        if (buyerParam && c.buyerId === buyerParam) return true;
+        if (productParam && (c.productId === productParam || c.product?.slug === productParam)) return true;
+        if (supplierParam && (c.supplierId === supplierParam || c.supplier?.id === supplierParam)) return true;
+        if (companyParam && (c.companyId === companyParam || c.company?.id === companyParam)) return true;
+        return false;
+      });
+
+      if (found) {
+        open(found.id);
+      } else if (startConversation) {
+        startConversation({
+          buyerId: buyerParam || null,
+          supplierId: supplierParam || null,
+          companyId: companyParam || null,
+          rfqId: rfqParam || null,
+          productId: productParam || null,
+        })
+          .then((newId) => {
+            if (newId) open(newId);
+          })
+          .catch((err) => {
+            console.warn('Auto-init conversation notice:', err.message);
+          });
+      }
+    }
+  }, [activeId, rfqParam, buyerParam, productParam, supplierParam, companyParam, conversations, loading, startConversation]);
+
   // Describe the "other party" of a conversation based on role
   const describe = (conversation) => {
     const company = getCompany(conversation.companyId);
@@ -84,20 +124,22 @@ export default function Messages() {
       const buyerCompany = conversation.buyer?.company || '';
       return {
         name: buyerName,
+        personName: buyerName,
+        companyName: buyerCompany,
         company: null,
         subtitle: buyerCompany ? `${buyerCompany} · Buyer` : 'Buyer',
       };
     }
 
-    const supplierName =
-      company?.name ||
-      conversation.supplier?.company ||
-      conversation.supplier?.name ||
-      'Supplier';
+    const supplierCompanyName = company?.name || conversation.supplier?.company || '';
+    const supplierPersonName = conversation.supplier?.name || '';
+    const supplierName = supplierCompanyName || supplierPersonName || 'Supplier';
 
     let subtitle = '';
     if (isAdmin) {
       subtitle = `with ${conversation.buyerName || conversation.buyer?.name || 'Buyer'}`;
+    } else if (supplierPersonName && supplierCompanyName && supplierPersonName !== supplierCompanyName) {
+      subtitle = `${supplierPersonName} · ${conversation.supplier?.city || company?.city || 'Verified Supplier'}`;
     } else if (company?.city || company?.country) {
       subtitle = `${company.city ? `${company.city}, ` : ''}${company.country}`;
     } else if (conversation.supplier?.city) {
@@ -108,6 +150,8 @@ export default function Messages() {
 
     return {
       name: supplierName,
+      personName: supplierPersonName,
+      companyName: supplierCompanyName,
       company,
       subtitle,
     };
@@ -345,12 +389,20 @@ export default function Messages() {
               }`}
             >
               {!active ? (
-                <EmptyState
-                  icon={MessageSquare}
-                  className="my-auto"
-                  title="Select a conversation"
-                  text="Choose a conversation from the list to view its message history and reply."
-                />
+                rfqParam || buyerParam || productParam || supplierParam || companyParam ? (
+                  <div className="my-auto flex flex-col items-center justify-center p-8 text-center">
+                    <Loader2 className="size-8 animate-spin text-emerald-600 mb-3" aria-hidden="true" />
+                    <h3 className="text-base font-bold text-navy-900">Opening conversation...</h3>
+                    <p className="mt-1 text-xs text-muted">Connecting you with the supplier directly.</p>
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={MessageSquare}
+                    className="my-auto"
+                    title="Select a conversation"
+                    text="Choose a conversation from the list to view its message history and reply."
+                  />
+                )
               ) : (
                 <>
                   {/* Conversation Header */}
@@ -426,6 +478,16 @@ export default function Messages() {
                             {isAdmin ? (
                               <p className="mb-1 text-[0.6875rem] font-bold uppercase tracking-wider text-muted">
                                 {message.from === 'buyer' ? active.buyerName : 'Supplier'}
+                              </p>
+                            ) : !mine ? (
+                              <p className="mb-1 text-[0.6875rem] font-bold text-emerald-800 flex items-center justify-between gap-2 border-b border-navy-50 pb-0.5">
+                                <span className="truncate">
+                                  {message.senderCompany || (side === 'buyer' ? (other.companyName || other.name) : other.name)}
+                                  {message.senderName && message.senderName !== message.senderCompany ? ` (${message.senderName})` : ''}
+                                </span>
+                                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider shrink-0">
+                                  {message.from || (side === 'buyer' ? 'Supplier' : 'Buyer')}
+                                </span>
                               </p>
                             ) : null}
 

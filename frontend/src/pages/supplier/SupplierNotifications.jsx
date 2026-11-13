@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import {
   Bell,
   CheckCircle2,
@@ -13,49 +12,19 @@ import {
 import { SectionHeading } from '../../components/common/PageHeader';
 import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
-import { TableSkeleton } from '../../components/common/Skeleton';
 import useNotifications from '../../hooks/useNotifications';
-import apiClient from '../../services/apiClient';
 import { formatDate } from '../../utils/formatDate';
 
 export default function SupplierNotifications() {
-  const { showToast } = useNotifications();
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { notifications, markRead, markAllRead, showToast } = useNotifications();
 
-  useEffect(() => {
-    loadNotifications();
-  }, []);
-
-  async function loadNotifications() {
-    setLoading(true);
-    try {
-      const res = await apiClient.get('/notifications?limit=50');
-      setNotifications(res?.data?.notifications || res?.data || []);
-    } catch (err) {
-      showToast(err.message || 'Failed to load notifications', 'error');
-    } finally {
-      setLoading(false);
-    }
+  function handleMarkAllRead() {
+    markAllRead();
+    showToast('All notifications marked as read.', 'success');
   }
 
-  async function handleMarkAllRead() {
-    try {
-      await apiClient.patch('/notifications/read-all');
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      showToast('All notifications marked as read.', 'success');
-    } catch (err) {
-      showToast(err.message || 'Failed to mark read', 'error');
-    }
-  }
-
-  async function handleMarkRead(id) {
-    try {
-      await apiClient.patch(`/notifications/${id}/read`);
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
-    } catch {
-      // Ignore
-    }
+  function handleMarkRead(id) {
+    markRead(id);
   }
 
   return (
@@ -70,11 +39,7 @@ export default function SupplierNotifications() {
         }
       />
 
-      {loading ? (
-        <div className="ts-card p-6">
-          <TableSkeleton />
-        </div>
-      ) : notifications.length === 0 ? (
+      {!notifications || notifications.length === 0 ? (
         <div className="ts-card p-8">
           <EmptyState
             icon={Bell}
@@ -85,7 +50,7 @@ export default function SupplierNotifications() {
       ) : (
         <div className="ts-card overflow-hidden divide-y divide-slate-100">
           {notifications.map((n) => {
-            const isUnread = !n.isRead;
+            const isUnread = !n.read && !n.isRead;
             return (
               <div
                 key={n.id}
@@ -123,10 +88,10 @@ export default function SupplierNotifications() {
                     </h4>
                     <span className="text-[10px] text-muted shrink-0 flex items-center gap-1">
                       <Clock className="size-3" />
-                      {formatDate(n.createdAt)}
+                      {formatDate(n.createdAt || n.at)}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-600 mt-0.5">{n.message}</p>
+                  <p className="text-xs text-slate-600 mt-0.5">{n.message || n.body}</p>
                   {n.link && (
                     <Button
                       to={n.link}

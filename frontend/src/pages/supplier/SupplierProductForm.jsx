@@ -63,9 +63,12 @@ function Form({ company, product }) {
     images: initialImages,
     videoUrl: product?.videoUrl || product?.video || null,
   }));
-  const [customTiersEnabled, setCustomTiersEnabled] = useState(Boolean(product?.priceTiers && product.priceTiers.length));
-  const [customTier1, setCustomTier1] = useState(product?.priceTiers?.[1]?.price ? String(product.priceTiers[1].price) : '');
-  const [customTier2, setCustomTier2] = useState(product?.priceTiers?.[2]?.price ? String(product.priceTiers[2].price) : '');
+  const initialHasTiers = Boolean(product?.priceTiers && product.priceTiers.length > 1);
+  const [pricingModel, setPricingModel] = useState(initialHasTiers ? 'volume' : 'fixed');
+  const [tier2MinQty, setTier2MinQty] = useState(product?.priceTiers?.[1]?.minQty ? String(product.priceTiers[1].minQty) : '');
+  const [tier2Price, setTier2Price] = useState(product?.priceTiers?.[1]?.price ? String(product.priceTiers[1].price) : '');
+  const [tier3MinQty, setTier3MinQty] = useState(product?.priceTiers?.[2]?.minQty ? String(product.priceTiers[2].minQty) : '');
+  const [tier3Price, setTier3Price] = useState(product?.priceTiers?.[2]?.price ? String(product.priceTiers[2].price) : '');
 
   const [uploadingImage, setUploadingImage] = useState(false);
   const [errors, setErrors] = useState({});
@@ -74,19 +77,23 @@ function Form({ company, product }) {
   const category = categories.find((item) => item.slug === values.category);
 
   const previewTiers = useMemo(() => {
+    if (pricingModel !== 'volume') return [];
     const basePrice = Number(values.price);
     const moq = Math.round(Number(values.moq));
     if (basePrice <= 0 || moq < 1) return [];
 
-    if (customTiersEnabled && customTier1 && customTier2) {
-      return [
-        { minQty: moq, maxQty: moq * 5 - 1, price: basePrice },
-        { minQty: moq * 5, maxQty: moq * 20 - 1, price: Number(customTier1) },
-        { minQty: moq * 20, maxQty: null, price: Number(customTier2) },
-      ];
-    }
-    return buildPriceTiers(basePrice, moq);
-  }, [values.price, values.moq, customTiersEnabled, customTier1, customTier2]);
+    const t2Min = Number(tier2MinQty) > moq ? Number(tier2MinQty) : moq * 5;
+    const t2Price = Number(tier2Price) > 0 ? Number(tier2Price) : Math.round(basePrice * 0.92);
+
+    const t3Min = Number(tier3MinQty) > t2Min ? Number(tier3MinQty) : moq * 20;
+    const t3Price = Number(tier3Price) > 0 ? Number(tier3Price) : Math.round(basePrice * 0.85);
+
+    return [
+      { minQty: moq, maxQty: t2Min - 1, price: basePrice },
+      { minQty: t2Min, maxQty: t3Min - 1, price: t2Price },
+      { minQty: t3Min, maxQty: null, price: t3Price },
+    ];
+  }, [pricingModel, values.price, values.moq, tier2MinQty, tier2Price, tier3MinQty, tier3Price]);
 
   const set = (field) => (event) => {
     const value = event.target.value;
@@ -245,47 +252,117 @@ function Form({ company, product }) {
               <Select id="product-status" label="Visibility" options={[{ value: 'Active', label: 'Active: shown in catalogue' }, { value: 'Hidden', label: 'Hidden: not shown' }]} value={values.status} onChange={set('status')} />
             </div>
 
-            {/* Custom Tier Pricing Option */}
+            {/* Pricing Structure Option: Fixed vs Volume Pricing */}
             <div className="mt-5 border-t border-navy-900/[0.06] pt-4">
-              <div className="flex items-center justify-between">
-                <p className="ts-label !mb-0">Quantity price tiers</p>
+              <p className="ts-label !mb-2">Pricing Structure</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 <button
                   type="button"
-                  onClick={() => setCustomTiersEnabled(!customTiersEnabled)}
-                  className="text-xs font-semibold text-brand-600 hover:text-brand-700"
+                  onClick={() => setPricingModel('fixed')}
+                  className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+                    pricingModel === 'fixed'
+                      ? 'border-emerald-600 bg-emerald-50/70 text-emerald-950 ring-2 ring-emerald-500/20'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
                 >
-                  {customTiersEnabled ? 'Switch to auto tiers (8% & 15% off)' : 'Customize tier prices manually'}
+                  <span className="font-bold text-sm">Fixed Pricing (Single Price)</span>
+                  <span className="text-xs text-muted mt-0.5">Same unit price for all purchase quantities. No volume tiers.</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPricingModel('volume');
+                    if (!tier2Price && values.price) setTier2Price(String(Math.round(Number(values.price) * 0.92)));
+                    if (!tier3Price && values.price) setTier3Price(String(Math.round(Number(values.price) * 0.85)));
+                  }}
+                  className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+                    pricingModel === 'volume'
+                      ? 'border-emerald-600 bg-emerald-50/70 text-emerald-950 ring-2 ring-emerald-500/20'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <span className="font-bold text-sm">Volume Pricing (Quantity Discounts)</span>
+                  <span className="text-xs text-muted mt-0.5">Offer automatic bulk discounts for larger purchase quantities.</span>
                 </button>
               </div>
 
-              {customTiersEnabled ? (
-                <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 bg-ivory/60 p-4 rounded-xl border border-navy-900/[0.06]">
-                  <Input
-                    id="product-tier1"
-                    label={`Tier 2 Price (₹ at ${Number(values.moq || 1) * 5} units)`}
-                    type="number"
-                    placeholder="e.g. 920"
-                    value={customTier1}
-                    onChange={(e) => setCustomTier1(e.target.value)}
-                    hint="Default is ~8% discount."
-                  />
-                  <Input
-                    id="product-tier2"
-                    label={`Tier 3 Price (₹ at ${Number(values.moq || 1) * 20} units)`}
-                    type="number"
-                    placeholder="e.g. 850"
-                    value={customTier2}
-                    onChange={(e) => setCustomTier2(e.target.value)}
-                    hint="Default is ~15% discount."
-                  />
-                </div>
-              ) : null}
+              {pricingModel === 'volume' ? (
+                <div className="space-y-4 rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-4">
+                  <p className="text-xs text-emerald-900 font-medium">
+                    Configure quantity tiers below. TradeExpress automatically evaluates your tiers and activates the <strong>Volume Pricing</strong> badge only when genuine discounts are offered.
+                  </p>
 
-              {previewTiers.length ? (
-                <div className="mt-3">
-                  <PriceTiers product={{ priceTiers: previewTiers, unit: values.unit }} />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                      <p className="text-xs font-bold text-slate-500">Tier 1 (Base MOQ)</p>
+                      <p className="mt-1 text-sm font-bold text-navy-900">
+                        {values.moq || 1}+ {values.unit || 'units'}
+                      </p>
+                      <p className="mt-0.5 text-xs text-emerald-700 font-semibold">
+                        ₹{values.price || 0} / {values.unit || 'unit'}
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2">
+                      <p className="text-xs font-bold text-slate-500">Tier 2 (Mid Volume)</p>
+                      <Input
+                        id="product-tier2-minQty"
+                        label="Min Quantity"
+                        type="number"
+                        min={Number(values.moq || 1) + 1}
+                        placeholder={String(Number(values.moq || 1) * 5)}
+                        value={tier2MinQty}
+                        onChange={(e) => setTier2MinQty(e.target.value)}
+                      />
+                      <Input
+                        id="product-tier2-price"
+                        label={`Price (₹ / ${values.unit || 'unit'})`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="e.g. 920"
+                        value={tier2Price}
+                        onChange={(e) => setTier2Price(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2">
+                      <p className="text-xs font-bold text-slate-500">Tier 3 (Bulk Volume)</p>
+                      <Input
+                        id="product-tier3-minQty"
+                        label="Min Quantity"
+                        type="number"
+                        min={Number(values.moq || 1) * 6}
+                        placeholder={String(Number(values.moq || 1) * 20)}
+                        value={tier3MinQty}
+                        onChange={(e) => setTier3MinQty(e.target.value)}
+                      />
+                      <Input
+                        id="product-tier3-price"
+                        label={`Price (₹ / ${values.unit || 'unit'})`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="e.g. 850"
+                        value={tier3Price}
+                        onChange={(e) => setTier3Price(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {previewTiers.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs font-bold text-slate-700 mb-1.5">Live Buyer Pricing Preview:</p>
+                      <PriceTiers product={{ priceTiers: previewTiers, unit: values.unit }} />
+                    </div>
+                  )}
                 </div>
-              ) : null}
+              ) : (
+                <p className="text-xs text-muted">
+                  Fixed pricing is active. Products without quantity tiers display a clean single unit price with standard MOQ and stock.
+                </p>
+              )}
             </div>
           </fieldset>
 

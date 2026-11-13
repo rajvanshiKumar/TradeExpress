@@ -10,19 +10,21 @@ import Button from '../common/Button';
 import ErrorState from '../common/ErrorState';
 import useProducts from '../../hooks/useProducts';
 import useCatalogFilters from '../../hooks/useCatalogFilters';
+import useFitToViewport from '../../hooks/useFitToViewport';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import useDisclosure from '../../hooks/useDisclosure';
 import { filterProducts } from '../../services/productService';
 import { PAGE_SIZE } from '../../utils/constants';
+import useCurrency from '../../hooks/useCurrency';
 
 /** Builds the removable chips shown above the results. */
-function buildChips(filters, categories, lockedCategory) {
+function buildChips(filters, categories, lockedCategory, price) {
   const chips = [];
   const add = (label, patch) => chips.push({ label, patch });
   if (filters.q) add(`Search: “${filters.q}”`, { q: '' });
   if (filters.category && !lockedCategory) add(categories.find((item) => item.slug === filters.category)?.name ?? filters.category, { category: '', subcategory: '' });
   if (filters.subcategory) add(filters.subcategory, { subcategory: '' });
-  if (filters.minPrice !== '' || filters.maxPrice !== '') add(`Price: ${filters.minPrice !== '' ? `₹${filters.minPrice}` : 'any'} – ${filters.maxPrice !== '' ? `₹${filters.maxPrice}` : 'any'}`, { minPrice: '', maxPrice: '' });
+  if (filters.minPrice !== '' || filters.maxPrice !== '') add(`Price: ${filters.minPrice !== '' ? price(filters.minPrice) : 'any'} – ${filters.maxPrice !== '' ? price(filters.maxPrice) : 'any'}`, { minPrice: '', maxPrice: '' });
   if (filters.maxMoq) add(`MOQ up to ${filters.maxMoq}`, { maxMoq: '' });
   filters.countries.forEach((country) => add(country, { countries: filters.countries.filter((item) => item !== country) }));
   filters.businessTypes.forEach((type) => add(type, { businessTypes: filters.businessTypes.filter((item) => item !== type) }));
@@ -47,11 +49,24 @@ export default function CatalogView({ lockedCategory = '' }) {
   const [view, setView] = useLocalStorage('catalog-view', 'grid');
   const drawer = useDisclosure();
   const topRef = useRef(null);
+  const sidebarRef = useFitToViewport();
 
   const filters = useMemo(() => (lockedCategory ? { ...urlFilters, category: lockedCategory } : urlFilters), [urlFilters, lockedCategory]);
   const results = useMemo(() => filterProducts(products, companies, filters), [products, companies, filters]);
   const countries = useMemo(() => [...new Set(companies.filter((company) => company.status !== 'Suspended').map((company) => company.country))].filter(Boolean).sort(), [companies]);
-  const chips = buildChips(filters, categories, lockedCategory);
+  const { displayMoney } = useCurrency();
+  const chips = buildChips(filters, categories, lockedCategory, displayMoney);
+
+  // Real figures for the sidebar: live products per category, and the lowest and highest unit price
+  const liveProducts = useMemo(() => products.filter((product) => product.status === 'Active'), [products]);
+  const categoryCounts = useMemo(() => liveProducts.reduce((counts, product) => {
+    counts[product.category] = (counts[product.category] || 0) + 1;
+    return counts;
+  }, {}), [liveProducts]);
+  const priceBounds = useMemo(() => {
+    const prices = liveProducts.map((product) => Number(product.price)).filter((price) => Number.isFinite(price) && price >= 0);
+    return prices.length ? { min: Math.floor(Math.min(...prices)), max: Math.ceil(Math.max(...prices)) } : null;
+  }, [liveProducts]);
 
   const pageCount = Math.max(Math.ceil(results.length / PAGE_SIZE), 1);
   const page = Math.min(filters.page, pageCount);
@@ -62,25 +77,36 @@ export default function CatalogView({ lockedCategory = '' }) {
     if (!loading && filters.page > pageCount) setPage(pageCount);
   }, [loading, filters.page, pageCount, setPage]);
 
-  const changePage = (next) => {
-    setPage(next);
-    topRef.current?.scrollIntoView({ block: 'start' });
-  };
+  // A new category, subcategory, filter or page: the results fade in, and if the reader has scrolled past their top,
+  // the page glides back up to them
+  const resultsKey = JSON.stringify(filters);
+  const firstResults = useRef(true);
+  useEffect(() => {
+    if (firstResults.current) {
+      firstResults.current = false;
+      return;
+    }
+    const top = topRef.current;
+    if (top && top.getBoundingClientRect().top < 0) top.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [resultsKey]);
 
-  const filterPanel = (idPrefix) => (
-    <ProductFilters filters={filters} onChange={update} categories={categories} countries={countries} idPrefix={idPrefix} hideCategory={Boolean(lockedCategory)} />
+  const changePage = (next) => setPage(next);
+
+  const filterPanel = (idPrefix, extra = {}) => (
+    <ProductFilters
+      filters={filters} onChange={update} categories={categories} countries={countries} idPrefix={idPrefix} hideCategory={Boolean(lockedCategory)}
+      categoryCounts={categoryCounts} priceBounds={priceBounds} onReset={clear} {...extra}
+    />
   );
 
   if (error) return <div className="ts-card"><ErrorState text={error} onRetry={reload} /></div>;
 
   return (
-    <div ref={topRef} className="scroll-mt-40 lg:grid lg:grid-cols-[16.5rem_minmax(0,1fr)] lg:gap-7">
-      <aside aria-label="Filters" className="hidden lg:block">
-        <div className="ts-card sticky top-36 max-h-[calc(100dvh-10rem)] overflow-y-auto ts-slim-scrollbar px-5 py-1">
-          <div className="flex items-center justify-between border-b py-3.5">
-            <h2 className="text-base font-bold">Filters</h2>
-            {chips.length ? <button type="button" onClick={clear} className="text-[0.8125rem] font-semibold text-brand-600 hover:text-brand-700">Clear all</button> : null}
-          </div>
+    <div ref={topRef} className="scroll-mt-40 lg:grid lg:grid-cols-[18.75rem_minmax(0,1fr)] lg:gap-7">
+      {/* The column keeps a fixed minimum height, so the panel fitting itself to the screen never moves the page */}
+      <aside aria-label="Filters" className="hidden lg:block lg:min-h-[calc(100dvh-7.5rem)]">
+        {/* Always fits the visible screen: the header and the Reset / Apply bar stay in view while the options scroll */}
+        <div ref={sidebarRef} className="sticky top-24 flex h-[calc(100dvh-7.5rem)] max-h-[58rem] flex-col overflow-hidden rounded-xl border border-line bg-white shadow-[0_8px_24px_-16px_rgb(16_40_24/0.25)]">
           {filterPanel('filter')}
         </div>
       </aside>
@@ -123,24 +149,18 @@ export default function CatalogView({ lockedCategory = '' }) {
           </ul>
         ) : null}
 
-        <ProductGrid
-          products={visible} layout={view} loading={loading} skeletonCount={9} columns="grid grid-cols-1 gap-4 xs:grid-cols-2 sm:gap-6 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3"
-          emptyAction={chips.length ? <Button variant="navy" onClick={clear}>Clear all filters</Button> : <Button to="/products" variant="navy">Browse all products</Button>}
-        />
+        <div key={resultsKey} className="ts-results-enter">
+          <ProductGrid
+            products={visible} layout={view} loading={loading} skeletonCount={9} columns="grid grid-cols-1 gap-4 xs:grid-cols-2 sm:gap-6 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3"
+            emptyAction={chips.length ? <Button variant="navy" onClick={clear}>Clear all filters</Button> : <Button to="/products" variant="navy">Browse all products</Button>}
+          />
+        </div>
         <Pagination page={page} pageCount={pageCount} onChange={changePage} className="mt-8" />
         {!loading && results.length ? <p className="mt-6 text-center text-xs text-muted">Prices are per unit in INR, excluding shipping and taxes. Request a quote for custom quantities.</p> : null}
       </div>
 
-      <Drawer
-        open={drawer.open} onClose={drawer.onClose} title="Filters" side="right"
-        footer={(
-          <div className="flex gap-3">
-            <Button variant="outline" className="flex-1" onClick={clear} disabled={!chips.length}>Clear all</Button>
-            <Button className="flex-1" onClick={drawer.onClose}>Show {results.length} {results.length === 1 ? 'result' : 'results'}</Button>
-          </div>
-        )}
-      >
-        <div className="px-4">{filterPanel('mfilter')}</div>
+      <Drawer open={drawer.open} onClose={drawer.onClose} title={`Filters · ${results.length} ${results.length === 1 ? 'result' : 'results'}`} side="right">
+        {filterPanel('mfilter', { showHeader: false, onApply: drawer.onClose })}
       </Drawer>
     </div>
   );

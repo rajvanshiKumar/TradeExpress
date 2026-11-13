@@ -77,7 +77,7 @@ function assertEmailSent(result) {
   }
 }
 
-/** Finds the account that owns a mobile number, in any of its stored formats. */
+/** Finds the account that owns a mobile number or official phone, in any of its stored formats. */
 function findUserByMobile(normalized) {
   const phoneValues = [...new Set([
     normalized.formattedPhone,
@@ -87,7 +87,15 @@ function findUserByMobile(normalized) {
   ].filter(Boolean))];
   return prisma.user.findFirst({
     where: {
-      phone: { in: phoneValues },
+      OR: [
+        { phone: { in: phoneValues } },
+        ...(normalized.national ? [
+          { phone: { endsWith: normalized.national } },
+          { businessPhone: normalized.national },
+          { businessPhone: { endsWith: normalized.national } },
+        ] : []),
+        { businessPhone: { in: phoneValues } },
+      ],
     },
     select: { id: true, role: true, name: true, phone: true, company: true, passwordHash: true, googleId: true, isActive: true, status: true, statusReason: true },
   });

@@ -17,22 +17,9 @@ const translations = { en, hi, te, ta, kn, ml, bn, mr };
 export { LanguageContext };
 
 export function LanguageProvider({ children }) {
-  // 1. Language state with persistent hydration
-  const [language, setLanguageState] = useState(() => {
-    try {
-      const stored = localStorage.getItem('tradeexpress_language') || localStorage.getItem('tradesphere_language');
-      if (stored && translations[stored]) return stored;
-
-      const rawPrefs = localStorage.getItem(STORAGE_KEYS.preferences);
-      if (rawPrefs) {
-        const parsed = JSON.parse(rawPrefs);
-        if (parsed.language && translations[parsed.language]) return parsed.language;
-      }
-    } catch {
-      // Fallback to English
-    }
-    return 'en';
-  });
+  // 1. TradeExpress is always shown in English, whatever country or language was chosen before.
+  // Country selection only affects the delivery location and display currency.
+  const language = 'en';
 
   // 2. Country / Region state with persistent hydration
   const [country, setCountryState] = useState(() => {
@@ -60,21 +47,8 @@ export function LanguageProvider({ children }) {
     }
   }, [language]);
 
-  // Language setter
-  const setLanguage = useCallback((code) => {
-    if (!translations[code]) return;
-    setLanguageState(code);
-    try {
-      localStorage.setItem('tradeexpress_language', code);
-      localStorage.setItem('tradesphere_language', code);
-
-      const rawPrefs = localStorage.getItem(STORAGE_KEYS.preferences);
-      const parsed = rawPrefs ? JSON.parse(rawPrefs) : {};
-      localStorage.setItem(STORAGE_KEYS.preferences, JSON.stringify({ ...parsed, language: code }));
-    } catch {
-      // Ignore localStorage issues
-    }
-  }, []);
+  // Kept so existing callers keep working; the language never changes
+  const setLanguage = useCallback(() => {}, []);
 
   // Country setter
   const setCountry = useCallback((countryName) => {

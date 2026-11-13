@@ -40,7 +40,7 @@ export default function MainLayout() {
     <div className="flex min-h-dvh flex-col">
       <AnnouncementBar />
       <Header />
-      <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">
+      <main id="main" tabIndex={-1} className="flex-1 focus:outline-none relative z-20">
         {/* Re-keyed per page so each page fades in gently */}
         <div key={pathname} className="ts-page-enter"><Suspense fallback={<PageSkeleton />}><PageOutlet /></Suspense></div>
       </main>
