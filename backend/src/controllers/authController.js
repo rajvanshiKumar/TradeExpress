@@ -5,8 +5,8 @@ import * as addressService from '../services/addressService.js';
 
 export async function sendMobileOtp(req, res, next) {
   try {
-    const { phone, country } = req.body;
-    const result = await otpService.requestMobileOtp({ phone, country });
+    const { phone, country, purpose } = req.body;
+    const result = await otpService.requestMobileOtp({ phone, country, purpose });
     res.json(result);
   } catch (error) {
     next(error);
@@ -200,7 +200,9 @@ export async function registerSupplier(req, res, next) {
 
 export async function login(req, res, next) {
   try {
-    const { user, token } = await authService.loginUser(req.body);
+    // Only the sign-in fields are read: the public route can never switch on admin login from the request body
+    const { email, password, role, otp, country } = req.body || {};
+    const { user, token } = await authService.loginUser({ email, password, role, otp, country, isAdminLogin: false });
     res.json({
       success: true,
       message: 'Signed in successfully.',

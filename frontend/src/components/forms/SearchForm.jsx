@@ -4,7 +4,7 @@ import {
   Boxes,
   Briefcase,
   Building2,
-  Camera,
+  ImageUp,
   Check,
   ChevronDown,
   Layers,
@@ -465,15 +465,15 @@ export default function SearchForm({
         }`}
       />
 
-      {/* Visual Image/Camera Search Trigger */}
+      {/* Visual search by uploaded image */}
       <button
         type="button"
         onClick={() => setVisualSearchOpen(true)}
-        title="Search by image or camera"
-        aria-label="Search by image or camera"
+        title="Search by image"
+        aria-label="Search by image"
         className="inline-flex size-8 sm:size-9 shrink-0 self-center items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 mr-1 sm:mr-1.5"
       >
-        <Camera className="size-4 sm:size-4.5" />
+        <ImageUp className="size-4 sm:size-4.5" />
       </button>
 
       {/* Submit Search Button */}

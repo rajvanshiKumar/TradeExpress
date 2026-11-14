@@ -135,7 +135,8 @@ export async function listSuppliersKyc(req, res, next) {
 
 export async function reviewSupplierKyc(req, res, next) {
   try {
-    const { status, rejectionReason, notes } = req.body;
+    const status = req.body?.status || 'VERIFIED';
+    const { rejectionReason, notes } = req.body || {};
     const data = await superAdminService.reviewSupplierKyc({
       supplierId: req.params.id,
       status,
@@ -143,7 +144,7 @@ export async function reviewSupplierKyc(req, res, next) {
       notes,
       req,
     });
-    res.json({ success: true, message: `Supplier KYC status set to ${status}.`, data });
+    res.json({ success: true, message: `KYC / Verification status set to ${status}.`, data });
   } catch (err) {
     next(err);
   }

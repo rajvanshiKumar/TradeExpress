@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Check,
@@ -12,7 +12,6 @@ import {
   Receipt,
   Scale,
   Search,
-  ShieldAlert,
 } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import StatCard from '../../components/common/StatCard';
@@ -21,6 +20,7 @@ import { StatusBadge } from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import { TableSkeleton } from '../../components/common/Skeleton';
 import ProductGrid from '../../components/products/ProductGrid';
+import TaxInvoiceModal from '../../components/common/TaxInvoiceModal';
 import useAuth from '../../hooks/useAuth';
 import useOrders from '../../hooks/useOrders';
 import useInquiries from '../../hooks/useInquiries';
@@ -30,6 +30,7 @@ import useProducts from '../../hooks/useProducts';
 import useCurrency from '../../hooks/useCurrency';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { formatDate } from '../../utils/formatDate';
+import { consolidateConversations } from '../../utils/messageUtils';
 import paymentMethodService, { isUsableCard } from '../../services/paymentMethodService';
 
 /**
@@ -85,12 +86,14 @@ export default function BuyerDashboard() {
   const { inquiries, loading: inquiriesLoading } = useInquiries();
   const { conversations: myConversations, unreadCount: unreadMessages, loading: messagesLoading } = useMessages();
   const { count: savedCount } = useWishlist();
-  const { products, recentlyViewed, loading: productsLoading } = useProducts();
+  const { products, recentlyViewed, loading: productsLoading, getCompany } = useProducts();
   const { money } = useCurrency();
   useDocumentTitle('Buyer dashboard');
 
   // Saved-card status for the profile checklist; on failure the step simply stays incomplete
   const [cardState, setCardState] = useState({ loading: true, hasCard: false });
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState(null);
+
   useEffect(() => {
     let active = true;
     paymentMethodService.list()
@@ -104,15 +107,38 @@ export default function BuyerDashboard() {
   const openQuotes = myQuotes.filter((inquiry) => inquiry.status !== 'Closed');
   const viewed = recentlyViewed.map((id) => products.find((product) => product.id === id && product.status === 'Active')).filter(Boolean).slice(0, 12);
 
+  // Deduplicate conversations so each supplier appears only once
+  const uniqueConversations = useMemo(() => {
+    const consolidated = consolidateConversations(myConversations || [], 'buyer', getCompany);
+    const seen = new Set();
+    const result = [];
+    for (const c of consolidated) {
+      const suppKey = (
+        c.supplierId ||
+        c.supplier?.id ||
+        c.companyId ||
+        c.supplierName ||
+        c.supplier?.company ||
+        c.supplier?.name ||
+        c.id
+      ).toString().trim().toLowerCase();
+      if (!seen.has(suppKey)) {
+        seen.add(suppKey);
+        result.push(c);
+      }
+    }
+    return result;
+  }, [myConversations, getCompany]);
+
   return (
     <div className="space-y-6">
       <SectionHeading
         title={`Welcome back, ${user.name.split(' ')[0]}`}
-        description={`${user.company || 'Enterprise Procurement Account'} · Verified Buyer`}
+        description={`${user.company || 'Enterprise Procurement Account'} · ${user?.kycStatus === 'VERIFIED' ? 'Verified Buyer' : 'Verification Pending'}`}
       />
 
       {/* Quick Navigation Shortcuts */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <Link
           to="/products"
           className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
@@ -159,16 +185,6 @@ export default function BuyerDashboard() {
         </Link>
 
         <Link
-          to="/buyer/disputes"
-          className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
-        >
-          <div className="size-7 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center shrink-0">
-            <ShieldAlert className="size-3.5" />
-          </div>
-          <span className="truncate">Help & Disputes</span>
-        </Link>
-
-        <Link
           to="/buyer/addresses"
           className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
         >
@@ -198,7 +214,16 @@ export default function BuyerDashboard() {
         ) : (
           <div className="overflow-x-auto ts-slim-scrollbar scroll-smooth">
             <table className="ts-table">
-              <thead><tr><th scope="col">Order</th><th scope="col">Date</th><th scope="col">Items</th><th scope="col">Total</th><th scope="col">Status</th></tr></thead>
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Items</th>
+                  <th scope="col">Total</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" className="text-right">Invoice</th>
+                </tr>
+              </thead>
               <tbody>
                 {myOrders.slice(0, 5).map((order) => (
                   <tr key={order.id}>
@@ -207,12 +232,203 @@ export default function BuyerDashboard() {
                     <td className="max-w-56 truncate">{order.items.map((item) => item.name).join(', ')}</td>
                     <td className="whitespace-nowrap font-semibold">{money(order.totals.total)}</td>
                     <td><StatusBadge status={order.status} /></td>
+                    <td className="text-right whitespace-nowrap">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={FileText}
+                        onClick={() => setSelectedInvoiceOrder(order)}
+                        aria-label={`View tax invoice for order ${order.id}`}
+                      >
+                        Invoice
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+      </section>
+
+      {/* Messages & Invoices Hub */}
+      <section aria-labelledby="messages-and-invoices-title" className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 id="messages-and-invoices-title" className="text-base font-bold text-navy-950 flex items-center gap-2">
+              <MessageSquare className="size-5 text-emerald-700" />
+              Messages & Invoices
+            </h2>
+            <p className="text-xs text-muted">
+              Direct supplier communication, order inquiries, and B2B GST tax invoices
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button to="/messages" size="sm" variant="outline" icon={MessageSquare}>
+              Supplier Inbox
+            </Button>
+            <Button to="/buyer/payments" size="sm" variant="outline" icon={Receipt}>
+              All Invoices
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Supplier Messages */}
+          <div className="ts-card flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="size-4 text-emerald-700" />
+                <h3 className="text-sm font-bold text-navy-950">Supplier Messages</h3>
+                {unreadMessages > 0 && (
+                  <span className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[11px] font-bold">
+                    {unreadMessages} unread
+                  </span>
+                )}
+              </div>
+              <Link to="/messages" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
+                View all
+              </Link>
+            </div>
+            {messagesLoading ? (
+              <TableSkeleton rows={2} />
+            ) : uniqueConversations.length === 0 ? (
+              <EmptyState
+                icon={MessageSquare}
+                className="!py-8"
+                title="No supplier messages yet"
+                text="When suppliers message you regarding your inquiries or orders, their direct messages will appear here."
+                action={<Button to="/products" variant="navy" size="sm">Browse Products to Contact Suppliers</Button>}
+              />
+            ) : (
+              <ul className="divide-y flex-1">
+                {uniqueConversations.slice(0, 4).map((conv) => {
+                  const lastMsg = conv.messages?.[conv.messages.length - 1];
+                  const supplierName = conv.supplierName || conv.supplier?.company || conv.supplier?.name || 'Supplier';
+                  const unread = (conv.unread?.buyer ?? 0) > 0;
+                  const initials = (supplierName || 'S')
+                    .split(' ')
+                    .filter(Boolean)
+                    .map((w) => w[0])
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase();
+
+                  return (
+                    <li
+                      key={conv.id}
+                      className={`flex items-center justify-between gap-3 px-4 py-3 transition-colors ${
+                        unread ? 'bg-emerald-50/40' : 'hover:bg-slate-50/70'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-800 font-display text-xs font-extrabold text-brand-300 shadow-2xs">
+                          {initials}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm truncate ${unread ? 'font-bold text-navy-950' : 'font-semibold text-slate-800'}`}>
+                              {supplierName}
+                            </span>
+                            {unread && (
+                              <span className="inline-flex items-center rounded-full bg-emerald-600 px-1.5 py-0.2 text-[10px] font-bold text-white shrink-0">
+                                New
+                              </span>
+                            )}
+                          </div>
+                          <p className="truncate text-xs text-muted mt-0.5">
+                            <span className="font-medium text-slate-700">{conv.subject}:</span>{' '}
+                            {lastMsg ? (lastMsg.text || lastMsg.content) : 'No messages'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[11px] text-muted hidden sm:inline">
+                          {formatDate(conv.lastMessageAt || conv.createdAt)}
+                        </span>
+                        <Button to={`/messages?c=${conv.id}`} size="sm" variant={unread ? 'navy' : 'outline'}>
+                          Reply
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {/* Tax Invoices & Billing */}
+          <div className="ts-card flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <Receipt className="size-4 text-emerald-700" />
+                <h3 className="text-sm font-bold text-navy-950">Tax Invoices & Billing</h3>
+                {myOrders.length > 0 && (
+                  <span className="rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-[11px] font-bold">
+                    {myOrders.length} Invoices
+                  </span>
+                )}
+              </div>
+              <Link to="/buyer/payments" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
+                View all
+              </Link>
+            </div>
+            {ordersLoading ? (
+              <TableSkeleton rows={2} />
+            ) : myOrders.length === 0 ? (
+              <EmptyState
+                icon={Receipt}
+                className="!py-8"
+                title="No invoices generated yet"
+                text="Official GST tax invoices will be generated automatically once orders are placed."
+                action={<Button to="/products" variant="navy" size="sm">Browse Products</Button>}
+              />
+            ) : (
+              <ul className="divide-y flex-1">
+                {myOrders.slice(0, 4).map((order) => {
+                  const invNumber = order.supplierInvoiceNumber || `INV-${order.id.slice(-8).toUpperCase()}`;
+                  return (
+                    <li
+                      key={order.id}
+                      className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50/70 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-800 border border-amber-200/80 shadow-2xs">
+                          <Receipt className="size-4.5" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-navy-900 truncate">
+                              {invNumber}
+                            </span>
+                            <StatusBadge status={order.status} />
+                          </div>
+                          <p className="text-xs text-muted truncate mt-0.5">
+                            Order <span className="font-semibold text-slate-700">#{order.orderNumber || order.id}</span> · {formatDate(order.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span className="font-mono text-xs font-bold text-emerald-800">
+                          {money(order.totals.total)}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          icon={FileText}
+                          onClick={() => setSelectedInvoiceOrder(order)}
+                          aria-label={`View tax invoice ${invNumber}`}
+                        >
+                          Invoice
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
       </section>
 
       <section aria-labelledby="recent-quotes-title" className="ts-card overflow-hidden">
@@ -240,70 +456,18 @@ export default function BuyerDashboard() {
         )}
       </section>
 
-      <section aria-labelledby="recent-messages-title" className="ts-card overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-5 py-4">
-          <div className="flex items-center gap-2">
-            <h2 id="recent-messages-title" className="text-base font-bold">Supplier Messages & Inbox</h2>
-            {unreadMessages > 0 && (
-              <span className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-bold">
-                {unreadMessages} unread
-              </span>
-            )}
-          </div>
-          <Link to="/messages" className="text-sm font-semibold text-brand-600 hover:text-brand-700">View all</Link>
-        </div>
-        {messagesLoading ? (
-          <TableSkeleton rows={2} />
-        ) : myConversations.length === 0 ? (
-          <EmptyState
-            icon={MessageSquare}
-            className="!py-8"
-            title="No supplier messages yet"
-            text="When suppliers message you regarding your inquiries or orders, their direct messages will appear here."
-            action={<Button to="/products" variant="navy" size="sm">Browse Products to Contact Suppliers</Button>}
-          />
-        ) : (
-          <ul className="divide-y border-t">
-            {myConversations.slice(0, 3).map((conv) => {
-              const lastMsg = conv.messages?.[conv.messages.length - 1];
-              const supplierName = conv.supplierName || conv.supplier?.company || conv.supplier?.name || 'Supplier';
-              const unread = (conv.unread?.buyer ?? 0) > 0;
-              return (
-                <li key={conv.id} className={`flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 transition-colors ${unread ? 'bg-emerald-50/40' : 'hover:bg-slate-50/50'}`}>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm ${unread ? 'font-bold text-navy-950' : 'font-semibold text-slate-900'}`}>
-                        {supplierName}
-                      </span>
-                      {unread && (
-                        <span className="inline-flex items-center rounded-full bg-emerald-600 px-1.5 py-0.2 text-[10px] font-bold text-white">
-                          New
-                        </span>
-                      )}
-                    </div>
-                    <p className="truncate text-xs text-muted mt-0.5">
-                      <span className="font-medium text-slate-700">{conv.subject}:</span> {lastMsg ? (lastMsg.text || lastMsg.content) : 'No messages'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    <span className="text-xs text-muted">
-                      {formatDate(conv.lastMessageAt || conv.createdAt)}
-                    </span>
-                    <Button to={`/messages?c=${conv.id}`} size="sm" variant={unread ? 'navy' : 'outline'}>
-                      Reply
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
       <section aria-labelledby="recently-viewed-title">
         <h2 id="recently-viewed-title" className="mb-4 text-base font-bold">Recently viewed</h2>
         <ProductGrid products={viewed} loading={productsLoading} skeletonCount={4} columns="grid grid-cols-1 gap-4 xs:grid-cols-2 sm:gap-6 xl:grid-cols-4" emptyTitle="Nothing viewed yet" emptyText="Products you open will be listed here." emptyAction={<Button to="/products" variant="navy" size="sm">Browse products</Button>} />
       </section>
+
+      {/* GST Tax Invoice Modal */}
+      <TaxInvoiceModal
+        order={selectedInvoiceOrder}
+        isOpen={Boolean(selectedInvoiceOrder)}
+        onClose={() => setSelectedInvoiceOrder(null)}
+        defaultRole="buyer"
+      />
     </div>
   );
 }

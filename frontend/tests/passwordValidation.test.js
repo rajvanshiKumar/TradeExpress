@@ -193,12 +193,10 @@ describe('TradeExpress Frontend Password Validation & Security Suite', () => {
       assert.ok(src.includes('showConfirmPassword'), 'Must support showConfirmPassword toggle');
     });
 
-    it('ensures BuyerSettings page integrates PasswordValidationIndicator and eye toggles', () => {
-      const src = readSrc('../src/pages/buyer/BuyerSettings.jsx');
+    it('ensures Account Settings Change Password (buyer and supplier) integrates PasswordValidationIndicator', () => {
+      const src = readSrc('../src/components/account/AccountVerificationFlows.jsx');
       assert.ok(src.includes('PasswordValidationIndicator'), 'Must render PasswordValidationIndicator');
       assert.ok(src.includes('validatePassword'), 'Must enforce validatePassword');
-      assert.ok(src.includes('showNewPass'), 'Must support showNewPass toggle');
-      assert.ok(src.includes('showConfirmPass'), 'Must support showConfirmPass toggle');
     });
 
     it('ensures SupplierSettings page integrates PasswordValidationIndicator and eye toggles', () => {

@@ -203,11 +203,66 @@ const regionNames = (() => {
   }
 })();
 
+export const COMMON_COUNTRY_ALIASES = {
+  USA: 'United States',
+  US: 'United States',
+  UK: 'United Kingdom',
+  GB: 'United Kingdom',
+  UAE: 'United Arab Emirates',
+  AE: 'United Arab Emirates',
+  IN: 'India',
+  BN: 'Brunei',
+  BD: 'Bangladesh',
+  CN: 'China',
+  KR: 'South Korea',
+  VN: 'Vietnam',
+  TR: 'Türkiye',
+  IT: 'Italy',
+  DE: 'Germany',
+  FR: 'France',
+  ES: 'Spain',
+  NL: 'Netherlands',
+  CA: 'Canada',
+  AU: 'Australia',
+  SG: 'Singapore',
+  SA: 'Saudi Arabia',
+  JP: 'Japan',
+  BR: 'Brazil',
+  MX: 'Mexico',
+  ZA: 'South Africa',
+  NG: 'Nigeria',
+  KE: 'Kenya',
+  ID: 'Indonesia',
+  MY: 'Malaysia',
+  TH: 'Thailand',
+  PH: 'Philippines',
+  PK: 'Pakistan',
+  LK: 'Sri Lanka',
+  NP: 'Nepal',
+};
+
+/**
+ * Resolves 2-letter ISO codes (e.g. 'IN', 'BN', 'BD', 'US'), short abbreviations ('USA', 'UK'),
+ * or full country names into the full English country name.
+ */
+export function normalizeCountryName(codeOrName) {
+  if (!codeOrName || typeof codeOrName !== 'string') return '';
+  const trimmed = codeOrName.trim();
+  if (!trimmed) return '';
+  const upper = trimmed.toUpperCase();
+  if (COMMON_COUNTRY_ALIASES[upper]) return COMMON_COUNTRY_ALIASES[upper];
+  if (/^[A-Za-z]{2}$/.test(trimmed)) {
+    try {
+      const resolved = regionNames?.of(upper);
+      if (resolved && resolved !== upper) return resolved;
+    } catch {
+      /* ignore */
+    }
+  }
+  return trimmed;
+}
+
 /** The English name of a country or territory. */
 export function countryName(code) {
-  try {
-    return regionNames?.of(code) || code;
-  } catch {
-    return code;
-  }
+  return normalizeCountryName(code) || code;
 }

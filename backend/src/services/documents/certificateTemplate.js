@@ -55,6 +55,50 @@ const WORDING = {
   },
 };
 
+// The same certificate for buyers (data.audience === 'buyer'): only the role wording differs
+const BUYER_WORDING = {
+  VERIFIED: {
+    lines: [
+      [['is registered as a buyer on ', 0], ['TradeExpress,', 1], [' India’s Largest Online B2B Marketplace,', 0]],
+      [['and is authorized to source, request quotations and purchase products on the platform,', 0]],
+      [['subject to the applicable terms and conditions.', 0]],
+    ],
+    caption: WORDING.VERIFIED.caption,
+  },
+  PENDING: {
+    lines: [
+      [['has applied for buyer registration on ', 0], ['TradeExpress,', 1], [' India’s Largest Online B2B Marketplace.', 0]],
+      WORDING.PENDING.lines[1],
+      WORDING.PENDING.lines[2],
+    ],
+    caption: WORDING.PENDING.caption,
+  },
+  REJECTED: {
+    lines: [
+      [['applied for buyer registration on ', 0], ['TradeExpress,', 1], [' India’s Largest Online B2B Marketplace.', 0]],
+      WORDING.REJECTED.lines[1],
+      WORDING.REJECTED.lines[2],
+    ],
+    caption: WORDING.REJECTED.caption,
+  },
+  SUSPENDED: {
+    lines: [
+      [['holds a buyer registration on ', 0], ['TradeExpress,', 1], [' India’s Largest Online B2B Marketplace,', 0]],
+      WORDING.SUSPENDED.lines[1],
+      WORDING.SUSPENDED.lines[2],
+    ],
+    caption: WORDING.SUSPENDED.caption,
+  },
+  EXPIRED: {
+    lines: [
+      [['was registered as a buyer on ', 0], ['TradeExpress,', 1], [' India’s Largest Online B2B Marketplace.', 0]],
+      WORDING.EXPIRED.lines[1],
+      WORDING.EXPIRED.lines[2],
+    ],
+    caption: WORDING.EXPIRED.caption,
+  },
+};
+
 const defs = () => `<defs>
   <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0a1a38"/><stop offset="1" stop-color="#183463"/></linearGradient>
   <linearGradient id="ribbon" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#a97b1c"/><stop offset=".45" stop-color="#f6e2a6"/><stop offset="1" stop-color="#b98a24"/></linearGradient>
@@ -182,7 +226,9 @@ function statusPill(x, y, style) {
 
 export function certificateSvg(data, { preview = false } = {}) {
   const style = statusStyle(data.status);
-  const wording = WORDING[data.status] || WORDING.PENDING;
+  const isBuyer = data.audience === 'buyer';
+  const wordingSet = isBuyer ? BUYER_WORDING : WORDING;
+  const wording = wordingSet[data.status] || wordingSet.PENDING;
   const nameSize = fitSize(String(data.businessName || '').toUpperCase(), 'Cond700', 50, 860, 26);
   const addressLines = wrapText(data.businessAddress, 'Cond400', 22, 530, 2);
   const ownerSize = fitSize(data.ownerName, 'Cond700', 25, 530, 16);
@@ -192,7 +238,11 @@ export function certificateSvg(data, { preview = false } = {}) {
 
   const watermark = data.status === 'VERIFIED'
     ? ''
-    : `<text x="745" y="710" text-anchor="middle" font-family="Cond800" font-size="170" fill="${style.solid}" opacity=".085" transform="rotate(-24 745 660)">${escapeXml(style.label)}</text>`;
+    : `<g transform="rotate(-24 745 610)">
+         <rect x="245" y="520" width="1000" height="170" rx="20" fill="${style.solid}" opacity=".08"/>
+         <text x="745" y="640" text-anchor="middle" font-family="Cond800" font-size="160" font-weight="900" fill="${style.solid}" opacity=".22" letter-spacing="14">${escapeXml(style.label)}</text>
+         <text x="745" y="675" text-anchor="middle" font-family="Cond700" font-size="28" font-weight="700" fill="${style.solid}" opacity=".30" letter-spacing="6">NOT VERIFIED • REVIEW PENDING</text>
+       </g>`;
 
   const signature = data.signatory?.signatureDataUrl
     ? `<image x="925" y="848" width="220" height="76" preserveAspectRatio="xMidYMax meet" href="${data.signatory.signatureDataUrl}"/>`
@@ -220,14 +270,14 @@ export function certificateSvg(data, { preview = false } = {}) {
   ${divider(745, 205, 430, true)}
 
   ${centeredRuns(745, 288, [
-    { value: 'SELLER REGISTRATION ', font: 'Cond800', fill: NAVY },
+    { value: isBuyer ? 'BUYER REGISTRATION ' : 'SELLER REGISTRATION ', font: 'Cond800', fill: NAVY },
     { value: 'CERTIFICATE', font: 'Cond800', fill: GOLD },
   ], 72)}
 
   ${divider(745, 317, 370, false)}
 
   ${idBox(62, 322, 320, 'Certificate No.', data.certificateNumber, 'file')}
-  ${idBox(1153, 322, 294, 'Seller ID', data.supplierId, 'user')}
+  ${idBox(1153, 322, 294, isBuyer ? 'Buyer ID' : 'Seller ID', data.supplierId, 'user')}
 
   ${text(745, 372, 'This is to certify that', { font: 'Cond400', size: 25, fill: INK, anchor: 'middle' })}
   ${text(745, 437, String(data.businessName || '').toUpperCase(), { font: 'Cond700', size: nameSize, fill: NAVY, anchor: 'middle' })}

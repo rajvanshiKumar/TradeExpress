@@ -36,6 +36,8 @@ router.patch('/users/:id/status', controller.updateUserStatus);
 router.post('/users/:id/reset-password', controller.sendPasswordResetLink);
 router.get('/users/:id/deletion-check', controller.getUserDeletionCheck);
 router.post('/users/:id/delete', controller.deleteUserAccount);
+router.post('/users/:id/kyc/review', controller.reviewSupplierKyc);
+router.post('/users/:id/verify', controller.reviewSupplierKyc);
 
 // Suppliers & KYC
 router.get('/suppliers/kyc', controller.listSuppliersKyc);

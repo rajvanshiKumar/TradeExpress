@@ -47,14 +47,30 @@ export default function AccountSettingsPage() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, logout, updateProfile } = useAuth();
-  const role = user?.role;
+  const pathRole = pathname.startsWith('/buyer')
+    ? 'buyer'
+    : pathname.startsWith('/supplier')
+    ? 'supplier'
+    : pathname.startsWith('/super-admin')
+    ? 'super_admin'
+    : null;
+  const role = user?.role || pathRole;
   const basePath = `/${pathname.split('/')[1]}/account-settings`;
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
 
-  const visibleCards = ACCOUNT_CARDS.map((card) => ({ ...card, rows: card.rows.filter((row) => !row.roles || row.roles.includes(role)) }));
+  const isBuyerDashboard = pathRole === 'buyer' || role === 'buyer';
+  const BUYER_EXCLUDED_SECTIONS = ['privacy', 'delete', 'sessions', 'two-factor'];
+
+  const visibleCards = ACCOUNT_CARDS.map((card) => ({
+    ...card,
+    rows: card.rows.filter((row) => {
+      if (isBuyerDashboard && BUYER_EXCLUDED_SECTIONS.includes(row.id)) return false;
+      return !row.roles || row.roles.includes(role);
+    }),
+  }));
   const sectionRow = visibleCards.flatMap((card) => card.rows).find((row) => row.id === section);
   const SectionComponent = sectionRow?.available ? SECTION_COMPONENTS[section] : null;
   useDocumentTitle(section && ACCOUNT_SECTION_TITLES[section] ? `${ACCOUNT_SECTION_TITLES[section]} | Account Settings` : 'Account Settings | TradeExpress');

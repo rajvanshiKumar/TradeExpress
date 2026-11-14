@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Camera,
+  ImageUp,
   Upload,
   RefreshCw,
   Sparkles,
@@ -10,210 +10,97 @@ import {
   ArrowRight,
   AlertCircle,
   CheckCircle2,
-  Video,
   SearchX,
+  ScanSearch,
 } from "lucide-react";
-import useProducts from "../../hooks/useProducts";
 import useCurrency from "../../hooks/useCurrency";
-import seedProducts from "../../data/products";
 import useOverlay from "./useOverlay";
 import Image from "./Image";
-import Button from "./Button";
+import { searchProductsByImage } from "../../services/visualSearchApi";
 
-const STOP_WORDS = new Set([
-  "the", "and", "with", "for", "image", "photo", "img", "pic", "picture", "screenshot",
-  "camera", "capture", "dsc", "px", "jpg", "jpeg", "png", "webp", "gif", "svg", "untitled",
-  "file", "upload", "new", "item", "sample", "test", "downloads", "dcim"
-]);
+const SAMPLE_IMAGES = [
+  { label: "🎧 Headphones", file: "sample-headphones.jpg", photo: "photo-1505740420928-5e560c06d30e" },
+  { label: "👕 Cotton T-Shirt", file: "sample-tshirt.jpg", photo: "photo-1620799139652-715e4d5b232d" },
+  { label: "🏺 Ceramic Vase", file: "sample-vase.jpg", photo: "photo-1612196808214-b8e1d6145a8c" },
+  { label: "🛠️ Cordless Drill", file: "sample-drill.jpg", photo: "photo-1562237553-36ad661d6f2c" },
+  { label: "🧴 Brightening Serum", file: "sample-serum.jpg", photo: "photo-1723951174326-2a97221d3b7f" },
+  { label: "📦 Shipping Box", file: "sample-box.jpg", photo: "photo-1513672494107-cd9d848a383e" },
+  { label: "🚫 Non-Matching Image", file: "sample-landscape.jpg", photo: "photo-1506744038136-46273834b3fb" },
+];
 
-function extractKeywords(str) {
-  if (!str) return [];
-  return str
-    .toLowerCase()
-    .replace(/[-_./\\+()[\]{}0-9]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
-}
+const IDLE = { status: "idle", result: null, error: null };
 
 export default function VisualSearchModal({ isOpen, onClose }) {
   const navigate = useNavigate();
-  const { products } = useProducts();
   // Browsing prices, shown in the buyer's currency ("≈" when converted); checkout and orders keep the real currency
   const { displayMoney: money } = useCurrency();
   const panelRef = useOverlay(isOpen, onClose);
 
-  const [activeTab, setActiveTab] = useState("upload"); // 'upload' | 'camera'
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [imageName, setImageName] = useState("");
-  const [analyzing, setAnalyzing] = useState(false);
-  const [matchedProducts, setMatchedProducts] = useState([]);
-  const [cameraError, setCameraError] = useState("");
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraCategory, setCameraCategory] = useState("all");
-
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
+  const [preview, setPreview] = useState(null); // { url, name }
+  const [search, setSearch] = useState(IDLE); // status: idle | searching | done | error
   const fileInputRef = useRef(null);
+  const requestRef = useRef(null); // AbortController of the search in progress
+  const lastFileRef = useRef(null); // for "Try again" after a temporary failure
 
-  // Stop camera when modal closes or switching tabs
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    setCameraActive(false);
-    setCameraError("");
+  const cancelSearch = () => {
+    requestRef.current?.abort();
+    requestRef.current = null;
   };
 
+  const reset = () => {
+    cancelSearch();
+    lastFileRef.current = null;
+    setPreview((current) => {
+      if (current?.url?.startsWith("blob:")) URL.revokeObjectURL(current.url);
+      return null;
+    });
+    setSearch(IDLE);
+  };
+
+  // Start fresh each time the search is closed; never leave a request running
   useEffect(() => {
-    if (!isOpen) {
-      stopCamera();
-      setSelectedImage(null);
-      setMatchedProducts([]);
-      setAnalyzing(false);
-    }
+    if (!isOpen) reset();
   }, [isOpen]);
+  useEffect(() => () => cancelSearch(), []);
 
-  useEffect(() => {
-    if (activeTab === "camera" && isOpen) {
-      startCamera();
-    } else {
-      stopCamera();
-    }
-    return () => stopCamera();
-  }, [activeTab, isOpen]);
-
-  // Request browser camera stream
-  const startCamera = async () => {
-    setCameraError("");
-    setCameraActive(false);
+  const runSearch = async (file, name) => {
+    cancelSearch();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    lastFileRef.current = { file, name };
+    setPreview((current) => {
+      if (current?.url?.startsWith("blob:")) URL.revokeObjectURL(current.url);
+      return { url: URL.createObjectURL(file), name };
+    });
+    setSearch({ status: "searching", result: null, error: null });
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Camera access is not supported by your browser.");
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
-        setCameraActive(true);
-      }
-    } catch (err) {
-      console.warn("Camera access error:", err);
-      setCameraError(
-        err.name === "NotAllowedError" || err.name === "PermissionDeniedError"
-          ? "Camera permission was denied. Please allow camera permissions in your browser or use file upload."
-          : "Unable to access camera device. Please use file upload instead."
-      );
+      const result = await searchProductsByImage(file, { signal: controller.signal });
+      if (requestRef.current !== controller) return;
+      setSearch({ status: "done", result, error: null });
+    } catch (error) {
+      if (requestRef.current !== controller) return;
+      setSearch({ status: "error", result: null, error });
+    } finally {
+      if (requestRef.current === controller) requestRef.current = null;
     }
   };
 
-  // Capture frame from active video stream
-  const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const context = canvas.getContext("2d");
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-    stopCamera();
-
-    const label =
-      cameraCategory && cameraCategory !== "all"
-        ? `Camera Capture - ${cameraCategory}`
-        : "Camera Capture";
-    processImageMatch(dataUrl, label);
-  };
-
-  // Handle uploaded file
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    setImageName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      processImageMatch(event.target.result, file.name);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = ""; // Reset so same file re-selection triggers instantly
+    e.target.value = ""; // Reset so selecting the same file again starts a new search
+    if (file) runSearch(file, file.name);
   };
 
-  // Watchdog timer: Guarantee analyzing state never gets stuck rotating
-  useEffect(() => {
-    if (analyzing) {
-      const timer = setTimeout(() => {
-        setAnalyzing(false);
-      }, 350);
-      return () => clearTimeout(timer);
+  const handleSample = async (sample) => {
+    try {
+      const response = await fetch(`https://images.unsplash.com/${sample.photo}?auto=format&fit=crop&w=800&q=80`);
+      if (!response.ok) throw new Error("Sample image unavailable");
+      const blob = await response.blob();
+      runSearch(new File([blob], sample.file, { type: blob.type || "image/jpeg" }), sample.file);
+    } catch {
+      setPreview(null);
+      setSearch({ status: "error", result: null, error: { code: "SAMPLE_UNAVAILABLE", message: "The sample image could not be loaded. Please upload your own photo." } });
     }
-  }, [analyzing]);
-
-  // Intelligent matching against catalog products
-  const processImageMatch = (dataUrl, name) => {
-    setSelectedImage(dataUrl);
-    setImageName(name);
-    setAnalyzing(true);
-
-    setTimeout(() => {
-      try {
-        const rawList = Array.isArray(products) && products.length > 0 ? products : seedProducts;
-        const activeProducts = rawList.filter((p) => p && (p.status === "Active" || !p.status));
-        const keywords = extractKeywords(name);
-
-        let matches = [];
-
-        if (keywords.length > 0) {
-          const scored = activeProducts.map((p) => {
-            let score = 0;
-            const pName = String(p.name || "").toLowerCase();
-            const pCat = String(p.category || p.categorySlug || "").toLowerCase();
-            const pSub = String(p.subcategory || "").toLowerCase();
-            const pSum = String(p.summary || p.description || "").toLowerCase();
-            const pSlug = String(p.slug || p.id || "").toLowerCase();
-
-            for (const kw of keywords) {
-              if (pName.includes(kw)) score += 12;
-              if (pSub.includes(kw)) score += 8;
-              if (pCat.includes(kw)) score += 5;
-              if (pSlug.includes(kw)) score += 4;
-              if (pSum.includes(kw)) score += 2;
-            }
-
-            return { product: p, score };
-          });
-
-          matches = scored
-            .filter((item) => item.score > 0)
-            .sort((a, b) => b.score - a.score)
-            .map((item) => item.product);
-        } else if (cameraCategory && cameraCategory !== "all") {
-          matches = activeProducts.filter(
-            (p) =>
-              String(p.category || p.categorySlug || "").toLowerCase() ===
-              cameraCategory.toLowerCase()
-          );
-        }
-
-        // Show ONLY truly matching products. No artificial fallback products!
-        setMatchedProducts(matches.slice(0, 8));
-      } catch (err) {
-        console.error("Visual search processing error:", err);
-        setMatchedProducts([]);
-      } finally {
-        setAnalyzing(false);
-      }
-    }, 50);
   };
 
   const handleSelectProduct = (product) => {
@@ -222,6 +109,13 @@ export default function VisualSearchModal({ isOpen, onClose }) {
   };
 
   if (!isOpen || typeof document === "undefined") return null;
+
+  const { status, result, error } = search;
+  const products = result?.products || [];
+  const recognized = result?.recognized;
+  const categoryOnly = result?.matchType === "category";
+  const unavailable = error?.code === "VISUAL_SEARCH_UNAVAILABLE";
+  const canRetry = status === "error" && !unavailable && error?.code !== "INVALID_IMAGE" && lastFileRef.current;
 
   return createPortal(
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5">
@@ -245,14 +139,14 @@ export default function VisualSearchModal({ isOpen, onClose }) {
         <div className="flex items-center justify-between border-b border-navy-900/[0.08] bg-ivory px-5 py-4 sm:px-6">
           <div className="flex items-center gap-2.5">
             <span className="flex size-9 items-center justify-center rounded-xl bg-navy-900 text-brand-400">
-              <Camera className="size-5" />
+              <ImageUp className="size-5" />
             </span>
             <div>
               <h2 className="text-base font-bold text-navy-900 sm:text-lg">
                 Visual Product Search
               </h2>
               <p className="text-xs text-muted">
-                Take a photo or upload an image to find matching wholesale products
+                Upload a product image to find matching wholesale products
               </p>
             </div>
           </div>
@@ -268,266 +162,164 @@ export default function VisualSearchModal({ isOpen, onClose }) {
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-          {!selectedImage ? (
-            <>
-              {/* Tab Selector */}
-              <div className="mb-5 flex rounded-xl bg-navy-100/70 p-1">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("upload")}
-                  className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all sm:text-sm ${
-                    activeTab === "upload"
-                      ? "bg-white text-navy-900 shadow-sm"
-                      : "text-navy-700 hover:text-navy-900"
-                  }`}
-                >
-                  <Upload className="size-4" />
-                  Upload Image
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("camera")}
-                  className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all sm:text-sm ${
-                    activeTab === "camera"
-                      ? "bg-white text-navy-900 shadow-sm"
-                      : "text-navy-700 hover:text-navy-900"
-                  }`}
-                >
-                  <Video className="size-4" />
-                  Live Camera
-                </button>
+          {status === "idle" ? (
+            /* Upload */
+            <div className="space-y-4">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-navy-200 bg-surface px-6 py-10 text-center transition-all hover:border-brand-500 hover:bg-brand-50/20"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+                <div className="flex size-14 items-center justify-center rounded-2xl bg-white text-brand-600 shadow-md ring-1 ring-navy-900/5 transition-transform group-hover:scale-110">
+                  <Upload className="size-7" />
+                </div>
+                <h3 className="mt-4 text-sm font-bold text-navy-900 sm:text-base">
+                  Click to upload product image
+                </h3>
+                <p className="mt-1 text-xs text-muted max-w-sm">
+                  JPG, PNG or WEBP. We recognise the product in the photo and find it in our wholesale catalog.
+                </p>
+                <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-navy-900 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition-transform group-hover:scale-105">
+                  <Sparkles className="size-3.5 text-brand-400" />
+                  Select Image File
+                </span>
               </div>
 
-              {/* Upload Tab */}
-              {activeTab === "upload" && (
-                <div className="space-y-4">
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-navy-200 bg-surface px-6 py-10 text-center transition-all hover:border-brand-500 hover:bg-brand-50/20"
-                  >
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                    <div className="flex size-14 items-center justify-center rounded-2xl bg-white text-brand-600 shadow-md ring-1 ring-navy-900/5 transition-transform group-hover:scale-110">
-                      <Upload className="size-7" />
-                    </div>
-                    <h3 className="mt-4 text-sm font-bold text-navy-900 sm:text-base">
-                      Click to upload product image
-                    </h3>
-                    <p className="mt-1 text-xs text-muted max-w-sm">
-                      Select JPG, PNG or WEBP from your device. Fast visual catalog match.
-                    </p>
-                    <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-navy-900 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition-transform group-hover:scale-105">
-                      <Sparkles className="size-3.5 text-brand-400" />
-                      Select Image File
-                    </span>
-                  </div>
-
-                  {/* Quick sample chips for instant selection and testing */}
-                  <div className="rounded-2xl border border-navy-900/[0.07] bg-surface/80 p-3 sm:p-4 text-left">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted mb-2">
-                      Or select any sample image to test match:
-                    </p>
-                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                      {[
-                        { label: "🎧 Headphones", file: "wireless-headphones.jpg", photo: "photo-1505740420928-5e560c06d30e" },
-                        { label: "👕 Cotton T-Shirt", file: "cotton-tshirt.jpg", photo: "photo-1620799139652-715e4d5b232d" },
-                        { label: "🏺 Ceramic Vase", file: "ceramic-vase.jpg", photo: "photo-1612196808214-b8e1d6145a8c" },
-                        { label: "🛠️ Cordless Drill", file: "impact-drill.jpg", photo: "photo-1562237553-36ad661d6f2c" },
-                        { label: "🧴 Brightening Serum", file: "vitamin-c-serum.jpg", photo: "photo-1723951174326-2a97221d3b7f" },
-                        { label: "📦 Shipping Box", file: "shipping-carton.jpg", photo: "photo-1513672494107-cd9d848a383e" },
-                        { label: "🚫 Non-Matching Image", file: "nature-landscape-scenery.jpg", photo: "photo-1506744038136-46273834b3fb" },
-                      ].map((sample) => (
-                        <button
-                          key={sample.file}
-                          type="button"
-                          onClick={() => {
-                            const sampleUrl = `https://images.unsplash.com/${sample.photo}?auto=format&fit=crop&w=400&q=80`;
-                            processImageMatch(sampleUrl, sample.file);
-                          }}
-                          className="inline-flex items-center rounded-xl border border-navy-900/10 bg-white px-2.5 py-1.5 text-xs font-semibold text-navy-800 shadow-2xs hover:border-brand-500 hover:bg-brand-50/50 hover:text-navy-950 transition-all hover:-translate-y-0.5 active:scale-95"
-                        >
-                          {sample.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              {/* Sample photos run through the same recognition */}
+              <div className="rounded-2xl border border-navy-900/[0.07] bg-surface/80 p-3 sm:p-4 text-left">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted mb-2">
+                  Or try a sample photo:
+                </p>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                  {SAMPLE_IMAGES.map((sample) => (
+                    <button
+                      key={sample.file}
+                      type="button"
+                      onClick={() => handleSample(sample)}
+                      className="inline-flex items-center rounded-xl border border-navy-900/10 bg-white px-2.5 py-1.5 text-xs font-semibold text-navy-800 shadow-2xs hover:border-brand-500 hover:bg-brand-50/50 hover:text-navy-950 transition-all hover:-translate-y-0.5 active:scale-95"
+                    >
+                      {sample.label}
+                    </button>
+                  ))}
                 </div>
-              )}
-
-              {/* Camera Tab */}
-              {activeTab === "camera" && (
-                <div className="flex flex-col items-center">
-                  {/* Category Focus Bar */}
-                  <div className="mb-3 w-full flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-                    <span className="text-[11px] font-bold text-muted uppercase tracking-wider shrink-0 mr-1">
-                      Focus:
-                    </span>
-                    {[
-                      { label: "Any / Auto", value: "all" },
-                      { label: "Audio & Gadgets", value: "electronics" },
-                      { label: "Fashion", value: "fashion-apparel" },
-                      { label: "Industrial", value: "machinery" },
-                      { label: "Cosmetics", value: "beauty-personal-care" },
-                      { label: "Home Decor", value: "home-kitchen" },
-                      { label: "Packaging", value: "packaging" },
-                    ].map((cat) => (
-                      <button
-                        key={cat.value}
-                        type="button"
-                        onClick={() => setCameraCategory(cat.value)}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors shrink-0 ${
-                          cameraCategory === cat.value
-                            ? "bg-navy-900 text-white shadow-xs"
-                            : "bg-navy-100/80 text-navy-700 hover:bg-navy-200"
-                        }`}
-                      >
-                        {cat.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {cameraError ? (
-                    <div className="w-full rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
-                      <AlertCircle className="mx-auto size-8 text-red-600" />
-                      <p className="mt-2 text-sm font-semibold text-red-900">
-                        Camera Unavailable
-                      </p>
-                      <p className="mt-1 text-xs text-red-700">{cameraError}</p>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("upload")}
-                        className="mt-4 inline-flex items-center gap-2 rounded-xl bg-navy-900 px-4 py-2 text-xs font-semibold text-white hover:bg-navy-800"
-                      >
-                        <Upload className="size-4" /> Switch to File Upload
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="relative w-full overflow-hidden rounded-2xl bg-black shadow-inner">
-                      <video
-                        ref={videoRef}
-                        playsInline
-                        muted
-                        autoPlay
-                        className="aspect-[4/3] w-full object-cover"
-                      />
-                      <canvas ref={canvasRef} className="hidden" />
-
-                      {/* Viewfinder Target */}
-                      <div className="pointer-events-none absolute inset-8 flex items-center justify-center rounded-xl border-2 border-white/40">
-                        <span className="rounded bg-black/60 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
-                          Align product in frame
-                        </span>
-                      </div>
-
-                      {/* Capture Trigger */}
-                      <div className="absolute inset-x-0 bottom-4 flex justify-center">
-                        <button
-                          type="button"
-                          onClick={capturePhoto}
-                          disabled={!cameraActive}
-                          className="flex size-14 items-center justify-center rounded-full border-4 border-white bg-brand-500 text-navy-950 shadow-xl transition-transform active:scale-90 hover:scale-105 disabled:opacity-50"
-                          aria-label="Take Photo"
-                        >
-                          <Camera className="size-6" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
+              </div>
+            </div>
           ) : (
             /* Results View */
             <div className="space-y-5">
               {/* Image Preview & Status Header */}
               <div className="flex items-center gap-3.5 rounded-2xl border border-navy-900/[0.08] bg-surface p-3 sm:p-4">
-                <img
-                  src={selectedImage}
-                  alt="Captured Product"
-                  className="size-16 shrink-0 rounded-xl object-cover ring-1 ring-navy-900/10 shadow-sm"
-                />
-                <div className="min-w-0 flex-1">
-                  {matchedProducts.length > 0 ? (
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-brand-700">
-                      <CheckCircle2 className="size-4" />
+                {preview?.url ? (
+                  <img
+                    src={preview.url}
+                    alt="Uploaded product image"
+                    className="size-16 shrink-0 rounded-xl object-cover ring-1 ring-navy-900/10 shadow-sm"
+                  />
+                ) : (
+                  <span className="flex size-16 shrink-0 items-center justify-center rounded-xl bg-white text-navy-400 ring-1 ring-navy-900/10">
+                    <ImageUp className="size-6" />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1" aria-live="polite">
+                  {status === "searching" ? (
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-navy-700">
+                      <ScanSearch className="size-4" />
+                      <span>Recognising product…</span>
+                    </div>
+                  ) : status === "done" && products.length > 0 ? (
+                    <div className={`flex items-center gap-1.5 text-xs font-semibold ${categoryOnly ? "text-amber-700" : "text-brand-700"}`}>
+                      {categoryOnly ? <AlertCircle className="size-4" /> : <CheckCircle2 className="size-4" />}
                       <span>
-                        {matchedProducts.length} Exact Catalog {matchedProducts.length === 1 ? "Match" : "Matches"} Found
+                        {categoryOnly
+                          ? `No exact match — similar products in ${recognized?.category?.name || "this category"}`
+                          : `${products.length} matching ${products.length === 1 ? "product" : "products"} found`}
                       </span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
                       <AlertCircle className="size-4" />
-                      <span>No Direct Catalog Matches Found</span>
+                      <span>{status === "error" ? (unavailable ? "Visual search unavailable" : "Search failed") : "No matching products found"}</span>
                     </div>
                   )}
                   <h4 className="truncate text-sm font-bold text-navy-900">
-                    {imageName || "Captured Product Photo"}
+                    {recognized?.productName ? `Recognised: ${recognized.productName}` : preview?.name || "Uploaded image"}
                   </h4>
-                  <p className="text-[11px] text-muted">
-                    {matchedProducts.length > 0
-                      ? `Found ${matchedProducts.length} matching wholesale ${matchedProducts.length === 1 ? "product" : "products"} in catalog`
-                      : "We could not find matching products for this photo in our active listings"}
+                  <p className="truncate text-[11px] text-muted">
+                    {status === "searching"
+                      ? "Identifying the product and searching our active listings"
+                      : recognized?.productName
+                        ? preview?.name
+                        : status === "error"
+                          ? error?.message
+                          : "We could not find matching products for this image in our active listings"}
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedImage(null);
-                    setMatchedProducts([]);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-xs font-semibold text-navy-700 hover:bg-navy-50 transition-colors"
+                  onClick={reset}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-xs font-semibold text-navy-700 hover:bg-navy-50 transition-colors"
                 >
                   <RefreshCw className="size-3.5" />
-                  New Photo
+                  New Image
                 </button>
               </div>
 
-              {/* Loader */}
-              {analyzing ? (
+              {status === "searching" ? (
                 <div className="flex flex-col items-center justify-center py-10 text-center">
                   <div className="size-10 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
                   <p className="mt-3 text-sm font-bold text-navy-900">
-                    Scanning catalog with visual recognition...
+                    Recognising the product in your photo…
                   </p>
                   <p className="text-xs text-muted">
-                    Matching against verified wholesale listings &amp; MOQs
+                    Then matching it against active wholesale listings
                   </p>
                 </div>
-              ) : matchedProducts.length > 0 ? (
-                /* Matching Products Grid - ONLY MATCHED PRODUCTS ARE SHOWN */
+              ) : status === "done" && products.length > 0 ? (
                 <div>
-                  <div className="mb-3 flex items-center justify-between">
+                  <div className="mb-3 flex items-center justify-between gap-3">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-muted">
-                      Matched Wholesale Products ({matchedProducts.length})
+                      {categoryOnly ? "Similar products" : "Matched wholesale products"} ({products.length})
                     </h3>
-                    <span className="text-xs text-brand-700 font-semibold">
-                      Showing matching products only
-                    </span>
+                    {recognized?.category?.name ? (
+                      <span className="truncate text-xs text-brand-700 font-semibold">{recognized.category.name}</span>
+                    ) : null}
                   </div>
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    {matchedProducts.map((product, idx) => (
+                    {products.map((product, idx) => (
                       <div
                         key={product.id || idx}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => handleSelectProduct(product)}
-                        className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-navy-900/[0.06] bg-white p-3 shadow-xs transition-all hover:-translate-y-0.5 hover:border-brand-500/50 hover:shadow-md"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleSelectProduct(product);
+                          }
+                        }}
+                        className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-navy-900/[0.06] bg-white p-3 shadow-xs transition-all hover:-translate-y-0.5 hover:border-brand-500/50 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
                       >
                         <div className="relative size-16 shrink-0 overflow-hidden rounded-xl bg-navy-50 ring-1 ring-navy-900/5">
                           <Image
-                            photo={product.photo}
+                            photo={product.photo || product.images?.[0]?.url}
                             illustration={product.illustration}
+                            category={product.categorySlug}
                             alt={product.name}
                             className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <span className="inline-block rounded-md bg-brand-50 text-brand-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-                            {idx === 0 ? "98% Match" : idx === 1 ? "95% Match" : idx === 2 ? "91% Match" : "86% Match"}
-                          </span>
+                          {idx === 0 && !categoryOnly ? (
+                            <span className="inline-block rounded-md bg-brand-50 text-brand-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                              Best match
+                            </span>
+                          ) : null}
                           <h4 className="truncate text-xs font-bold text-navy-900 group-hover:text-brand-600 sm:text-sm">
                             {product.name}
                           </h4>
@@ -535,7 +327,7 @@ export default function VisualSearchModal({ isOpen, onClose }) {
                             {money(product.price)}
                             <span className="text-[10px] font-normal text-muted">
                               {" "}
-                              / unit (MOQ: {product.moq || 50})
+                              / {product.unit || "unit"}{product.moq ? ` (MOQ: ${product.moq})` : ""}
                             </span>
                           </p>
                         </div>
@@ -546,76 +338,73 @@ export default function VisualSearchModal({ isOpen, onClose }) {
                     ))}
                   </div>
 
-                  {/* Right bottom side link */}
                   <div className="mt-5 flex items-center justify-between border-t border-navy-900/[0.08] pt-4">
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelectedImage(null);
-                        setMatchedProducts([]);
-                      }}
+                      onClick={reset}
                       className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-navy-900 transition-colors"
                     >
                       <RefreshCw className="size-3.5" />
-                      Scan Another Item
+                      Search Another Image
                     </button>
                     <Link
-                      to="/products"
+                      to={recognized?.searchTerms?.[0] ? `/products?q=${encodeURIComponent(recognized.searchTerms[0])}` : "/products"}
                       onClick={onClose}
                       className="group inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-brand-700 hover:text-brand-800 transition-colors"
                     >
-                      <span>Explore more</span>
+                      <span>See all results</span>
                       <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
                     </Link>
                   </div>
                 </div>
               ) : (
-                /* No Matches Found State with Explore more --> link on right bottom side */
+                /* No matches, or the search could not run */
                 <div>
                   <div className="flex flex-col items-center justify-center rounded-2xl border border-navy-900/[0.08] bg-surface p-8 text-center sm:p-10">
                     <div className="flex size-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 ring-1 ring-amber-200/60 shadow-xs">
-                      <SearchX className="size-7" />
+                      {status === "error" ? <AlertCircle className="size-7" /> : <SearchX className="size-7" />}
                     </div>
                     <h3 className="mt-4 text-base font-bold text-navy-900 sm:text-lg">
-                      No matching products found
+                      {status === "error"
+                        ? unavailable ? "Visual search is not available right now" : "We couldn't search this image"
+                        : "No matching products found"}
                     </h3>
                     <p className="mt-1.5 max-w-md text-xs text-muted sm:text-sm">
-                      We couldn't find any products in our wholesale catalog matching this photo. Try another image with clear product features or explore all wholesale categories.
+                      {status === "error"
+                        ? error?.message || "Please try again in a moment."
+                        : recognized?.productName
+                          ? `We recognised "${recognized.productName}", but no active listing matches it yet. Try another photo or search by name.`
+                          : "We couldn't recognise a product in this photo. Try a clear photo of a single product."}
                     </p>
-                    <div className="mt-5 flex items-center gap-3">
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                      {canRetry ? (
+                        <button
+                          type="button"
+                          onClick={() => runSearch(lastFileRef.current.file, lastFileRef.current.name)}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-navy-900 px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-navy-800 transition-colors"
+                        >
+                          <RefreshCw className="size-3.5" />
+                          Try Again
+                        </button>
+                      ) : null}
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedImage(null);
-                          setMatchedProducts([]);
-                        }}
+                        onClick={reset}
                         className="inline-flex items-center gap-1.5 rounded-xl border border-navy-900/10 bg-white px-4 py-2 text-xs font-semibold text-navy-800 shadow-2xs hover:bg-navy-50 transition-colors"
                       >
-                        <RefreshCw className="size-3.5" />
-                        Try Another Photo
+                        <Upload className="size-3.5" />
+                        Try Another Image
                       </button>
                     </div>
                   </div>
 
-                  {/* Right bottom side link: Explore more --> */}
-                  <div className="mt-5 flex items-center justify-between border-t border-navy-900/[0.08] pt-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedImage(null);
-                        setMatchedProducts([]);
-                      }}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-navy-900 transition-colors"
-                    >
-                      <RefreshCw className="size-3.5" />
-                      Upload different photo
-                    </button>
+                  <div className="mt-5 flex items-center justify-end border-t border-navy-900/[0.08] pt-4">
                     <Link
-                      to="/products"
+                      to={recognized?.searchTerms?.[0] ? `/products?q=${encodeURIComponent(recognized.searchTerms[0])}` : "/products"}
                       onClick={onClose}
                       className="group inline-flex items-center gap-1.5 rounded-full bg-navy-900 px-4 py-2 text-xs sm:text-sm font-bold text-white shadow-sm transition-all hover:bg-brand-600 hover:shadow"
                     >
-                      <span>Explore more</span>
+                      <span>{recognized?.searchTerms?.[0] ? `Search "${recognized.searchTerms[0]}"` : "Browse all products"}</span>
                       <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
                     </Link>
                   </div>

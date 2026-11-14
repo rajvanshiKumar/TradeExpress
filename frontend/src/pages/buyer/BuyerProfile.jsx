@@ -10,14 +10,15 @@ import useNotifications from '../../hooks/useNotifications';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { DEFAULT_NOTIFICATION_PREFS } from '../../data/users';
 import { COUNTRIES } from '../../utils/constants';
-import { focusFirstError, hasErrors, mobileExample, parseMobile, rules, validate } from '../../utils/validators';
+import { apiPut } from '../../services/apiClient';
+import { focusFirstError, hasErrors, rules, validate } from '../../utils/validators';
 
+// Mobile number is not edited here: changing it needs OTP verification in Account Settings.
 const schema = {
   name: [rules.required('Full name'), rules.minLength('Full name', 2)],
   company: [rules.required('Company name')],
   country: [rules.required('Country')],
   city: [rules.required('City')],
-  phone: [rules.required('Mobile number'), rules.mobile('country')],
 };
 
 const NOTIFICATION_OPTIONS = [
@@ -29,8 +30,9 @@ const NOTIFICATION_OPTIONS = [
 export default function BuyerProfile() {
   const { user, updateProfile } = useAuth();
   const { showToast } = useNotifications();
-  const [values, setValues] = useState({ name: user.name, company: user.company ?? '', phone: user.phone ?? '', country: user.country ?? 'India', city: user.city ?? '' });
+  const [values, setValues] = useState({ name: user.name, company: user.company ?? '', country: user.country ?? 'India', city: user.city ?? '' });
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
   const prefs = { ...DEFAULT_NOTIFICATION_PREFS, ...user.notificationPrefs };
   useDocumentTitle('Profile & settings');
 
@@ -39,13 +41,46 @@ export default function BuyerProfile() {
     if (errors[field]) setErrors((previous) => ({ ...previous, [field]: '' }));
   };
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
+    if (saving) return;
     const found = validate(schema, values);
     setErrors(found);
     if (hasErrors(found)) return focusFirstError(found, 'profile-');
-    updateProfile({ name: values.name.trim(), company: values.company.trim(), phone: parseMobile(values.phone, values.country).international, country: values.country, city: values.city.trim() });
-    return showToast('Profile saved.');
+
+    const payload = {
+      name: values.name.trim(),
+      company: values.company.trim(),
+      country: values.country,
+      city: values.city.trim(),
+    };
+
+    setSaving(true);
+    try {
+      // Saved to the TradeExpress account on the server, then mirrored into this session.
+      const res = await apiPut('auth/profile', payload);
+      const saved = res?.data || {};
+      const next = {
+        name: saved.name ?? payload.name,
+        company: saved.company ?? payload.company,
+        country: saved.country ?? payload.country,
+        city: saved.city ?? payload.city,
+      };
+      updateProfile(next);
+      setValues(next);
+      showToast('Profile saved.');
+    } catch (error) {
+      const fieldErrors = Array.isArray(error?.data?.errors) ? error.data.errors : [];
+      if (fieldErrors.length) {
+        const mapped = Object.fromEntries(fieldErrors.filter((item) => item?.field).map((item) => [item.field, item.message]));
+        setErrors(mapped);
+        focusFirstError(mapped, 'profile-');
+      }
+      showToast(error?.message && error.message !== 'Validation failed' ? error.message : 'Could not save your profile. Please check the details and try again.', 'error');
+    } finally {
+      setSaving(false);
+    }
+    return undefined;
   };
 
   const togglePref = (key, checked) => {
@@ -55,7 +90,7 @@ export default function BuyerProfile() {
 
   return (
     <div className="space-y-6">
-      <SectionHeading title="Profile & settings" description="Saved in this browser only." />
+      <SectionHeading title="Profile & settings" description="Your business details on TradeExpress." />
 
       <form onSubmit={submit} noValidate className="ts-card p-5 sm:p-6">
         <h2 className="mb-4 text-base font-bold">Profile</h2>
@@ -65,9 +100,13 @@ export default function BuyerProfile() {
           <Input id="profile-company" label="Company name" required autoComplete="organization" value={values.company} onChange={set('company')} error={errors.company} />
           <Select id="profile-country" label="Country" required options={COUNTRIES} value={values.country} onChange={set('country')} error={errors.country} />
           <Input id="profile-city" label="City" required autoComplete="address-level2" value={values.city} onChange={set('city')} error={errors.city} />
-          <Input id="profile-phone" label="Mobile number" required type="tel" autoComplete="tel" value={values.phone} onChange={set('phone')} error={errors.phone} hint={`e.g. ${mobileExample(values.country)}`} />
+          <Input id="profile-phone" label="Mobile number" type="tel" value={user.phone ?? ''} disabled readOnly hint="To change your mobile number, go to Account Settings (OTP verification)." />
         </div>
-        <div className="mt-5 flex justify-end"><Button type="submit" variant="navy" icon={Save}>Save profile</Button></div>
+        <div className="mt-5 flex justify-end">
+          <Button type="submit" variant="navy" icon={Save} loading={saving}>
+            {saving ? 'Saving…' : 'Save profile'}
+          </Button>
+        </div>
       </form>
 
       <section className="ts-card p-5 sm:p-6" aria-labelledby="notification-prefs-title">

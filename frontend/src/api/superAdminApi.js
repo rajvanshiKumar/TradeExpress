@@ -85,6 +85,10 @@ export const superAdminApi = {
   getUserDeletionCheck: (id) => request(`/users/${id}/deletion-check`),
   deleteUser: (id, payload) =>
     request(`/users/${id}/delete`, { method: 'POST', body: JSON.stringify(payload) }),
+  verifyUser: (id) =>
+    request(`/users/${id}/verify`, { method: 'POST', body: JSON.stringify({ status: 'VERIFIED' }) }),
+  reviewUserKyc: (id, payload) =>
+    request(`/users/${id}/kyc/review`, { method: 'POST', body: JSON.stringify(payload) }),
   getExportUsersCsvUrl: (params = {}) => {
     return `${API_BASE}/super-admin/users/export/csv${buildQueryString(params)}`;
   },

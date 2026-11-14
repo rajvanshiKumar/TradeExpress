@@ -221,27 +221,27 @@ async function resolveConversationLinks({ buyerId, productId, productSlug, rfqId
   const [product, rfq, order] = await Promise.all([
     productKeys.length
       ? prisma.product.findFirst({
-          where: { OR: productKeys.flatMap((key) => [{ id: key }, { slug: key }]) },
-          select: { id: true, name: true, companyId: true, supplierId: true },
-        })
+        where: { OR: productKeys.flatMap((key) => [{ id: key }, { slug: key }]) },
+        select: { id: true, name: true, companyId: true, supplierId: true },
+      })
       : null,
     rfqId
       ? prisma.rfq.findFirst({
-          where: {
-            OR: [{ id: String(rfqId) }, { rfqNumber: String(rfqId) }],
-            ...(buyerId ? { buyerId } : {}),
-          },
-          select: { id: true, rfqNumber: true, buyerId: true, title: true },
-        })
+        where: {
+          OR: [{ id: String(rfqId) }, { rfqNumber: String(rfqId) }],
+          ...(buyerId ? { buyerId } : {}),
+        },
+        select: { id: true, rfqNumber: true, buyerId: true, title: true },
+      })
       : null,
     orderId
       ? prisma.order.findFirst({
-          where: {
-            OR: [{ id: String(orderId) }, { orderNumber: String(orderId) }],
-            ...(buyerId ? { userId: buyerId } : {}),
-          },
-          select: { id: true, orderNumber: true, userId: true },
-        })
+        where: {
+          OR: [{ id: String(orderId) }, { orderNumber: String(orderId) }],
+          ...(buyerId ? { userId: buyerId } : {}),
+        },
+        select: { id: true, orderNumber: true, userId: true },
+      })
       : null,
   ]);
   return {
@@ -364,19 +364,45 @@ export async function createOrGetConversation({
 
   // Run in a transaction to prevent race conditions on duplicate creation
   const result = await prisma.$transaction(async (tx) => {
-    // Check if an existing conversation exists for this buyer, supplier, and product context
-    const existing = await tx.conversation.findFirst({
-      where: {
-        buyerId: resolvedBuyerId,
-        supplierId: supplier.id,
-        productId: productId || null,
-        rfqId: rfqId || null,
-        orderId: orderId || null,
-      },
-      include: conversationInclude,
-    });
+    // 1. Check if an exact matching conversation exists for this buyer, supplier, and context
+    let existing = null;
+    if (productId || rfqId || orderId) {
+      existing = await tx.conversation.findFirst({
+        where: {
+          buyerId: resolvedBuyerId,
+          supplierId: supplier.id,
+          ...(productId ? { productId } : {}),
+          ...(rfqId ? { rfqId } : {}),
+          ...(orderId ? { orderId } : {}),
+        },
+        include: conversationInclude,
+        orderBy: { lastMessageAt: 'desc' },
+      });
+    }
+
+    // 2. If no exact context match, reuse ANY existing conversation between this buyer and supplier
+    if (!existing) {
+      existing = await tx.conversation.findFirst({
+        where: {
+          buyerId: resolvedBuyerId,
+          OR: [
+            { supplierId: supplier.id },
+            ...(companyId ? [{ companyId }] : []),
+            ...(supplier.company ? [{ companyId: supplier.company }] : []),
+          ],
+        },
+        include: conversationInclude,
+        orderBy: { lastMessageAt: 'desc' },
+      });
+    }
 
     if (existing) {
+      const updateData = {};
+      if (!existing.productId && productId) updateData.productId = productId;
+      if (!existing.rfqId && rfqId) updateData.rfqId = rfqId;
+      if (!existing.orderId && orderId) updateData.orderId = orderId;
+      if (!existing.companyId && (companyId || supplier.company)) updateData.companyId = companyId || supplier.company;
+
       if (initialMessage && initialMessage.trim()) {
         const cleanText = initialMessage.trim();
         await tx.message.create({
@@ -388,15 +414,15 @@ export async function createOrGetConversation({
           },
         });
 
-        const updateData = {
-          lastMessageAt: new Date(),
-        };
+        updateData.lastMessageAt = new Date();
         if (isSenderBuyer) {
           updateData.unreadSupplier = { increment: 1 };
         } else {
           updateData.unreadBuyer = { increment: 1 };
         }
+      }
 
+      if (Object.keys(updateData).length > 0) {
         const updated = await tx.conversation.update({
           where: { id: existing.id },
           data: updateData,
@@ -424,12 +450,12 @@ export async function createOrGetConversation({
         lastMessageAt: new Date(),
         messages: initialMessage && initialMessage.trim()
           ? {
-              create: {
-                senderId,
-                senderRole,
-                content: initialMessage.trim(),
-              },
-            }
+            create: {
+              senderId,
+              senderRole,
+              content: initialMessage.trim(),
+            },
+          }
           : undefined,
       },
       include: conversationInclude,
@@ -482,7 +508,73 @@ export async function listConversations(userId, role, search = '') {
     orderBy: { lastMessageAt: 'desc' },
   });
 
-  return rawConversations.map(formatConversation);
+  // Consolidate conversations between the same buyer and supplier so only one clean thread appears
+  const partyMap = new Map();
+  for (const conv of rawConversations) {
+    const normSupplier = (
+      conv.supplier?.company ||
+      conv.supplier?.name ||
+      conv.companyId ||
+      conv.supplierId ||
+      ''
+    ).toString().trim().toLowerCase();
+    const pairKey = `${conv.buyerId}_${conv.supplierId || normSupplier || 'supplier'}`;
+    if (!partyMap.has(pairKey)) {
+      partyMap.set(pairKey, {
+        ...conv,
+        messages: Array.isArray(conv.messages) ? conv.messages : [],
+      });
+    } else {
+      const existing = partyMap.get(pairKey);
+      const existingMsgs = (existing.messages || []).length;
+      const currentMsgs = (conv.messages || []).length;
+
+      // Merge messages from both
+      const msgMap = new Map();
+      (existing.messages || []).forEach((m) => msgMap.set(m.id, m));
+      (conv.messages || []).forEach((m) => msgMap.set(m.id, m));
+      const mergedMessages = Array.from(msgMap.values()).sort(
+        (a, b) => new Date(a.createdAt || a.at || 0) - new Date(b.createdAt || b.at || 0)
+      );
+
+      // Choose richer base object
+      const preferConv =
+        currentMsgs > existingMsgs ||
+        (currentMsgs === existingMsgs &&
+          new Date(conv.lastMessageAt || conv.createdAt || 0) >
+          new Date(existing.lastMessageAt || existing.createdAt || 0));
+      const primary = preferConv ? conv : existing;
+      const secondary = preferConv ? existing : conv;
+
+      let bestSubject = primary.subject;
+      if (
+        (!bestSubject || bestSubject.toLowerCase() === 'inquiry for supplier') &&
+        secondary.subject &&
+        secondary.subject.toLowerCase() !== 'inquiry for supplier'
+      ) {
+        bestSubject = secondary.subject;
+      }
+
+      partyMap.set(pairKey, {
+        ...secondary,
+        ...primary,
+        id: primary.id,
+        subject: bestSubject || primary.subject || 'Inquiry',
+        messages: mergedMessages,
+        lastMessageAt: new Date(
+          Math.max(
+            new Date(primary.lastMessageAt || primary.createdAt || 0).getTime(),
+            new Date(secondary.lastMessageAt || secondary.createdAt || 0).getTime()
+          )
+        ),
+        unreadBuyer: (primary.unreadBuyer || 0) + (secondary.unreadBuyer || 0),
+        unreadSupplier: (primary.unreadSupplier || 0) + (secondary.unreadSupplier || 0),
+      });
+    }
+  }
+
+  const consolidated = Array.from(partyMap.values());
+  return consolidated.map(formatConversation);
 }
 
 /**
@@ -528,6 +620,26 @@ export async function getConversationById(conversationId, user) {
     err.status = 403;
     err.statusCode = 403;
     throw err;
+  }
+
+  // If this conversation has 0 messages, check if another conversation between the same parties has messages
+  if ((!conv.messages || conv.messages.length === 0) && conv.buyerId && conv.supplierId) {
+    const companion = await prisma.conversation.findFirst({
+      where: {
+        buyerId: conv.buyerId,
+        supplierId: conv.supplierId,
+        id: { not: conv.id },
+        messages: { some: {} },
+      },
+      include: conversationInclude,
+      orderBy: { lastMessageAt: 'desc' },
+    });
+    if (companion && companion.messages?.length > 0) {
+      conv.messages = companion.messages;
+      if (companion.subject && (!conv.subject || conv.subject.toLowerCase() === 'inquiry for supplier')) {
+        conv.subject = companion.subject;
+      }
+    }
   }
 
   return formatConversation(conv);

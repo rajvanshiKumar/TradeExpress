@@ -14,6 +14,28 @@
 
 let verifiedWorkingBase = null;
 
+/**
+ * A 404 means "this target does not serve the auth API, try the next one" only when the reply is not
+ * an API answer: an HTML page, a non-JSON body, or the backend's unmatched-route handler.
+ * A JSON 404 from a real auth route (e.g. "No account found with this email", code ACCOUNT_NOT_FOUND)
+ * is a genuine answer and must reach the caller instead of being reported as a connection failure.
+ */
+export function isMissingRouteResponse(status, contentType, data) {
+  if (String(contentType || '').includes('text/html')) return true;
+  if (status !== 404) return false;
+  if (!String(contentType || '').includes('json') || !data || typeof data !== 'object') return true;
+  return /^API Route not found/i.test(String(data.message || ''));
+}
+
+const parseBody = (text) => {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+};
+
 export function getAuthBaseCandidates() {
   const envBase = (import.meta.env?.VITE_PUBLIC_API_BASE_URL || '').trim().replace(/\/+$/, '');
   const candidates = [];
@@ -27,8 +49,14 @@ export function getAuthBaseCandidates() {
   if (envBase) {
     candidates.push(envBase);
   }
-  candidates.push('http://localhost:5000/api');
-  candidates.push('http://127.0.0.1:5000/api');
+  // Local backend fallbacks only for development, or when the site itself is opened on this computer.
+  // A deployed page must never probe the visitor's own machine.
+  const isDevBuild = import.meta.env?.DEV !== false;
+  const onLocalhost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location?.hostname || '');
+  if (isDevBuild || onLocalhost) {
+    candidates.push('http://localhost:5000/api');
+    candidates.push('http://127.0.0.1:5000/api');
+  }
 
   // 2. Relative reverse proxy
   if (typeof window !== 'undefined' && window.location) {
@@ -70,24 +98,18 @@ export async function authFetch(endpoint, options = {}) {
       });
 
       const contentType = response.headers.get('content-type') || '';
-      // If we got an HTML response (e.g. Vite SPA index.html fallback for unhandled route),
-      // this candidate did not reach the backend API. Skip to next candidate.
-      if (contentType.includes('text/html') || response.status === 404) {
+      // HTML (e.g. Vite SPA index.html fallback) or an unmatched-route 404 means this candidate did not
+      // reach the auth API. Skip to next candidate.
+      if (contentType.includes('text/html')) {
+        continue;
+      }
+      const data = parseBody(await response.text());
+      if (isMissingRouteResponse(response.status, contentType, data)) {
         continue;
       }
 
-      // Valid API response received (success or 4xx/5xx from Express)
+      // Valid API response received (success or 4xx/5xx from Express, including JSON 404 answers)
       verifiedWorkingBase = candidate;
-
-      let data = null;
-      const text = await response.text();
-      if (text) {
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { message: text };
-        }
-      }
 
       return {
         ok: response.ok,

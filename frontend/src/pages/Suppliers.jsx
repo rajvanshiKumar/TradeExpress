@@ -10,6 +10,7 @@ import useProducts from '../hooks/useProducts';
 import useDebounce from '../hooks/useDebounce';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { filterCompanies } from '../services/supplierService';
+import { normalizeCountryName } from '../utils/countryData';
 
 const PER_PAGE = 9;
 
@@ -46,7 +47,14 @@ export default function Suppliers() {
 
   const results = useMemo(() => filterCompanies(companies, filters), [companies, filters]);
   const active = companies.filter((company) => company.status !== 'Suspended');
-  const countries = useMemo(() => [...new Set(active.map((company) => company.country))].filter(Boolean).sort(), [companies]); // eslint-disable-line react-hooks/exhaustive-deps
+  const countries = useMemo(() => {
+    const set = new Set();
+    active.forEach((company) => {
+      const full = normalizeCountryName(company.country);
+      if (full) set.add(full);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [companies]); // eslint-disable-line react-hooks/exhaustive-deps
   const industries = useMemo(() => [...new Set(active.map((company) => company.industry))].filter(Boolean).sort(), [companies]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasActive = Boolean(filters.q || filters.country || filters.industry || filters.businessType || filters.scope);
   const clear = () => { setQuery(''); write({ sort: filters.sort, page: 1 }); };

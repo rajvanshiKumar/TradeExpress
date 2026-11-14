@@ -18,7 +18,8 @@ export const requestEmailChange = ({ grant, newEmail }) => authorizedRequest('PO
 export const completeEmailChange = ({ grant, otp }) => authorizedRequest('POST', 'account/email/verify-new', { grant, otp });
 
 // Change phone: the new number is verified by SMS (same endpoints as signup), then the change is applied
-export const sendPhoneCode = (phone) => authorizedRequest('POST', 'auth/send-mobile-otp', { phone, country: 'India' });
+// PHONE_CHANGE gives the account-settings code expiry (5 minutes) instead of the signup expiry
+export const sendPhoneCode = (phone) => authorizedRequest('POST', 'auth/send-mobile-otp', { phone, country: 'India', purpose: 'PHONE_CHANGE' });
 export const verifyPhoneCode = (phone, otp) => authorizedRequest('POST', 'auth/verify-mobile-otp', { phone, country: 'India', otp });
 export const changePhone = ({ grant, phone, verificationToken }) => authorizedRequest('POST', 'account/phone/change', { grant, phone, country: 'India', verificationToken });
 

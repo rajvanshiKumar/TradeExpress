@@ -2,7 +2,8 @@ import crypto from 'crypto';
 import { cleanRegistrationNumber, ensureSupplierDocument, parseProfilePhoto, validateLegalStructure } from './supplierDocumentService.js';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
-import { issueLoginToken } from './sessionService.js';
+import { issueLoginToken, invalidateSessionCache, reissueCurrentToken } from './sessionService.js';
+import { getRequestContext } from '../utils/requestContext.js';
 import { normalizeMobile, validateVerifiedMobile, validateVerifiedEmail, validateEmailLoginOtp, issueVerifiedEmailToken } from './otpService.js';
 import { resolveSignupGstin, resolveSignupPanAadhaar } from './verificationService.js';
 import { getVerifiedGoogleProfile } from './googleAuthService.js';
@@ -441,10 +442,11 @@ export async function registerBuyer({
   // Country and Address resolution
   const isIndia = (country || 'India').trim().toLowerCase() === 'india';
   const resolvedCountry = country || 'India';
-  const resolvedState = state ? state.trim() : (isIndia ? 'Maharashtra' : 'International');
-  const resolvedCity = city ? city.trim() : (isIndia ? 'Mumbai' : 'Default City');
-  const resolvedPostal = postalCode ? postalCode.trim() : (isIndia ? '400001' : '00000');
-  const resolvedAddress = (businessAddress && businessAddress.trim()) || `${resolvedCity}, ${resolvedState} - ${resolvedPostal}`;
+  // Only what the buyer entered is stored: no invented city, state, PIN code or address
+  const resolvedState = textOrNull(state);
+  const resolvedCity = textOrNull(city);
+  const resolvedPostal = textOrNull(postalCode);
+  const resolvedAddress = textOrNull(businessAddress);
 
   // Tax & Identity Details (PAN & Aadhaar)
   let cleanGstin = null;
@@ -515,9 +517,9 @@ export async function registerBuyer({
     aadhaarLast4: cleanAadhaarLast4,
     ...panAadhaar,
     status: 'ACTIVE',
-    isVerified: true,
+    isVerified: false,
     isPhoneVerified: true,
-    kycStatus: panAadhaar.panAadhaarLinked ? 'VERIFIED' : 'PENDING',
+    kycStatus: 'PENDING',
   };
   const user = resumeUser
     ? await prisma.user.update({ where: { id: resumeUser.id }, data: buyerData, select: BUYER_AUTH_RESPONSE_SELECT })
@@ -1224,7 +1226,9 @@ export async function loginUser({ email, password, role, otp, country = 'India',
     });
   }
 
-  if (!user && (isAdminLogin || ADMIN_ALIASES.includes(normalizedEmail))) {
+  // Admin aliases resolve only on the separate admin portal, and only for the listed aliases:
+  // an unknown email must never fall back to an administrator account.
+  if (!user && isAdminLogin && ADMIN_ALIASES.includes(normalizedEmail)) {
     user = await prisma.user.findFirst({
       where: {
         OR: [
@@ -1235,6 +1239,14 @@ export async function loginUser({ email, password, role, otp, country = 'India',
       },
       select: AUTH_USER_SELECT,
     });
+  }
+
+  // The public Buyer/Supplier sign-in never grants administrator access (admins use /auth/admin-login).
+  // Same answer as a wrong password, so the public form does not reveal which emails are admin accounts.
+  if (!isAdminLogin && user && !['BUYER', 'SUPPLIER'].includes(user.role)) {
+    const error = new Error('Invalid email or password. Please try again.');
+    error.statusCode = 401;
+    throw error;
   }
 
   // Buyer/Supplier sign-in: existence, selected role and signup completion come before credentials
@@ -1461,6 +1473,8 @@ export async function resetPassword({ email, token, otp, newPassword }) {
       data: { used: true },
     }),
   ]);
+  // Old tokens stop working immediately, not only after the short auth cache expires
+  invalidateSessionCache(null, resetToken.userId);
 
   return { success: true, message: 'Password has been successfully reset. You can now log in.' };
 }
@@ -1473,7 +1487,8 @@ export async function changePassword({ userId, currentPassword, newPassword }) {
     throw error;
   }
 
-  const matches = await bcrypt.compare(currentPassword, user.passwordHash);
+  const matches = typeof currentPassword === 'string' && typeof user.passwordHash === 'string'
+    && await bcrypt.compare(currentPassword, user.passwordHash);
   if (!matches) {
     const error = new Error('Current password does not match.');
     error.statusCode = 400;
@@ -1488,12 +1503,23 @@ export async function changePassword({ userId, currentPassword, newPassword }) {
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash },
-  });
+  // Same rule as the Account Settings flow: a password change signs out every other device
+  const { sessionId } = getRequestContext() || {};
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, sessionsValidAfter: new Date(Math.floor(Date.now() / 1000) * 1000) },
+    }),
+    prisma.userSession.updateMany({
+      where: { userId, revokedAt: null, ...(sessionId ? { id: { not: sessionId } } : {}) },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
+  invalidateSessionCache(null, userId);
 
-  return { success: true, message: 'Password changed successfully.' };
+  // A fresh token for this device, since tokens issued before the change are no longer accepted
+  const token = await reissueCurrentToken(user);
+  return { success: true, message: 'Password changed successfully.', data: { token } };
 }
 
 /**

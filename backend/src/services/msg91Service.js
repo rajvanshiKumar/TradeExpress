@@ -35,7 +35,7 @@ export function sanitizeMobileForMsg91(mobile) {
  * @param {string} mobile - Mobile number with country dial code (e.g. "919876543210")
  * @returns {Promise<{ success: boolean, message: string, requestId?: string }>}
  */
-export async function sendOtp(mobile) {
+export async function sendOtp(mobile, { expiryMinutes } = {}) {
   const { authKey, templateId } = checkConfig();
   const cleanMobile = sanitizeMobileForMsg91(mobile);
 
@@ -45,7 +45,7 @@ export async function sendOtp(mobile) {
     throw error;
   }
 
-  const otpExpiry = Number(process.env.MSG91_OTP_EXPIRY_MINUTES) || 10;
+  const otpExpiry = Number(expiryMinutes) || Number(process.env.MSG91_OTP_EXPIRY_MINUTES) || 10;
   const otpLength = Number(process.env.MSG91_OTP_LENGTH) || 6;
 
   try {

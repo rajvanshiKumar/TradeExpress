@@ -24,7 +24,7 @@ export const HELP_CATEGORIES = [
   { id: 'rfq-negotiation', title: 'RFQ & Negotiations', icon: 'messages', description: 'Post RFQs, compare quotations and negotiate up to three rounds.' },
   { id: 'orders-logistics', title: 'Orders & Logistics', icon: 'truck', description: 'Place, cancel, fulfil and track wholesale orders.' },
   { id: 'payments-escrow', title: 'Payments & Escrow', icon: 'wallet', description: 'Payment options, advance payments, escrow, invoices and payouts.' },
-  { id: 'returns-disputes', title: 'Returns & Disputes', icon: 'scale', description: 'Raise a trade dispute, submit evidence and understand outcomes.' },
+  { id: 'returns-disputes', title: 'Returns & Disputes', icon: 'scale', description: 'Inspect deliveries and understand how disputes are decided.' },
   { id: 'account-security', title: 'Account Security', icon: 'shield', description: 'Keep your account, OTPs and password safe.' },
 ];
 
@@ -394,10 +394,10 @@ const ARTICLE_SOURCE = [
     summary: 'Orders can be cancelled until the supplier has packed them.',
     body: [
       'You can cancel an order from My Orders while it is placed, confirmed or being processed. Once an order has been packed, shipped or delivered, it can no longer be cancelled.',
-      { note: 'If there is a problem with goods you have received, raise a trade dispute instead.' },
+      { note: 'If there is a problem with goods you have received, contact TradeExpress support instead.' },
     ],
     keywords: ['cancel', 'cancellation', 'cancel order', 'stop order'],
-    related: ['raise-trade-dispute', 'place-bulk-order'],
+    related: ['raise-support-ticket', 'place-bulk-order'],
     action: { to: '/buyer/orders', label: 'Open my orders' },
   },
   {
@@ -422,17 +422,17 @@ const ARTICLE_SOURCE = [
     category: 'orders-logistics',
     audience: 'buyer',
     title: 'Inspecting goods on delivery',
-    summary: 'Check your consignment and keep evidence in case you need to raise a dispute.',
+    summary: 'Check your consignment and keep evidence in case you need to report a problem.',
     body: [
       { list: [
         'Check the quantity and condition of the goods against your order and invoice.',
         'Take clear photos of any damage, shortage or mismatch before using the goods.',
         'Keep the packaging and documents until you are satisfied with the order.',
       ] },
-      'If something is wrong, raise a trade dispute on the order and attach your evidence.',
+      'If something is wrong, raise a support ticket with your order number and attach your evidence.',
     ],
     keywords: ['inspection', 'check goods', 'damaged', 'delivery check', 'quality check'],
-    related: ['raise-trade-dispute', 'track-shipment'],
+    related: ['raise-support-ticket', 'track-shipment'],
   },
   {
     slug: 'supplier-accept-orders',
@@ -505,7 +505,7 @@ const ARTICLE_SOURCE = [
       ] },
     ],
     keywords: ['escrow', 'held', 'release', 'frozen', 'safe payment', 'protection', 'payout'],
-    related: ['raise-trade-dispute', 'supplier-payments', 'payment-options'],
+    related: ['supplier-payments', 'payment-options'],
   },
   {
     slug: 'gst-invoice',
@@ -541,26 +541,6 @@ const ARTICLE_SOURCE = [
 
   // ── Returns & Disputes ─────────────────────────────────────────────────────
   {
-    slug: 'raise-trade-dispute',
-    category: 'returns-disputes',
-    audience: 'buyer',
-    title: 'Raising a trade dispute',
-    summary: 'Report a problem with an order and submit evidence for review.',
-    body: [
-      'If an order has a problem, you can raise one dispute for that order from Disputes in your buyer dashboard.',
-      { steps: [
-        'Open Disputes and choose the order.',
-        'Select the reason: quality mismatch, damaged or defective goods, quantity shortage, delayed consignment, counterfeit material, or another compliance issue.',
-        'Describe the problem in detail and attach photo evidence.',
-        'Submit the dispute. The supplier’s payout for that order is paused while TradeExpress reviews it.',
-      ] },
-      'You can add messages to the dispute while it is being reviewed.',
-    ],
-    keywords: ['dispute', 'complaint', 'problem with order', 'damaged goods', 'shortage', 'wrong item', 'quality issue', 'refund'],
-    related: ['dispute-outcomes', 'inspect-on-delivery', 'escrow-explained'],
-    action: { to: '/buyer/disputes', label: 'Open disputes' },
-  },
-  {
     slug: 'dispute-outcomes',
     category: 'returns-disputes',
     audience: 'all',
@@ -576,7 +556,7 @@ const ARTICLE_SOURCE = [
       'Both the buyer and the supplier are notified of the decision.',
     ],
     keywords: ['dispute decision', 'refund', 'partial refund', 'rejected', 'resolution', 'outcome'],
-    related: ['raise-trade-dispute', 'escrow-explained'],
+    related: ['escrow-explained'],
   },
   {
     slug: 'supplier-respond-dispute',
@@ -642,7 +622,7 @@ const ARTICLE_SOURCE = [
       ] },
     ],
     keywords: ['support', 'contact', 'help', 'ticket', 'customer care', 'complaint', 'raise ticket'],
-    related: ['raise-trade-dispute', 'payment-failed'],
+    related: ['payment-failed'],
   },
 ];
 
@@ -695,7 +675,7 @@ export const HELP_FAQ_TABS = [
     id: 'after-sales',
     label: 'After-Sales',
     items: [
-      { q: 'My goods arrived damaged or short. What should I do?', a: 'Take photos, keep the packaging and raise a trade dispute on the order with your evidence.', article: 'raise-trade-dispute' },
+      { q: 'My goods arrived damaged or short. What should I do?', a: 'Take photos, keep the packaging and raise a support ticket with your order number and evidence.', article: 'raise-support-ticket' },
       { q: 'What happens to the payment during a dispute?', a: 'The supplier’s payout for that order is paused until TradeExpress decides the dispute.', article: 'escrow-explained' },
       { q: 'What are the possible dispute outcomes?', a: 'A full refund, a partial refund, or rejection of the claim with the payout released to the supplier.', article: 'dispute-outcomes' },
     ],
@@ -717,7 +697,7 @@ export const HELP_POPULAR_TOPICS = [
   'post-an-rfq',
   'moq-and-price-tiers',
   'payment-options',
-  'raise-trade-dispute',
+  'inspect-on-delivery',
   'track-shipment',
   'supplier-registration',
 ];

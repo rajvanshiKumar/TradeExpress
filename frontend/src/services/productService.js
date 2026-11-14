@@ -1,9 +1,10 @@
-import seedProducts from '../data/products';
+import seedProducts, { isRemovedProduct } from '../data/products';
 import seedCategories from '../data/categories';
 import { STORAGE_KEYS } from '../utils/constants';
 import { createCollection } from './localCollection';
 import { apiGet, isApiConfigured } from './apiClient';
 import { getPriceRange } from '../utils/calculateTotals';
+import { normalizeCountryName } from '../utils/countryData';
 
 const products = createCollection(STORAGE_KEYS.products, seedProducts);
 const categories = createCollection(STORAGE_KEYS.categories, seedCategories);
@@ -21,12 +22,15 @@ async function fetchRemoteProducts() {
   return items;
 }
 
+// Browsers may still hold a saved copy of withdrawn sample products: drop them on load.
+const withoutRemoved = (list) => (Array.isArray(list) ? list.filter((item) => !isRemovedProduct(item)) : list);
+
 const productService = {
-  getInitialProducts: () => products.readInstant(),
+  getInitialProducts: () => withoutRemoved(products.readInstant()),
   getInitialCategories: () => categories.readInstant(),
   /** Local catalogue, optionally extended with products from a configured public API. */
   async listProducts(options) {
-    const local = await products.list(options);
+    const local = withoutRemoved(await products.list(options));
     if (!isApiConfigured || !REMOTE_PRODUCTS_PATH) return local;
     try {
       const remote = await fetchRemoteProducts();
@@ -89,7 +93,10 @@ export function filterProducts(products, companies, filters = {}) {
     if (minPrice !== null && product.price < minPrice) return false;
     if (maxPrice !== null && min > maxPrice) return false;
     if (maxMoq !== null && product.moq > maxMoq) return false;
-    if (filters.countries?.length && !filters.countries.includes(company?.country)) return false;
+    if (filters.countries?.length) {
+      const normComp = normalizeCountryName(company?.country);
+      if (!filters.countries.includes(company?.country) && !filters.countries.includes(normComp)) return false;
+    }
     if (filters.businessTypes?.length && !filters.businessTypes.includes(company?.businessType)) return false;
     if (filters.condition && product.condition !== filters.condition) return false;
     if (filters.ready && !product.readyToShip) return false;

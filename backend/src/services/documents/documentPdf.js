@@ -38,7 +38,7 @@ function newPdf(info) {
 
 /** The Registration Certificate as one A4 landscape page. */
 export async function renderCertificatePdf(data) {
-  const doc = newPdf({ Title: `Seller Registration Certificate ${data.certificateNumber}`, Subject: data.businessName });
+  const doc = newPdf({ Title: `${data.audience === 'buyer' ? 'Buyer' : 'Seller'} Registration Certificate ${data.certificateNumber}`, Subject: data.businessName });
   const finished = collect(doc);
   doc.addPage({ size: A4_LANDSCAPE, margin: 0 });
   SVGtoPDF(doc, certificateSvg(data), 0, 0, drawOptions(A4_LANDSCAPE[0], A4_LANDSCAPE[1]));
@@ -48,7 +48,7 @@ export async function renderCertificatePdf(data) {
 
 /** The ID card on one page: front and back side by side, each the exact size of a standard CR80 card. */
 export async function renderIdCardPdf(data) {
-  const doc = newPdf({ Title: `Supplier ID Card ${data.supplierId}`, Subject: data.businessName });
+  const doc = newPdf({ Title: `${data.audience === 'buyer' ? 'Buyer' : 'Supplier'} ID Card ${data.supplierId}`, Subject: data.businessName });
   const finished = collect(doc);
   doc.addPage({ size: CARD_PAGE, margin: 0 });
   // A light background, so the white card's rounded edges stay visible

@@ -13,15 +13,19 @@ import useProducts from '../../hooks/useProducts';
 import useAuth from '../../hooks/useAuth';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
-/** Saved products and saved suppliers. Used in the buyer dashboard and as the public /wishlist page. */
+/**
+ * Saved items. In the buyer dashboard (/buyer/wishlist) it shows Saved Products only;
+ * the public /wishlist page (standalone) keeps both the Products and Suppliers tabs.
+ */
 export default function BuyerWishlist({ standalone = false }) {
   const { user } = useAuth();
   const { items, clearWishlist, suppliers, clearSuppliers } = useWishlist();
   const { loading } = useProducts();
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get('tab') === 'suppliers' ? 'suppliers' : 'products';
+  const productsOnly = !standalone;
+  const tab = !productsOnly && searchParams.get('tab') === 'suppliers' ? 'suppliers' : 'products';
   const [confirming, setConfirming] = useState(false);
-  useDocumentTitle('Saved items');
+  useDocumentTitle(productsOnly ? 'Saved Products' : 'Saved items');
 
   const setTab = (next) => setSearchParams(next === 'suppliers' ? { tab: 'suppliers' } : {});
   const hasItems = tab === 'products' ? items.length : suppliers.length;
@@ -51,25 +55,36 @@ export default function BuyerWishlist({ standalone = false }) {
     return standalone ? <div className="ts-container py-12 sm:py-16">{guestState}</div> : guestState;
   }
 
+  const productGrid = (
+    <ProductGrid
+      products={items} loading={loading} skeletonCount={4} columns={standalone ? undefined : 'grid grid-cols-1 gap-4 xs:grid-cols-2 sm:gap-6 xl:grid-cols-3'}
+      emptyTitle="No saved products yet" emptyText="Tap the heart on any product to save it here." emptyAction={<Button to="/products" variant="navy" icon={Heart}>Find products to save</Button>}
+    />
+  );
+
   const content = (
     <>
       <SectionHeading
-        title="Saved items" description="Products and suppliers you saved in this browser, ready to compare."
+        title={productsOnly ? 'Saved Products' : 'Saved items'}
+        description={productsOnly ? 'Products you saved, ready to compare and order.' : 'Products and suppliers you saved in this browser, ready to compare.'}
         actions={hasItems ? <Button variant="dangerOutline" size="sm" icon={Trash2} onClick={() => setConfirming(true)}>Clear {tab}</Button> : null}
       />
-      <Tabs tabs={[{ id: 'products', label: 'Products', count: items.length }, { id: 'suppliers', label: 'Suppliers', count: suppliers.length }]} active={tab} onChange={setTab} idPrefix="saved" className="mb-6" />
-      <TabPanel id={tab} idPrefix="saved">
-        {tab === 'products' ? (
-          <ProductGrid
-            products={items} loading={loading} skeletonCount={4} columns={standalone ? undefined : 'grid grid-cols-1 gap-4 xs:grid-cols-2 sm:gap-6 xl:grid-cols-3'}
-            emptyTitle="No saved products yet" emptyText="Tap the heart on any product to save it here." emptyAction={<Button to="/products" variant="navy" icon={Heart}>Find products to save</Button>}
-          />
-        ) : suppliers.length ? (
-          <SupplierGrid companies={suppliers} loading={loading} />
-        ) : (
-          <div className="ts-card"><EmptyState icon={Bookmark} title="No saved suppliers yet" text="Use the bookmark on any supplier card or company profile to save it here." action={<Button to="/suppliers" variant="navy">Find suppliers</Button>} /></div>
-        )}
-      </TabPanel>
+      {productsOnly ? (
+        <div className="mt-6">{productGrid}</div>
+      ) : (
+        <>
+          <Tabs tabs={[{ id: 'products', label: 'Products', count: items.length }, { id: 'suppliers', label: 'Suppliers', count: suppliers.length }]} active={tab} onChange={setTab} idPrefix="saved" className="mb-6" />
+          <TabPanel id={tab} idPrefix="saved">
+            {tab === 'products' ? (
+              productGrid
+            ) : suppliers.length ? (
+              <SupplierGrid companies={suppliers} loading={loading} />
+            ) : (
+              <div className="ts-card"><EmptyState icon={Bookmark} title="No saved suppliers yet" text="Use the bookmark on any supplier card or company profile to save it here." action={<Button to="/suppliers" variant="navy">Suppliers</Button>} /></div>
+            )}
+          </TabPanel>
+        </>
+      )}
       <ConfirmDialog
         open={confirming} onCancel={() => setConfirming(false)} confirmLabel="Remove all"
         title={tab === 'products' ? 'Remove all saved products?' : 'Remove all saved suppliers?'} text="This only clears the list in this browser."

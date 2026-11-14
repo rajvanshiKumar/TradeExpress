@@ -122,6 +122,16 @@ export default function SuperAdminUsers() {
     }
   };
 
+  const handleVerifyUser = async (u) => {
+    try {
+      await superAdminApi.verifyUser(u.id);
+      showToast(`${u.name || u.email} verified successfully. Official ID & Certificate issued.`, 'success');
+      fetchUsers(pagination.page);
+    } catch (err) {
+      showToast(err.message || 'Failed to verify user.', 'error');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -302,16 +312,18 @@ export default function SuperAdminUsers() {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        {u.role === 'SUPPLIER' ? (
+                        {u.role === 'SUPPLIER' || u.role === 'BUYER' ? (
                           <span
                             className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              u.isVerified
+                              u.kycStatus === 'VERIFIED'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : u.kycStatus === 'REJECTED'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
                                 : 'bg-amber-50 text-amber-700 border border-amber-200'
                             }`}
                           >
                             <ShieldCheck className="size-3" />
-                            {u.isVerified ? 'VERIFIED' : u.kycStatus || 'PENDING'}
+                            {u.kycStatus === 'VERIFIED' ? 'VERIFIED' : (u.kycStatus || 'PENDING')}
                           </span>
                         ) : (
                           <span className="text-slate-400">—</span>
@@ -324,6 +336,18 @@ export default function SuperAdminUsers() {
 
                       <td className="py-3.5 px-4 text-right sticky right-0 bg-white group-hover:bg-[#f8faf7] transition-colors z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)]">
                         <div className="flex items-center justify-end gap-1.5">
+                          {(u.role === 'BUYER' || u.role === 'SUPPLIER') && u.kycStatus !== 'VERIFIED' && !isDeleted && !isSuspended && (
+                            <button
+                              type="button"
+                              onClick={() => handleVerifyUser(u)}
+                              className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-2xs transition-colors flex items-center gap-1"
+                              title={`Verify ${u.role === 'BUYER' ? 'Buyer' : 'Supplier'} Account & Issue Official Documents`}
+                            >
+                              <ShieldCheck className="size-3" />
+                              Verify
+                            </button>
+                          )}
+
                           <button
                             type="button"
                             onClick={() => viewDetails(u)}
@@ -575,6 +599,13 @@ export default function SuperAdminUsers() {
                 <span className="text-slate-400 font-semibold block">PAN</span>
                 <span className="font-bold text-slate-800 font-mono">{selectedUser.pan || 'Not registered'}</span>
               </div>
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="text-slate-400 font-semibold block">KYC / Verification</span>
+                <span className={`inline-flex items-center gap-1 font-bold text-xs mt-0.5 ${selectedUser.kycStatus === 'VERIFIED' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  <ShieldCheck className="size-3.5" />
+                  {selectedUser.kycStatus === 'VERIFIED' ? 'VERIFIED' : (selectedUser.kycStatus || 'PENDING')}
+                </span>
+              </div>
             </div>
 
             {selectedUser.addresses?.length > 0 && (
@@ -591,7 +622,20 @@ export default function SuperAdminUsers() {
               </div>
             )}
 
-            <div className="flex justify-end pt-3 border-t border-slate-100">
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              {(selectedUser.role === 'BUYER' || selectedUser.role === 'SUPPLIER') && selectedUser.kycStatus !== 'VERIFIED' ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleVerifyUser(selectedUser);
+                    setDetailModalOpen(false);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <ShieldCheck className="size-4" />
+                  Verify {selectedUser.role === 'BUYER' ? 'Buyer' : 'Supplier'} Account &amp; Issue Certificate
+                </button>
+              ) : <div />}
               <button
                 type="button"
                 onClick={() => setDetailModalOpen(false)}

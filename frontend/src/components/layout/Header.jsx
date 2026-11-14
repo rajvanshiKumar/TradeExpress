@@ -39,7 +39,7 @@ function IconLink({ to, icon: Icon, label, count, className = "" }) {
       to={to}
       aria-label={`${label}${count ? `, ${count}` : ""}`}
       title={label}
-      className={`relative ${displayClass}size-8 shrink-0 items-center justify-center rounded-full text-navy-800 transition-colors hover:bg-navy-900/5 hover:text-navy-950 ${className}`}
+      className={`relative ${displayClass}size-8 sm:size-8.5 shrink-0 items-center justify-center rounded-full text-navy-800 transition-colors hover:bg-navy-900/5 hover:text-navy-950 ${className}`}
     >
       <Icon className="size-4" strokeWidth={1.75} aria-hidden="true" />
       <CountDot count={count} />
@@ -138,7 +138,7 @@ export default function Header() {
         </a>
 
         <div
-          className="w-full max-w-[102rem] mx-auto px-3 sm:px-4 lg:px-4 xl:px-6 flex items-center justify-between gap-2 lg:gap-3 xl:gap-4 h-14 sm:h-16 lg:h-[66px]"
+          className="w-full max-w-[102rem] mx-auto px-3 sm:px-4 lg:px-4 xl:px-6 flex items-center justify-between gap-3 lg:gap-4 xl:gap-6 h-14 sm:h-16 lg:h-[66px]"
         >
           {/* Left: Mobile menu button & Brand Logo */}
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -153,25 +153,26 @@ export default function Header() {
             <Logo size="sm" />
           </div>
 
-          {/* Center Navigation: Clean, optimized B2B wholesale marketplace links & About section */}
+          {/* Navigation: Balanced, equal gaps between components & optical centering */}
           <nav
             aria-label="Main"
             ref={megaRef}
             onMouseLeave={scheduleClose}
-            className="relative hidden items-center justify-center flex-1 min-w-0 gap-1 xl:gap-1.5 2xl:gap-2 lg:flex"
+            // "safe center": if the links ever need more room than they have, they never spill over the logo
+            className="relative hidden lg:flex items-center [justify-content:safe_center] gap-0.5 xl:gap-1 2xl:gap-2.5 mx-auto px-1 sm:px-2 min-w-0"
           >
             {[
               { label: "Products", to: "/products" },
               { label: "Categories", to: "/categories", megaMenu: true },
               { label: "Suppliers", to: "/suppliers" },
-              { label: "Request a Quote", to: "/rfq" },
               ...(!isAuthPage
                 ? [{ label: "Compare Products", to: "/compare-products" }]
                 : []),
-              { label: "Deals", to: "/products?deal=1" },
+              // Laptop widths (1024–1279px) have no room for Deals next to About Us; it returns from 1280px
+              { label: "Deals", to: "/products?deal=1", wideOnly: true },
             ].map((item) => {
               const active = isActive(item.to, location);
-              const pillClass = `relative inline-flex h-8.5 xl:h-9 items-center whitespace-nowrap rounded-full px-2 lg:px-2.5 xl:px-3 text-xs xl:text-[13px] font-semibold transition-all ${
+              const pillClass = `relative ${item.wideOnly ? "hidden xl:inline-flex" : "inline-flex"} h-8.5 xl:h-9 items-center whitespace-nowrap rounded-full px-1.5 xl:px-2.5 2xl:px-3 text-xs xl:text-[13px] font-semibold transition-all ${
                 active
                   ? "bg-navy-900/[0.08] text-navy-950 font-bold ring-1 ring-navy-900/10 shadow-2xs"
                   : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-950"
@@ -182,15 +183,14 @@ export default function Header() {
                   return (
                     <span className="inline-flex items-center gap-1 xl:gap-1.5">
                       <Scale className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
-                      <span className="hidden xl:inline">{t('nav.compareProducts', {}, 'Compare Products')}</span>
-                      <span className="xl:hidden">{t('nav.compareShort', {}, 'Compare')}</span>
+                      <span>{t('nav.compareProducts', {}, 'Compare Products')}</span>
                     </span>
                   );
                 }
                 if (label === "Deals") {
                   return (
                     <span className="inline-flex items-center gap-1 xl:gap-1.5">
-                      <BadgePercent className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                      <BadgePercent className="hidden 2xl:block size-3.5 shrink-0 opacity-75" aria-hidden="true" />
                       <span>{t('nav.deals', {}, 'Deals')}</span>
                     </span>
                   );
@@ -205,10 +205,10 @@ export default function Header() {
                   );
                 }
                 if (label === "Find Suppliers" || label === "Suppliers") {
-                  return t('nav.findSuppliers', {}, 'Suppliers');
+                  return t('nav.suppliers', {}, t('nav.findSuppliers', {}, 'Suppliers'));
                 }
                 if (label === "Explore Products" || label === "Products") {
-                  return t('nav.exploreProducts', {}, 'Products');
+                  return t('nav.products', {}, t('nav.exploreProducts', {}, 'Products'));
                 }
                 if (label === "Categories") {
                   return t('nav.categories', {}, 'Categories');
@@ -225,7 +225,7 @@ export default function Header() {
                   >
                     <Link
                       to={item.to}
-                      className={`relative inline-flex h-8.5 xl:h-9 items-center gap-1 whitespace-nowrap rounded-full px-2 lg:px-2.5 xl:px-3 text-xs xl:text-[13px] font-semibold transition-all ${
+                      className={`relative inline-flex h-8.5 xl:h-9 items-center gap-1 whitespace-nowrap rounded-full px-1.5 xl:px-2.5 2xl:px-3 text-xs xl:text-[13px] font-semibold transition-all ${
                         active || megaOpen
                           ? "bg-navy-900/[0.08] text-navy-950 font-bold ring-1 ring-navy-900/10 shadow-2xs"
                           : "text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-950"
@@ -274,7 +274,7 @@ export default function Header() {
           </nav>
 
           {/* Right Action Icons & User Account */}
-          <div className="flex shrink-0 items-center gap-1 sm:gap-1.5 xl:gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2 xl:gap-2.5 2xl:gap-3">
             <IconButton
               icon={searchOpen ? X : Search}
               label={searchOpen ? "Close search" : "Search"}
@@ -282,7 +282,7 @@ export default function Header() {
               aria-expanded={searchOpen}
               aria-controls="header-search"
               size="sm"
-              className="!size-8 shrink-0 max-lg:hidden"
+              className="!size-8 sm:!size-8.5 shrink-0 max-lg:hidden"
             />
             {/* Very narrow phones choose language from the menu ("Region, language & currency") so Sign up fits */}
             <LocationSelector className="max-[389px]:hidden" />

@@ -53,7 +53,9 @@ describe('Buyer registration validation', () => {
       return null;
     });
     const result = await registerBuyer(registration());
-    assert.equal(result.user.isVerified, true);
+    // Buyers start with PENDING KYC until approved by Admin as required by TradeExpress verification policy
+    assert.equal(result.user.isVerified, false);
+    assert.equal(result.user.kycStatus, 'PENDING');
     assert.equal(result.user.isPhoneVerified, true);
     assert.equal(result.user.passwordHash, undefined);
     assert.ok(result.token);

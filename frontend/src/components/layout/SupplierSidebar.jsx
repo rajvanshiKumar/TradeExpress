@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageSquare,
   Package,
   Plus,
   Settings,
@@ -28,6 +29,7 @@ import useAuth from '../../hooks/useAuth';
 import useNotifications from '../../hooks/useNotifications';
 import useOrders from '../../hooks/useOrders';
 import useInquiries from '../../hooks/useInquiries';
+import useMessages from '../../hooks/useMessages';
 import useProducts from '../../hooks/useProducts';
 import useSupplierCompany from '../../pages/supplier/useSupplierCompany';
 
@@ -51,6 +53,7 @@ export const SUPPLIER_NAV_GROUPS = [
     group: 'Orders & Fulfillment',
     items: [
       { id: 'orders', label: 'Purchase Orders', to: '/supplier/orders', icon: Package, badgeKey: 'orders' },
+      { id: 'messages', label: 'Messages', to: '/messages', icon: MessageSquare, badgeKey: 'messages' },
       { id: 'quotations', label: 'Quotations & RFQs', to: '/supplier/quotations', icon: ClipboardList, badgeKey: 'quotes' },
       { id: 'transport', label: 'Transport & Delivery Management', to: '/supplier/transport', icon: Truck },
     ],
@@ -84,6 +87,7 @@ export default function SupplierSidebar() {
   const { unreadCount: unreadNotifications } = useNotifications();
   const { orders } = useOrders();
   const { inquiries } = useInquiries();
+  const { unreadCount: unreadMessages } = useMessages();
 
   const myCompanyId = company?.id || user?.companyId || user?.id;
 
@@ -162,6 +166,8 @@ export default function SupplierSidebar() {
         return unreadNotifications > 0 ? (unreadNotifications > 99 ? '99+' : unreadNotifications) : null;
       case 'orders':
         return activeOrdersCount > 0 ? (activeOrdersCount > 99 ? '99+' : activeOrdersCount) : null;
+      case 'messages':
+        return unreadMessages > 0 ? (unreadMessages > 99 ? '99+' : unreadMessages) : null;
       case 'quotes':
         return openQuotesCount > 0 ? (openQuotesCount > 99 ? '99+' : openQuotesCount) : null;
       case 'lowStock':
@@ -330,39 +336,41 @@ export default function SupplierSidebar() {
       >
         <div className="flex flex-col rounded-2xl border border-slate-200/90 bg-white shadow-2xs overflow-hidden">
           {/* Header Brand Bar */}
-          <div className="relative border-b border-slate-200/80 bg-gradient-to-b from-slate-50/90 to-white p-3.5">
-            <div className="flex items-center justify-between">
-              {!collapsed ? (
-                <div className="min-w-0 flex items-center gap-2.5">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-800 to-navy-950 font-display font-extrabold text-white shadow-2xs text-sm">
-                    {displayName.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-navy-950">{displayName}</p>
-                    <p className="text-[11px] font-semibold text-emerald-700">Supplier Dashboard</p>
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                      <span>{supplierCode}</span>
-                      {isVerified && <ShieldCheck className="size-3 text-emerald-600" title="Verified" />}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="mx-auto flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-800 to-navy-950 font-bold text-white shadow-2xs text-sm">
+          <div
+            className={`relative border-b border-slate-200/80 bg-gradient-to-b from-slate-50/90 to-white transition-all duration-200 ${
+              collapsed ? 'p-2.5 flex flex-col items-center gap-2' : 'p-3.5 flex items-center justify-between'
+            }`}
+          >
+            {!collapsed ? (
+              <div className="min-w-0 flex items-center gap-2.5">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-800 to-navy-950 font-display font-extrabold text-white shadow-2xs text-sm">
                   {displayName.charAt(0).toUpperCase()}
                 </div>
-              )}
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold text-navy-950">{displayName}</p>
+                  <p className="text-[11px] font-semibold text-emerald-700">Supplier Dashboard</p>
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                    <span>{supplierCode}</span>
+                    {isVerified && <ShieldCheck className="size-3 text-emerald-600" title="Verified" />}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-800 to-navy-950 font-bold text-white shadow-2xs text-sm">
+                {displayName.charAt(0).toUpperCase()}
+              </div>
+            )}
 
-              {/* Collapse / Expand Toggle Button */}
-              <button
-                type="button"
-                onClick={toggleCollapsed}
-                className="flex size-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition shadow-2xs"
-                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              >
-                {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
-              </button>
-            </div>
+            {/* Collapse / Expand Toggle Button */}
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              className="flex size-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition shadow-2xs"
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+            </button>
           </div>
 
           {/* Navigation Items */}

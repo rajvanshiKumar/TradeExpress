@@ -46,7 +46,16 @@ const DIAL_RULES = {
 const RESEND_COOLDOWN_SECONDS = 60;
 const MAX_HOURLY_ATTEMPTS = 5;
 const MAX_VERIFY_ATTEMPTS = 5;
+// The "too many codes" limit counts sends within this window; after it passes the count starts again
+const RESEND_WINDOW_MS = 60 * 60 * 1000;
+
+/** The pending entry's resend window if it is still running, otherwise null (a fresh window starts). */
+export const activeResendWindow = (entry) =>
+  entry && entry.windowStartedAt && Date.now() - entry.windowStartedAt < RESEND_WINDOW_MS ? entry : null;
 const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+// Account Settings codes expire sooner, matching CODE_TTL_MS in accountSecurityService (5 minutes)
+export const ACCOUNT_CHANGE_OTP_EXPIRY_MS = 5 * 60 * 1000;
+export const MOBILE_OTP_PURPOSES = ['PHONE_CHANGE'];
 const VERIFICATION_TOKEN_VALIDITY_MS = 15 * 60 * 1000; // 15 minutes to complete registration
 // Expired in-memory OTP sessions are kept briefly so users see "expired" rather than "not requested"
 const EXPIRED_SESSION_GRACE_MS = 30 * 60 * 1000;
@@ -166,8 +175,12 @@ export function normalizeMobile(value, country = 'India') {
 
 /**
  * Requests sending an OTP to the given mobile number.
+ * `purpose: 'PHONE_CHANGE'` (Account Settings → Change Phone Number) gives the shorter account-settings
+ * expiry; signup verification keeps the standard expiry.
  */
-export async function requestMobileOtp({ phone, country = 'India' }) {
+export async function requestMobileOtp({ phone, country = 'India', purpose }) {
+  const expiryMs = purpose === 'PHONE_CHANGE' ? ACCOUNT_CHANGE_OTP_EXPIRY_MS : OTP_EXPIRY_MS;
+  const expiryMinutes = Math.round(expiryMs / 60000);
   const normalized = normalizeMobile(phone, country);
   if (!normalized.ok) {
     const error = new Error(`Enter a valid ${country} mobile number.`);
@@ -218,14 +231,14 @@ export async function requestMobileOtp({ phone, country = 'India' }) {
     smsResult = await powerstextService.sendOtpSms({
       mobile: msg91Mobile,
       otp: generatedOtp,
-      expiryMinutes: Number(process.env.MSG91_OTP_EXPIRY_MINUTES) || 10,
+      expiryMinutes: purpose === 'PHONE_CHANGE' ? expiryMinutes : Number(process.env.MSG91_OTP_EXPIRY_MINUTES) || 10,
     });
   } else {
-    await msg91Service.sendOtp(msg91Mobile);
+    await msg91Service.sendOtp(msg91Mobile, purpose === 'PHONE_CHANGE' ? { expiryMinutes } : {});
   }
 
   // 4. Save/update verification state
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+  const expiresAt = new Date(Date.now() + expiryMs);
   await prisma.mobileVerification.upsert({
     where: { phone: formattedPhone },
     create: {
@@ -254,6 +267,7 @@ export async function requestMobileOtp({ phone, country = 'India' }) {
     success: true,
     message: 'OTP has been sent to your mobile number via SMS.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
+    expiresInSeconds: expiryMs / 1000,
     phone: formattedPhone,
     ...(isDev ? { devOtp: generatedOtp || '123456' } : {}),
   };
@@ -553,20 +567,24 @@ export async function requestEmailLoginOtp({ email, role }) {
   // Account existence, role and signup completion are validated before any cooldown applies
   assertCanSignIn(user, { role, via: 'email' });
 
-  // Rate limiting & cooldown check (only reached when an OTP was genuinely sent recently)
-  const existing = emailLoginOtpStore.get(normalizedEmail);
+  // Rate limiting & cooldown check (only reached when an OTP was genuinely sent recently).
+  // A code that was already used to sign in ends that cycle: after logout the next sign-in starts fresh,
+  // so the cooldown and resend count only guard codes that are still pending.
+  const stored = emailLoginOtpStore.get(normalizedEmail);
+  const existing = stored && !stored.consumed ? stored : null;
   if (existing) {
     const elapsedSeconds = Math.floor((Date.now() - existing.lastSentAt) / 1000);
     if (elapsedSeconds < RESEND_COOLDOWN_SECONDS) {
       throw otpCooldownError(RESEND_COOLDOWN_SECONDS - elapsedSeconds);
     }
 
-    if (existing.resendCount >= MAX_HOURLY_ATTEMPTS) {
+    if (activeResendWindow(existing)?.resendCount >= MAX_HOURLY_ATTEMPTS) {
       const error = new Error('Too many OTP requests for this email address. Please try again after 1 hour.');
       error.statusCode = 429;
       throw error;
     }
   }
+  const loginWindow = activeResendWindow(existing);
 
   // Generate real cryptographically secure random 6-digit OTP (never fixed 123456 as generated real OTP)
   const generatedOtp = generateOtp();
@@ -581,7 +599,8 @@ export async function requestEmailLoginOtp({ email, role }) {
     otpHash,
     expiresAt: Date.now() + OTP_EXPIRY_MS,
     attempts: 0,
-    resendCount: existing ? existing.resendCount + 1 : 0,
+    resendCount: loginWindow ? loginWindow.resendCount + 1 : 0,
+    windowStartedAt: loginWindow ? loginWindow.windowStartedAt : Date.now(),
     lastSentAt: Date.now(),
   });
 
@@ -608,13 +627,14 @@ export function validateEmailLoginOtp({ email, otp, consume = false }) {
     throw error;
   }
 
-  // Check development OTP bypass
-  if (isDevOtpAllowed(cleanOtp)) {
-    return true;
-  }
-
   const normalizedEmail = (email || '').toLowerCase().trim();
   const session = emailLoginOtpStore.get(normalizedEmail);
+
+  // Check development OTP bypass (a successful sign-in still closes the pending code, as with a real OTP)
+  if (isDevOtpAllowed(cleanOtp)) {
+    if (consume && session) session.consumed = true;
+    return true;
+  }
 
   if (!session || session.consumed) {
     throw authError(AUTH_MESSAGES.OTP_NOT_REQUESTED, 400, AUTH_ERROR_CODES.OTP_NOT_REQUESTED);
@@ -638,7 +658,8 @@ export function validateEmailLoginOtp({ email, otp, consume = false }) {
   }
 
   if (consume) {
-    // Keep lastSentAt/resendCount so the resend cooldown and hourly limit still apply after sign-in
+    // Used for a successful sign-in: the code can never be reused, and the next sign-in (e.g. after logout)
+    // may request a new code immediately instead of waiting out this code's resend cooldown
     session.consumed = true;
   }
 
@@ -668,9 +689,11 @@ export async function requestMobileLoginOtp({ phone, country = 'India', role }) 
   // 1. Check registered account, role and signup completion before any cooldown applies
   assertCanSignIn(user, { role, via: 'mobile' });
 
-  // 2. Check rate limits & resend cooldown in MobileVerification
+  // 2. Check rate limits & resend cooldown in MobileVerification.
+  // A code that was already verified and used ends that cycle: after logout the next sign-in starts fresh.
+  const previousCodeUsed = Boolean(existingVerification?.used && existingVerification?.verified);
 
-  if (existingVerification) {
+  if (existingVerification && !previousCodeUsed) {
     const elapsedSeconds = Math.floor((Date.now() - new Date(existingVerification.lastSentAt).getTime()) / 1000);
     if (elapsedSeconds < RESEND_COOLDOWN_SECONDS) {
       throw otpCooldownError(RESEND_COOLDOWN_SECONDS - elapsedSeconds);
@@ -721,7 +744,7 @@ export async function requestMobileLoginOtp({ phone, country = 'India', role }) 
       token: sessionToken,
       verified: false,
       attempts: 0,
-      resendCount: { increment: 1 },
+      resendCount: previousCodeUsed ? 0 : { increment: 1 },
       lastSentAt: new Date(),
       expiresAt,
       used: false,
@@ -765,7 +788,13 @@ export async function verifyAndLoginMobile({ phone, country = 'India', otp, role
 
   // 2. Check dev OTP bypass or verify real OTP
   const isDev = isDevOtpAllowed(cleanOtp);
-  if (!isDev) {
+  if (isDev) {
+    // A successful sign-in closes any pending code, as with a real OTP (no lingering cooldown after logout)
+    await prisma.mobileVerification.updateMany({
+      where: { phone: formattedPhone, used: false },
+      data: { used: true, verified: true, verifiedAt: new Date() },
+    });
+  } else {
     const verification = await prisma.mobileVerification.findUnique({
       where: { phone: formattedPhone },
     });
@@ -882,12 +911,13 @@ export async function requestEmailVerificationOtp({ email, name, purpose = 'regi
       throw otpCooldownError(RESEND_COOLDOWN_SECONDS - elapsedSeconds);
     }
 
-    if (existing.resendCount >= MAX_HOURLY_ATTEMPTS) {
+    if (activeResendWindow(existing)?.resendCount >= MAX_HOURLY_ATTEMPTS) {
       const error = new Error('Too many OTP requests for this email. Please try again after 1 hour.');
       error.statusCode = 429;
       throw error;
     }
   }
+  const verificationWindow = activeResendWindow(existing);
 
   // Generate real cryptographically secure random 6-digit OTP
   const generatedOtp = generateOtp();
@@ -902,7 +932,8 @@ export async function requestEmailVerificationOtp({ email, name, purpose = 'regi
     otpHash,
     expiresAt: Date.now() + OTP_EXPIRY_MS,
     attempts: 0,
-    resendCount: existing?.resendCount !== undefined ? existing.resendCount + 1 : 0,
+    resendCount: verificationWindow ? verificationWindow.resendCount + 1 : 0,
+    windowStartedAt: verificationWindow ? verificationWindow.windowStartedAt : Date.now(),
     lastSentAt: Date.now(),
     verified: false,
     purpose,

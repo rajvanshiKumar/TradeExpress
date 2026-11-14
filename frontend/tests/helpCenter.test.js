@@ -90,7 +90,7 @@ describe('Help Center search', () => {
   });
 
   it('matches word prefixes for search-as-you-type', () => {
-    assert.ok(search('disp').some((result) => result.article.slug === 'raise-trade-dispute'));
+    assert.ok(search('disp').some((result) => result.article.slug === 'dispute-outcomes'));
     assert.ok(search('invo').some((result) => result.article.slug === 'gst-invoice'));
   });
 

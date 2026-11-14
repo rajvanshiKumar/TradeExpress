@@ -3,6 +3,8 @@ import Image from '../common/Image';
 import CompanyLogo from '../common/CompanyLogo';
 import VerificationBadge from '../common/VerificationBadge';
 import { SaveSupplierButton } from './SupplierCard';
+import { normalizeCountryName } from '../../utils/countryData';
+import { COUNTRY_FLAGS } from '../../utils/constants';
 
 /** Cover image and identity block at the top of a supplier profile. */
 export default function SupplierHeader({ company, productCount }) {
@@ -19,7 +21,10 @@ export default function SupplierHeader({ company, productCount }) {
           <div className="w-full min-w-0 sm:w-auto sm:flex-1 sm:pt-10">
             <h1 className="text-2xl font-extrabold sm:text-3xl">{company.name}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-              <span className="inline-flex items-center gap-1"><MapPin className="size-4" aria-hidden="true" />{company.flag} {company.city}, {company.country}</span>
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="size-4" aria-hidden="true" />
+                {company.flag || COUNTRY_FLAGS[normalizeCountryName(company.country)] || ''} {company.city ? `${company.city}, ` : ''}{normalizeCountryName(company.country) || company.country}
+              </span>
               <span>{company.businessType}</span>
               <span>{company.industry}</span>
             </p>

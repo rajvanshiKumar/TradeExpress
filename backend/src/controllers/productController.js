@@ -1,4 +1,5 @@
 import * as productService from '../services/productService.js';
+import * as visualSearchService from '../services/visualSearchService.js';
 
 export async function getProducts(req, res, next) {
   try {
@@ -148,5 +149,18 @@ export async function getSuggestions(req, res, next) {
     res.json({ success: true, data });
   } catch (error) {
     next(error);
+  }
+}
+
+/** POST /api/products/visual-search — multipart field "image": finds catalogue products matching a photo. */
+export async function visualSearch(req, res, next) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, code: 'INVALID_IMAGE', message: 'Upload a JPG, PNG or WEBP product image.' });
+    }
+    const data = await visualSearchService.searchByImage({ buffer: req.file.buffer, mimeType: req.file.mimetype });
+    return res.json({ success: true, data });
+  } catch (error) {
+    return next(error);
   }
 }

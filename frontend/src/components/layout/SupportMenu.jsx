@@ -1,21 +1,17 @@
 import { Link } from 'react-router-dom';
-import { FileText, FileWarning, Flag, Headset, LifeBuoy, Scale } from 'lucide-react';
+import { FileText, FileWarning, Flag, Headset, LifeBuoy } from 'lucide-react';
 import Dropdown from '../common/Dropdown';
-import useAuth from '../../hooks/useAuth';
 
 const ITEMS = [
   { label: 'Help Center', to: '/help', icon: LifeBuoy },
   { label: 'Policies & Rules', to: '/policies', icon: FileText },
-  { label: 'File a trade dispute', to: '/buyer/disputes', icon: Scale, buyersOnly: true },
   // Reporting forms arrive in a later phase; until then these open the Help Center support section
   { label: 'Report IP infringement', to: '/help#support', icon: FileWarning },
   { label: 'Report a violation', to: '/help#support', icon: Flag },
 ];
 
-/** Header support menu (headset icon): help, policies, disputes and reporting. */
+/** Header support menu (headset icon): help, policies and reporting. */
 export default function SupportMenu({ className = '' }) {
-  const { user } = useAuth();
-  const items = ITEMS.filter((item) => !item.buyersOnly || user?.role !== 'supplier');
 
   return (
     <Dropdown
@@ -37,7 +33,7 @@ export default function SupportMenu({ className = '' }) {
     >
       {({ close }) => (
         <ul className="py-1">
-          {items.map(({ label, to, icon: Icon }) => (
+          {ITEMS.map(({ label, to, icon: Icon }) => (
             <li key={label}>
               <Link
                 to={to}

@@ -32,6 +32,7 @@ export async function listProducts({
   sort = 'relevance',
   limit = 50,
   page = 1,
+  searchTerms,
 } = {}) {
   const where = { status: 'Active' };
 
@@ -39,15 +40,18 @@ export async function listProducts({
     where.categorySlug = category;
   }
 
+  const textMatch = (q) => [
+    { name: { contains: q } },
+    { summary: { contains: q } },
+    { description: { contains: q } },
+    { subcategory: { contains: q } },
+    { sku: { contains: q } },
+  ];
   if (search && search.trim()) {
-    const q = search.trim();
-    where.OR = [
-      { name: { contains: q } },
-      { summary: { contains: q } },
-      { description: { contains: q } },
-      { subcategory: { contains: q } },
-      { sku: { contains: q } },
-    ];
+    where.OR = textMatch(search.trim());
+  } else if (Array.isArray(searchTerms) && searchTerms.length) {
+    // Several alternative terms (visual search): a product matching any of them is a candidate
+    where.OR = searchTerms.map((term) => String(term).trim()).filter(Boolean).flatMap(textMatch);
   }
 
   if (minPrice !== undefined && minPrice !== '' && !isNaN(Number(minPrice))) {

@@ -1018,12 +1018,13 @@ export default function BuyerRegisterForm({ onRoleChange }) {
         <div className="space-y-5">
           {/* Full Name Field */}
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
+            <label htmlFor="buyer-signup-name" className="block text-xs font-bold text-slate-800 mb-1.5">
               Full Name <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <UserRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <input
+                id="buyer-signup-name"
                 type="text"
                 placeholder="Enter your full name"
                 value={values.name}
@@ -1038,12 +1039,13 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
           {/* Business Email Address Field with Inline Verify Button */}
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
+            <label htmlFor="buyer-signup-email" className="block text-xs font-bold text-slate-800 mb-1.5">
               Business Email Address <span className="text-red-500">*</span>
             </label>
             <div className="relative flex items-center">
               <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <input
+                id="buyer-signup-email"
                 type="email"
                 placeholder="you@example.com"
                 value={values.email}
@@ -1217,7 +1219,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           {/* COMBINED PHONE VERIFICATION BOX */}
           <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs space-y-5">
             <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+              <label htmlFor="buyer-signup-phone" className="block text-xs font-bold text-slate-800 mb-1.5">
                 Mobile Number <span className="text-red-500">*</span>
               </label>
 
@@ -1238,6 +1240,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                 <div className="relative flex-1">
                   <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                   <input
+                    id="buyer-signup-phone"
                     type="tel"
                     inputMode="numeric"
                     placeholder="e.g. 98765 43210"
@@ -1399,12 +1402,13 @@ export default function BuyerRegisterForm({ onRoleChange }) {
         <div className="space-y-4">
           {/* Optional Business / Company Name */}
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
+            <label htmlFor="buyer-signup-company" className="block text-xs font-bold text-slate-800 mb-1.5">
               Company / Legal Business Name <span className="text-slate-400 font-normal">(Optional)</span>
             </label>
             <div className="relative">
               <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <input
+                id="buyer-signup-company"
                 type="text"
                 placeholder="e.g. Apex Global Trade Pvt Ltd"
                 value={values.companyName}
@@ -1435,12 +1439,13 @@ export default function BuyerRegisterForm({ onRoleChange }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Aadhaar Number Input */}
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                <label htmlFor="buyer-signup-aadhaar" className="block text-xs font-bold text-slate-800 mb-1.5">
                   Aadhaar Card Number <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                   <input
+                    id="buyer-signup-aadhaar"
                     type="text"
                     placeholder="12-digit Aadhaar Number"
                     disabled={panAadhaarLinked}
@@ -1459,12 +1464,13 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
               {/* PAN Number Input */}
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                <label htmlFor="buyer-signup-pan" className="block text-xs font-bold text-slate-800 mb-1.5">
                   PAN Card Number <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <FileCheck2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                   <input
+                    id="buyer-signup-pan"
                     type="text"
                     placeholder="10-digit PAN (e.g. ABCDE1234F)"
                     disabled={panAadhaarLinked}

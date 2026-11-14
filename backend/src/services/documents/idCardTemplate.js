@@ -68,6 +68,13 @@ const TRUST_LINES = {
   EXPIRED: ['VALIDITY', 'EXPIRED'],
 };
 
+// Role wording: suppliers by default, buyers when data.audience === 'buyer'
+const ROLE_TEXT = {
+  supplier: { cardTitle: 'SUPPLIER ID CARD', nameLabel: 'SUPPLIER NAME', idLabel: 'SUPPLIER ID', trusted: 'B2B SELLER', verifyTitle: 'Supplier Verification', verifyText: 'Scan the QR code to verify this supplier’s registration details', footer: 'Sellers' },
+  buyer: { cardTitle: 'BUYER ID CARD', nameLabel: 'BUYER NAME', idLabel: 'BUYER ID', trusted: 'B2B BUYER', verifyTitle: 'Buyer Verification', verifyText: 'Scan the QR code to verify this buyer’s registration details', footer: 'Buyers' },
+};
+const roleText = (data) => (data.audience === 'buyer' ? ROLE_TEXT.buyer : ROLE_TEXT.supplier);
+
 function dashedRing(cx, cy, r, stroke) {
   return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${stroke}" stroke-width="2.600" stroke-dasharray="3 6" stroke-linecap="round"/>
     <circle cx="${cx}" cy="${cy}" r="${r - 10}" fill="none" stroke="${stroke}" stroke-width="2.600"/>`;
@@ -76,7 +83,8 @@ function dashedRing(cx, cy, r, stroke) {
 export function idCardFrontSvg(data, { preview = false } = {}) {
   const style = statusStyle(data.status);
   const trustColor = data.status === 'VERIFIED' ? GREEN : style.solid;
-  const trust = TRUST_LINES[data.status] || TRUST_LINES.PENDING;
+  const role = roleText(data);
+  const trust = data.status === 'VERIFIED' ? ['TRUSTED', role.trusted] : TRUST_LINES[data.status] || TRUST_LINES.PENDING;
 
   const nameSize = fitSize(data.supplierName, 'Pop600', 28, 240, 19);
   const nameLines = wrapText(data.supplierName, 'Pop600', nameSize, 240, 2);
@@ -101,7 +109,7 @@ export function idCardFrontSvg(data, { preview = false } = {}) {
     <rect x="${WIDTH - 26}" y="214" width="14" height="60" rx="3" fill="${BRIGHT}"/>
     <rect x="33" y="191" width="${WIDTH - 66}" height="108" rx="22" fill="url(#banner)"/>
     ${text(WIDTH / 2, 247, 'TRADEEXPRESS', { font: 'Pop700', size: 44, fill: '#ffffff', anchor: 'middle', spacing: 3.200 })}
-    ${text(WIDTH / 2, 281, 'SUPPLIER ID CARD', { font: 'Pop500', size: 19, fill: '#ffffff', anchor: 'middle', spacing: 5.400 })}
+    ${text(WIDTH / 2, 281, role.cardTitle, { font: 'Pop500', size: 19, fill: '#ffffff', anchor: 'middle', spacing: 5.400 })}
     <path d="M${WIDTH / 2 - 186} 274H${WIDTH / 2 - 146}M${WIDTH / 2 + 146} 274H${WIDTH / 2 + 186}" stroke="${BRIGHT}" stroke-width="3"/>
 
     ${photoFrame(data.photo)}
@@ -109,11 +117,11 @@ export function idCardFrontSvg(data, { preview = false } = {}) {
 
     <rect x="306" y="367" width="343" height="338" rx="20" fill="#fafbfa" stroke="#dfe6e1" stroke-width="1.500"/>
     <path d="M326 367C313 367 306 374 306 387V685C306 698 313 705 326 705" fill="none" stroke="#14893f" stroke-width="7"/>
-    ${infoRow(378, 'user', 'SUPPLIER NAME', nameLines, nameSize)}
+    ${infoRow(378, 'user', role.nameLabel, nameLines, nameSize)}
     <path d="M334 482H636" stroke="#e3e9e5" stroke-width="1.500"/>
     ${infoRow(486, 'store', 'BUSINESS NAME', businessLines, businessSize)}
     <path d="M334 598H636" stroke="#e3e9e5" stroke-width="1.500"/>
-    ${infoRow(602, 'idCard', 'SUPPLIER ID', [data.supplierId], idSize)}
+    ${infoRow(602, 'idCard', role.idLabel, [data.supplierId], idSize)}
 
     <rect x="33" y="774" width="${WIDTH - 66}" height="161" rx="22" fill="${SOFT}"/>
     ${dashedRing(103, 854, 46, trustColor)}
@@ -125,7 +133,12 @@ export function idCardFrontSvg(data, { preview = false } = {}) {
     ${data.signatory?.name ? text(512, 892, data.signatory.name, { font: 'Pop600', size: fitSize(data.signatory.name, 'Pop600', 22, 250, 14), fill: INK, anchor: 'middle' }) : ''}
     ${text(512, data.signatory?.name ? 920 : 892, designation, { font: 'Pop400', size: 17, fill: MUTED, anchor: 'middle' })}
 
-    ${data.status === 'VERIFIED' ? '' : `<text x="${WIDTH / 2}" y="600" text-anchor="middle" font-family="Pop700" font-size="86" fill="${style.solid}" opacity=".11" transform="rotate(-32 ${WIDTH / 2} 540)">${escapeXml(style.label)}</text>`}
+    ${data.status === 'VERIFIED' ? '' : `
+    <g transform="rotate(-30 ${WIDTH / 2} 550)">
+      <rect x="${WIDTH / 2 - 250}" y="490" width="500" height="110" rx="16" fill="${style.solid}" opacity=".09"/>
+      <text x="${WIDTH / 2}" y="570" text-anchor="middle" font-family="Pop700" font-size="82" font-weight="900" fill="${style.solid}" opacity=".24" letter-spacing="6">${escapeXml(style.label)}</text>
+      <text x="${WIDTH / 2}" y="596" text-anchor="middle" font-family="Pop600" font-size="16" font-weight="700" fill="${style.solid}" opacity=".35" letter-spacing="2">NOT VERIFIED • PENDING</text>
+    </g>`}
 
     <path d="M0 985H200L232 1003H0Z" fill="${BRIGHT}"/>
     <path d="M${WIDTH} 985H${WIDTH - 200}L${WIDTH - 232} 1003H${WIDTH}Z" fill="${BRIGHT}"/>
@@ -145,6 +158,7 @@ function footerColumn(index, iconName, line1, line2) {
 
 export function idCardBackSvg(data, { preview = false } = {}) {
   const style = statusStyle(data.status);
+  const role = roleText(data);
   const qrX = WIDTH / 2 - 113;
   const qrY = 450;
   const qrFrame = 226;
@@ -176,14 +190,20 @@ export function idCardBackSvg(data, { preview = false } = {}) {
     ${text(136, 274, 'Customer Support', { font: 'Pop600', size: 23, fill: INK })}
     ${text(136, 306, data.supportEmail, { font: 'Pop400', size: fitSize(data.supportEmail, 'Pop400', 19, 500, 13), fill: INK })}
 
-    ${text(WIDTH / 2, 386, 'Supplier Verification', { font: 'Pop600', size: 28, fill: INK, anchor: 'middle' })}
+    ${text(WIDTH / 2, 386, role.verifyTitle, { font: 'Pop600', size: 28, fill: INK, anchor: 'middle' })}
     <path d="M${WIDTH / 2 - 190} 377H${WIDTH / 2 - 164}M${WIDTH / 2 + 164} 377H${WIDTH / 2 + 190}" stroke="${INK}" stroke-width="2"/>
-    ${text(WIDTH / 2, 424, 'Scan the QR code to verify this supplier’s registration details', { font: 'Pop400', size: 17, fill: MUTED, anchor: 'middle' })}
+    ${text(WIDTH / 2, 424, role.verifyText, { font: 'Pop400', size: 17, fill: MUTED, anchor: 'middle' })}
 
     <rect x="${qrX}" y="${qrY - 12}" width="${qrFrame}" height="${qrFrame}" rx="20" fill="#ffffff" stroke="#14893f" stroke-width="5"/>
     ${qrSvg(data.publicProfileUrl, qrX + 15, qrY + 3, qrFrame - 30)}
     <rect x="${WIDTH / 2 - 27}" y="${qrY + 74}" width="54" height="54" rx="10" fill="#ffffff"/>
     <image x="${WIDTH / 2 - 23}" y="${qrY + 85}" width="46" height="32.400" href="${imageDataUrl('tradeexpress-mark.png')}"/>
+    ${data.status === 'VERIFIED' ? '' : `
+    <g transform="rotate(-30 ${WIDTH / 2} 560)">
+      <rect x="${WIDTH / 2 - 250}" y="500" width="500" height="110" rx="16" fill="${style.solid}" opacity=".09"/>
+      <text x="${WIDTH / 2}" y="580" text-anchor="middle" font-family="Pop700" font-size="82" font-weight="900" fill="${style.solid}" opacity=".24" letter-spacing="6">${escapeXml(style.label)}</text>
+      <text x="${WIDTH / 2}" y="606" text-anchor="middle" font-family="Pop600" font-size="16" font-weight="700" fill="${style.solid}" opacity=".35" letter-spacing="2">NOT VERIFIED • PENDING</text>
+    </g>`}
     ${statusNote}
 
     <rect x="33" y="714" width="302" height="88" rx="16" fill="${SOFT}"/>
@@ -206,7 +226,7 @@ export function idCardBackSvg(data, { preview = false } = {}) {
     ${restLines.map((line, i) => text(106, 882 + i * 26, line, { font: 'Pop400', size: 17.500, fill: INK })).join('')}
 
     <rect x="0" y="946" width="${WIDTH}" height="135" fill="${DARK}"/>
-    ${footerColumn(0, 'shield', 'Verified', 'Sellers')}
+    ${footerColumn(0, 'shield', 'Verified', role.footer)}
     ${footerColumn(1, 'box', 'Wide Product', 'Range')}
     ${footerColumn(2, 'users', 'Trusted B2B', 'Platform')}
     ${footerColumn(3, 'globe', 'Grow', 'Globally')}

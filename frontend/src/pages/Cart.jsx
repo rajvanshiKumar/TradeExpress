@@ -29,7 +29,7 @@ export default function Cart() {
       <div className="ts-container py-6 sm:py-8">
         {loading ? <div className="ts-card"><TableSkeleton rows={4} /></div> : lines.length === 0 ? (
           <div className="ts-card">
-            <EmptyState icon={ShoppingCart} title="Your cart is empty" text="Add wholesale products from the catalogue, or use Buy Now on any listing." action={<><Button to="/products">Explore Products</Button><Button to="/products?ready=1" variant="outline">Ready to ship</Button></>} />
+            <EmptyState icon={ShoppingCart} title="Your cart is empty" text="Add wholesale products from the catalogue, or use Buy Now on any listing." action={<><Button to="/products">Products</Button><Button to="/products?ready=1" variant="outline">Ready to ship</Button></>} />
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">

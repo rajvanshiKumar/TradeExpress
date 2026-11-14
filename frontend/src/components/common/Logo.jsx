@@ -34,7 +34,7 @@ export default function Logo({
     <img
       src={imgSrc}
       alt={BRAND.name}
-      className={`object-contain max-w-none transition-transform duration-200 hover:opacity-95 ${sizeClasses}`}
+      className={`object-contain max-w-none shrink-0 ${markOnly ? '' : 'aspect-[934/192]'} transition-transform duration-200 hover:opacity-95 ${sizeClasses}`}
       loading="eager"
       {...rest}
     />

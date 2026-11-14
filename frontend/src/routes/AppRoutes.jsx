@@ -43,8 +43,7 @@ const BuyerAddresses = lazy(() => import('../pages/buyer/BuyerAddresses'));
 const BuyerPayments = lazy(() => import('../pages/buyer/BuyerPayments'));
 const BuyerCardsAccounts = lazy(() => import('../pages/buyer/BuyerCardsAccounts'));
 const BuyerNotifications = lazy(() => import('../pages/buyer/BuyerNotifications'));
-const BuyerDisputes = lazy(() => import('../pages/buyer/BuyerDisputes'));
-const BuyerSettings = lazy(() => import('../pages/buyer/BuyerSettings'));
+const BuyerDocuments = lazy(() => import('../pages/buyer/BuyerDocuments'));
 const SupplierDashboard = lazy(() => import('../pages/supplier/SupplierDashboard'));
 const SupplierProducts = lazy(() => import('../pages/supplier/SupplierProducts'));
 const SupplierProductForm = lazy(() => import('../pages/supplier/SupplierProductForm'));
@@ -162,13 +161,16 @@ export default function AppRoutes() {
             <Route path="/buyer/wishlist" element={<BuyerWishlist />} />
             <Route path="/buyer/addresses" element={<BuyerAddresses />} />
             <Route path="/buyer/profile" element={<BuyerProfile />} />
+            <Route path="/buyer/documents" element={<BuyerDocuments />} />
             <Route path="/buyer/payments" element={<BuyerPayments />} />
             <Route path="/buyer/payment-methods" element={<BuyerCardsAccounts />} />
             <Route path="/buyer/notifications" element={<BuyerNotifications />} />
-            <Route path="/buyer/disputes" element={<BuyerDisputes />} />
+            {/* Buyer disputes page removed; old links go to My Orders */}
+            <Route path="/buyer/disputes" element={<Navigate to="/buyer/orders" replace />} />
             {/* Shipment tracking lives in My Orders → Order details → Track delivery */}
             <Route path="/buyer/shipments" element={<Navigate to="/buyer/orders" replace />} />
-            <Route path="/buyer/settings" element={<BuyerSettings />} />
+            {/* Buyer settings live in Account Settings; the old address keeps working for bookmarks */}
+            <Route path="/buyer/settings" element={<Navigate to="/buyer/account-settings" replace />} />
             <Route path="/buyer/account-settings" element={<AccountSettingsPage />} />
             <Route path="/buyer/account-settings/:section" element={<AccountSettingsPage />} />
           </Route>

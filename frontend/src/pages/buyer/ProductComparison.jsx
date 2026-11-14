@@ -4,7 +4,6 @@ import {
   Award,
   BadgeCheck,
   Building2,
-  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -46,6 +45,21 @@ import useContactSupplier from '../../hooks/useContactSupplier';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { apiGet } from '../../services/apiClient';
 import { slugify } from '../../utils/validators';
+import ComparisonFilterDropdown from '../../components/products/ComparisonFilterDropdown';
+import {
+  EMPTY_COMPARISON_FILTERS,
+  MOQ_LIMITS,
+  applyComparisonFilters,
+  buildFilterOptions,
+  countActiveFilters,
+  extractProductColors,
+  extractProductSizes,
+  hasListedMoq,
+  matchingSizes,
+  matchingValues,
+  moqUnitLabel,
+  withinMoqLimit,
+} from '../../utils/comparisonFilters';
 
 const safeSlug = (text) => {
   if (!text) return 'supplier';
@@ -195,52 +209,6 @@ const resolveColorHex = (colorName) => {
   return COLOR_HEX_MAP[key] || '#64748b';
 };
 
-const extractProductColors = (product) => {
-  if (!product) return [];
-  const colors = new Set();
-  const v = product.variants || {};
-  for (const [k, val] of Object.entries(v)) {
-    if (/colou?r|shade|wash|fabric|leather/i.test(k)) {
-      (Array.isArray(val) ? val : [val]).forEach((c) => c && colors.add(String(c).trim()));
-    }
-  }
-  const s = product.specifications || {};
-  for (const [k, val] of Object.entries(s)) {
-    if (/colou?r/i.test(k)) {
-      (Array.isArray(val) ? val : [val]).forEach((c) => c && colors.add(String(c).trim()));
-    }
-  }
-  if (Array.isArray(product.colors)) {
-    product.colors.forEach((c) => c && colors.add(String(c).trim()));
-  } else if (typeof product.color === 'string') {
-    product.color.split(',').forEach((c) => c && colors.add(c.trim()));
-  }
-  return Array.from(colors);
-};
-
-const extractProductSizes = (product) => {
-  if (!product) return [];
-  const sizes = new Set();
-  const v = product.variants || {};
-  for (const [k, val] of Object.entries(v)) {
-    if (/size|capacity|volume|fit|length|height|dimension/i.test(k)) {
-      (Array.isArray(val) ? val : [val]).forEach((s) => s && sizes.add(String(s).trim()));
-    }
-  }
-  const s = product.specifications || {};
-  for (const [k, val] of Object.entries(s)) {
-    if (/size|capacity|volume|dimension/i.test(k)) {
-      (Array.isArray(val) ? val : [val]).forEach((s) => s && sizes.add(String(s).trim()));
-    }
-  }
-  if (Array.isArray(product.sizes)) {
-    product.sizes.forEach((s) => s && sizes.add(String(s).trim()));
-  } else if (typeof product.size === 'string') {
-    product.size.split(',').forEach((s) => s && sizes.add(s.trim()));
-  }
-  return Array.from(sizes);
-};
-
 const POPULAR_SEARCH_SUGGESTIONS = [
   { label: 'Cotton T-Shirt (10 Sellers)', query: 'Cotton T-Shirt' },
   { label: 'Wireless Earbuds', query: 'Wireless Earbuds' },
@@ -249,6 +217,23 @@ const POPULAR_SEARCH_SUGGESTIONS = [
   { label: 'Cordless Impact Drill', query: 'Cordless Impact Drill' },
   { label: 'Kraft Paper Bags', query: 'Kraft Paper Shopping Bags' },
 ];
+
+function FilterChip({ label, swatch, onRemove }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 py-0.5 pl-2.5 pr-1 font-bold text-emerald-900 border border-emerald-200">
+      {swatch && <span aria-hidden="true" className="size-2 rounded-full border border-black/10" style={{ backgroundColor: swatch }} />}
+      <span>{label}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove filter ${label}`}
+        className="rounded-full p-0.5 hover:bg-emerald-100 hover:text-emerald-700 cursor-pointer"
+      >
+        <X className="size-3" />
+      </button>
+    </span>
+  );
+}
 
 export default function ProductComparison() {
   const { productId } = useParams();
@@ -275,12 +260,8 @@ export default function ProductComparison() {
   // Compared Products matching search
   const [comparedProducts, setComparedProducts] = useState([]);
   const [sortBy, setSortBy] = useState('relevance'); // 'relevance' | 'price-asc' | 'price-desc' | 'moq-asc' | 'moq-desc' | 'delivery-asc' | 'rating-desc'
-  const [selectedColor, setSelectedColor] = useState('');
-  const [selectedSize, setSelectedSize] = useState('');
-  const [maxMoq, setMaxMoq] = useState(null); // null | 100 | 200 | 500
-  const [filterVerifiedOnly, setFilterVerifiedOnly] = useState(false);
-  const [filterSampleOnly, setFilterSampleOnly] = useState(false);
-  const [filterReadyToShip, setFilterReadyToShip] = useState(false);
+  // { colors: string[], sizes: string[], maxMoq: null | 100 | 200 | 500, verifiedOnly, sampleOnly, readyToShip }
+  const [filters, setFilters] = useState(EMPTY_COMPARISON_FILTERS);
   const [showFiltersPanel, setShowFiltersPanel] = useState(true);
   const [cartQuantities, setCartQuantities] = useState({});
 
@@ -295,12 +276,7 @@ export default function ProductComparison() {
     setSearching(true);
     setHasSearched(true);
     setSearchQuerySubmitted(query);
-    setSelectedColor('');
-    setSelectedSize('');
-    setMaxMoq(null);
-    setFilterVerifiedOnly(false);
-    setFilterSampleOnly(false);
-    setFilterReadyToShip(false);
+    setFilters(EMPTY_COMPARISON_FILTERS);
 
     try {
       // 1. Fetch matching products from backend API (real-time live database)
@@ -408,6 +384,7 @@ export default function ProductComparison() {
             supplier: supplierObj,
             price: parseNumeric(item.price, 0),
             moq: parseNumeric(item.moq, 1),
+            moqListed: hasListedMoq(item.moq),
             stock: parseNumeric(item.stock, 100),
             leadTimeDays: parseNumeric(item.leadTimeDays ?? item.leadTime, 14),
             rating,
@@ -429,6 +406,7 @@ export default function ProductComparison() {
             supplier: p.supplier || { company: 'Verified Supplier', country: 'India', flag: '🇮🇳', isVerified: true, rating: 0, reviewCount: 0 },
             price: parseNumeric(p.price, 0),
             moq: parseNumeric(p.moq, 1),
+            moqListed: hasListedMoq(p.moq),
             stock: parseNumeric(p.stock, 100),
             leadTimeDays: parseNumeric(p.leadTimeDays, 14),
           }));
@@ -485,98 +463,61 @@ export default function ProductComparison() {
     setCartQuantities((prev) => ({ ...prev, [productId]: val }));
   };
 
-  // Discovered Filter Options across all compared products
-  const { availableColors, availableSizes } = useMemo(() => {
-    const colorCounts = new Map();
-    const sizeCounts = new Map();
-
-    (comparedProducts || []).forEach((p) => {
-      const pColors = extractProductColors(p);
-      pColors.forEach((c) => {
-        colorCounts.set(c, (colorCounts.get(c) || 0) + 1);
-      });
-
-      const pSizes = extractProductSizes(p);
-      pSizes.forEach((s) => {
-        sizeCounts.set(s, (sizeCounts.get(s) || 0) + 1);
-      });
-    });
-
+  // Filter options discovered from the compared sellers (counts are real seller counts)
+  const filterOptions = useMemo(() => {
+    const { colors, sizes } = buildFilterOptions(comparedProducts);
+    const unit = moqUnitLabel(comparedProducts);
+    const countWhere = (predicate) => comparedProducts.filter(predicate).length;
     return {
-      availableColors: Array.from(colorCounts.entries())
-        .map(([name, count]) => ({ name, count, hex: resolveColorHex(name) }))
-        .sort((a, b) => b.count - a.count),
-      availableSizes: Array.from(sizeCounts.entries())
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count),
+      colors: colors.map((c) => ({ value: c.name, label: c.name, count: c.count, swatch: resolveColorHex(c.name) })),
+      sizes: sizes.map((s) => ({ value: s.name, label: s.name, count: s.count })),
+      moqUnit: unit,
+      moq: MOQ_LIMITS.map((limit) => ({
+        value: limit,
+        label: `Up to ${limit} ${unit}`,
+        count: countWhere((p) => withinMoqLimit(p, limit)),
+      })),
+      credentials: [
+        { value: 'verifiedOnly', label: 'Verified Suppliers Only', icon: ShieldCheck, count: countWhere((p) => p.supplier?.isVerified) },
+        { value: 'sampleOnly', label: 'Sample Available', icon: PackageCheck, count: countWhere((p) => p.sampleAvailable !== false) },
+        { value: 'readyToShip', label: 'Ready to Ship', icon: Truck, count: countWhere((p) => p.readyToShip) },
+      ],
     };
   }, [comparedProducts]);
 
-  // Active filters count
-  const activeFiltersCount = useMemo(() => {
-    let count = 0;
-    if (selectedColor) count++;
-    if (selectedSize) count++;
-    if (maxMoq !== null) count++;
-    if (filterVerifiedOnly) count++;
-    if (filterSampleOnly) count++;
-    if (filterReadyToShip) count++;
-    return count;
-  }, [
-    selectedColor,
-    selectedSize,
-    maxMoq,
-    filterVerifiedOnly,
-    filterSampleOnly,
-    filterReadyToShip,
-  ]);
+  // Keep selections in sync with the data: drop colors/sizes no longer offered by any compared seller
+  useEffect(() => {
+    setFilters((prev) => {
+      const colorNames = new Set(filterOptions.colors.map((c) => c.value));
+      const sizeNames = new Set(filterOptions.sizes.map((s) => s.value));
+      const colors = prev.colors.filter((c) => colorNames.has(c));
+      const sizes = prev.sizes.filter((s) => sizeNames.has(s));
+      if (colors.length === prev.colors.length && sizes.length === prev.sizes.length) return prev;
+      return { ...prev, colors, sizes };
+    });
+  }, [filterOptions]);
 
-  const resetAllFilters = () => {
-    setSelectedColor('');
-    setSelectedSize('');
-    setMaxMoq(null);
-    setFilterVerifiedOnly(false);
-    setFilterSampleOnly(false);
-    setFilterReadyToShip(false);
-  };
+  const activeFiltersCount = countActiveFilters(filters);
+  const credentialKeys = filterOptions.credentials.map((c) => c.value).filter((key) => filters[key]);
+
+  const updateFilters = (patch) => setFilters((prev) => ({ ...prev, ...patch }));
+  const toggleListFilter = (key, value) =>
+    setFilters((prev) => ({
+      ...prev,
+      [key]: prev[key].includes(value) ? prev[key].filter((v) => v !== value) : [...prev[key], value],
+    }));
+  const setCredentialFilters = (keys) =>
+    updateFilters({
+      verifiedOnly: keys.includes('verifiedOnly'),
+      sampleOnly: keys.includes('sampleOnly'),
+      readyToShip: keys.includes('readyToShip'),
+    });
+
+  const resetAllFilters = () => setFilters(EMPTY_COMPARISON_FILTERS);
 
   // Filter and Sort Compared Products with robust numeric sorting
   const processedProducts = useMemo(() => {
-    let list = [...comparedProducts];
-
-    // Filter by Color
-    if (selectedColor) {
-      const targetColor = selectedColor.toLowerCase();
-      list = list.filter((p) => {
-        const pColors = extractProductColors(p).map((c) => c.toLowerCase());
-        return pColors.some((c) => c === targetColor || c.includes(targetColor) || targetColor.includes(c));
-      });
-    }
-
-    // Filter by Size
-    if (selectedSize) {
-      const targetSize = selectedSize.toLowerCase();
-      list = list.filter((p) => {
-        const pSizes = extractProductSizes(p).map((s) => s.toLowerCase());
-        return pSizes.some((s) => s === targetSize || s.includes(targetSize) || targetSize.includes(s));
-      });
-    }
-
-    // Filter by Max MOQ
-    if (maxMoq !== null && maxMoq !== undefined) {
-      list = list.filter((p) => parseNumeric(p.moq, 1) <= maxMoq);
-    }
-
-    // Verified Only
-    if (filterVerifiedOnly) {
-      list = list.filter((p) => p.supplier?.isVerified);
-    }
-    if (filterSampleOnly) {
-      list = list.filter((p) => p.sampleAvailable !== false);
-    }
-    if (filterReadyToShip) {
-      list = list.filter((p) => p.readyToShip);
-    }
+    const list = applyComparisonFilters(comparedProducts, filters);
 
     // Sort comparator (safe numeric comparisons that never return NaN)
     list.sort((a, b) => {
@@ -617,12 +558,7 @@ export default function ProductComparison() {
   }, [
     comparedProducts,
     sortBy,
-    selectedColor,
-    selectedSize,
-    maxMoq,
-    filterVerifiedOnly,
-    filterSampleOnly,
-    filterReadyToShip,
+    filters,
   ]);
 
   return (
@@ -822,11 +758,11 @@ export default function ProductComparison() {
             </div>
           </div>
 
-          {/* Interactive Filters Panel: Color, Size, MOQ, and Badges */}
-          <div className="rounded-2xl border border-navy-900/[0.08] bg-white p-4 sm:p-5 shadow-xs space-y-4">
+          {/* Interactive Filters Panel: Color, Size, MOQ, and Credentials dropdowns */}
+          <div className="rounded-2xl border border-navy-900/[0.08] bg-white p-4 sm:p-5 shadow-xs space-y-3">
             {/* Filter Section Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
                   <Filter className="size-4" />
                 </span>
@@ -836,13 +772,13 @@ export default function ProductComparison() {
                     {activeFiltersCount} Active
                   </span>
                 )}
-                <span className="text-xs text-navy-500 hidden sm:inline">
+                <span className="text-xs text-navy-500 hidden sm:inline" aria-live="polite">
                   Showing <strong className="text-navy-900 font-bold">{processedProducts.length}</strong> of {comparedProducts.length} Sellers
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
-                {activeFiltersCount > 0 && (
+                {activeFiltersCount > 0 && !showFiltersPanel && (
                   <button
                     type="button"
                     onClick={resetAllFilters}
@@ -855,6 +791,8 @@ export default function ProductComparison() {
                 <button
                   type="button"
                   onClick={() => setShowFiltersPanel(!showFiltersPanel)}
+                  aria-expanded={showFiltersPanel}
+                  aria-controls="comparison-filter-controls"
                   className="inline-flex items-center gap-1 text-xs font-semibold text-navy-600 hover:text-navy-900 px-2.5 py-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   <span>{showFiltersPanel ? 'Hide Filters' : 'Show Filters'}</span>
@@ -864,238 +802,79 @@ export default function ProductComparison() {
             </div>
 
             {showFiltersPanel && (
-              <div className="space-y-4 pt-1">
-                {/* 1. Color Filter */}
-                {availableColors.length > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-navy-800">
-                      <Palette className="size-3.5 text-brand-600" />
-                      <span>Filter by Color:</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedColor('')}
-                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                          !selectedColor
-                            ? 'bg-navy-900 text-white border-navy-900 shadow-xs'
-                            : 'bg-white text-navy-700 border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span>All Colors</span>
-                      </button>
-                      {availableColors.map((col) => {
-                        const isActive = selectedColor && (col.name.toLowerCase() === selectedColor.toLowerCase() || col.name.toLowerCase().includes(selectedColor.toLowerCase()));
-                        return (
-                          <button
-                            key={col.name}
-                            type="button"
-                            onClick={() => setSelectedColor(isActive ? '' : col.name)}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                              isActive
-                                ? 'bg-emerald-50 text-emerald-950 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs font-bold'
-                                : 'bg-white text-navy-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                            }`}
-                          >
-                            <span
-                              className="size-3 rounded-full shrink-0 border border-black/15 shadow-2xs"
-                              style={{ backgroundColor: col.hex }}
-                            />
-                            <span>{col.name}</span>
-                            <span className={`text-[10px] ml-0.5 ${isActive ? 'text-emerald-700 font-bold' : 'text-slate-400 font-normal'}`}>
-                              ({col.count})
-                            </span>
-                            {isActive && <Check className="size-3 text-emerald-600 stroke-[3]" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. Size Filter */}
-                {availableSizes.length > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-navy-800">
-                      <Ruler className="size-3.5 text-brand-600" />
-                      <span>Filter by Size / Capacity:</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedSize('')}
-                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                          !selectedSize
-                            ? 'bg-navy-900 text-white border-navy-900 shadow-xs'
-                            : 'bg-white text-navy-700 border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span>All Sizes</span>
-                      </button>
-                      {availableSizes.map((sz) => {
-                        const isActive = selectedSize && (sz.name.toLowerCase() === selectedSize.toLowerCase() || sz.name.toLowerCase().includes(selectedSize.toLowerCase()));
-                        return (
-                          <button
-                            key={sz.name}
-                            type="button"
-                            onClick={() => setSelectedSize(isActive ? '' : sz.name)}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                              isActive
-                                ? 'bg-emerald-50 text-emerald-950 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs font-bold'
-                                : 'bg-white text-navy-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                            }`}
-                          >
-                            <span>{sz.name}</span>
-                            <span className={`text-[10px] ml-0.5 ${isActive ? 'text-emerald-700 font-bold' : 'text-slate-400 font-normal'}`}>
-                              ({sz.count})
-                            </span>
-                            {isActive && <Check className="size-3 text-emerald-600 stroke-[3]" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. MOQ, Verification & Fast Logistics */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1 border-t border-slate-100">
-                  {/* MOQ Selector */}
-                  <div className="space-y-1">
-                    <span className="text-[11px] font-bold text-navy-700 block">Maximum MOQ:</span>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {[
-                        { label: 'All', value: null },
-                        { label: '≤ 100 pcs', value: 100 },
-                        { label: '≤ 200 pcs', value: 200 },
-                        { label: '≤ 500 pcs', value: 500 },
-                      ].map((m) => (
-                        <button
-                          key={String(m.value)}
-                          type="button"
-                          onClick={() => setMaxMoq(maxMoq === m.value ? null : m.value)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                            maxMoq === m.value
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                              : 'bg-white text-navy-700 border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Badges and Logistics */}
-                  <div className="space-y-1 sm:col-span-2">
-                    <span className="text-[11px] font-bold text-navy-700 block">Supplier Credentials & Logistics:</span>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setFilterVerifiedOnly(!filterVerifiedOnly)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                          filterVerifiedOnly
-                            ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-950 font-bold ring-1 ring-emerald-500/30'
-                            : 'bg-white border-slate-200 text-navy-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <ShieldCheck className={`size-3.5 ${filterVerifiedOnly ? 'text-emerald-600' : 'text-slate-400'}`} />
-                        <span>Verified Suppliers Only</span>
-                        {filterVerifiedOnly && <Check className="size-3 text-emerald-600 stroke-[3]" />}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setFilterSampleOnly(!filterSampleOnly)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                          filterSampleOnly
-                            ? 'bg-brand-500/15 border-brand-500/50 text-brand-950 font-bold ring-1 ring-brand-500/30'
-                            : 'bg-white border-slate-200 text-navy-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <PackageCheck className={`size-3.5 ${filterSampleOnly ? 'text-brand-600' : 'text-slate-400'}`} />
-                        <span>Sample Available</span>
-                        {filterSampleOnly && <Check className="size-3 text-brand-600 stroke-[3]" />}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setFilterReadyToShip(!filterReadyToShip)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                          filterReadyToShip
-                            ? 'bg-blue-500/15 border-blue-500/50 text-blue-950 font-bold ring-1 ring-blue-500/30'
-                            : 'bg-white border-slate-200 text-navy-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <Truck className={`size-3.5 ${filterReadyToShip ? 'text-blue-600' : 'text-slate-400'}`} />
-                        <span>Ready to Ship</span>
-                        {filterReadyToShip && <Check className="size-3 text-blue-600 stroke-[3]" />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Active Filters Summary Strip */}
-            {activeFiltersCount > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
-                <span className="font-semibold text-navy-500 mr-1">Active Filters:</span>
-                {selectedColor && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
-                    <span className="size-2 rounded-full border border-black/10" style={{ backgroundColor: resolveColorHex(selectedColor) }} />
-                    <span>Color: {selectedColor}</span>
-                    <button type="button" onClick={() => setSelectedColor('')} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                )}
-                {selectedSize && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
-                    <span>Size: {selectedSize}</span>
-                    <button type="button" onClick={() => setSelectedSize('')} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                )}
-                {maxMoq !== null && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
-                    <span>MOQ ≤ {maxMoq}</span>
-                    <button type="button" onClick={() => setMaxMoq(null)} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                )}
-                {filterVerifiedOnly && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
-                    <span>Verified Only</span>
-                    <button type="button" onClick={() => setFilterVerifiedOnly(false)} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                )}
-                {filterSampleOnly && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
-                    <span>Sample Available</span>
-                    <button type="button" onClick={() => setFilterSampleOnly(false)} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                )}
-                {filterReadyToShip && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-bold text-emerald-900 border border-emerald-200">
-                    <span>Ready to Ship</span>
-                    <button type="button" onClick={() => setFilterReadyToShip(false)} className="hover:text-emerald-700 ml-0.5 cursor-pointer">
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                )}
+              <div
+                id="comparison-filter-controls"
+                className="grid grid-cols-1 gap-2.5 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto] lg:items-stretch"
+              >
+                <ComparisonFilterDropdown
+                  label="Color"
+                  icon={Palette}
+                  allLabel="All Colors"
+                  emptyText="No colors listed"
+                  options={filterOptions.colors}
+                  selected={filters.colors}
+                  onChange={(colors) => updateFilters({ colors })}
+                  closeOnSelect
+                  panelClassName="left-0"
+                />
+                <ComparisonFilterDropdown
+                  label="Size / Capacity"
+                  icon={Ruler}
+                  allLabel="All Sizes"
+                  emptyText="No sizes listed"
+                  options={filterOptions.sizes}
+                  selected={filters.sizes}
+                  onChange={(sizes) => updateFilters({ sizes })}
+                  closeOnSelect
+                  panelClassName="left-0 sm:left-auto sm:right-0 lg:right-auto lg:left-0"
+                />
+                <ComparisonFilterDropdown
+                  label="Maximum MOQ"
+                  icon={Layers}
+                  allLabel="All MOQ"
+                  options={filterOptions.moq}
+                  selected={filters.maxMoq === null ? [] : [filters.maxMoq]}
+                  onChange={(values) => updateFilters({ maxMoq: values.length ? values[0] : null })}
+                  multiple={false}
+                  panelClassName="left-0"
+                />
+                <ComparisonFilterDropdown
+                  label="Credentials & Logistics"
+                  icon={ShieldCheck}
+                  allLabel="Any Supplier"
+                  options={filterOptions.credentials}
+                  selected={credentialKeys}
+                  onChange={setCredentialFilters}
+                  panelClassName="left-0 sm:left-auto sm:right-0"
+                />
                 <button
                   type="button"
                   onClick={resetAllFilters}
-                  className="font-bold text-brand-600 hover:text-brand-800 underline ml-2 cursor-pointer"
+                  disabled={activeFiltersCount === 0}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-navy-700 transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-navy-700 sm:col-span-2 lg:col-span-1 cursor-pointer"
                 >
-                  Clear all
+                  <RotateCcw className="size-3.5" />
+                  <span>Clear All Filters</span>
                 </button>
+              </div>
+            )}
+
+            {/* Active Filters Summary Strip: one removable chip per selection */}
+            {activeFiltersCount > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="font-semibold text-navy-500 mr-1">Active Filters:</span>
+                {filters.colors.map((color) => (
+                  <FilterChip key={`color-${color}`} label={`Color: ${color}`} swatch={resolveColorHex(color)} onRemove={() => toggleListFilter('colors', color)} />
+                ))}
+                {filters.sizes.map((size) => (
+                  <FilterChip key={`size-${size}`} label={`Size: ${size}`} onRemove={() => toggleListFilter('sizes', size)} />
+                ))}
+                {filters.maxMoq !== null && (
+                  <FilterChip label={`MOQ ≤ ${filters.maxMoq} ${filterOptions.moqUnit}`} onRemove={() => updateFilters({ maxMoq: null })} />
+                )}
+                {filters.verifiedOnly && <FilterChip label="Verified Only" onRemove={() => updateFilters({ verifiedOnly: false })} />}
+                {filters.sampleOnly && <FilterChip label="Sample Available" onRemove={() => updateFilters({ sampleOnly: false })} />}
+                {filters.readyToShip && <FilterChip label="Ready to Ship" onRemove={() => updateFilters({ readyToShip: false })} />}
               </div>
             )}
           </div>
@@ -1113,12 +892,12 @@ export default function ProductComparison() {
               </h3>
               <p className="text-xs text-navy-600 max-w-md mx-auto mb-4">
                 None of the {comparedProducts.length} sellers match your active filter combination ({[
-                  selectedColor && `Color: "${selectedColor}"`,
-                  selectedSize && `Size: "${selectedSize}"`,
-                  maxMoq !== null && `MOQ ≤ ${maxMoq}`,
-                  filterVerifiedOnly && 'Verified Only',
-                  filterSampleOnly && 'Sample Available',
-                  filterReadyToShip && 'Ready to Ship',
+                  filters.colors.length > 0 && `Color: ${filters.colors.map((c) => `"${c}"`).join(' or ')}`,
+                  filters.sizes.length > 0 && `Size: ${filters.sizes.map((s) => `"${s}"`).join(' or ')}`,
+                  filters.maxMoq !== null && `MOQ ≤ ${filters.maxMoq} ${filterOptions.moqUnit}`,
+                  filters.verifiedOnly && 'Verified Only',
+                  filters.sampleOnly && 'Sample Available',
+                  filters.readyToShip && 'Ready to Ship',
                 ].filter(Boolean).join(', ')}).
               </p>
               <Button variant="brand" size="sm" onClick={resetAllFilters} icon={RotateCcw}>
@@ -1133,12 +912,8 @@ export default function ProductComparison() {
               const orderQty = cartQuantities[product.id] || product.moq || 1;
               const productColors = extractProductColors(product);
               const productSizes = extractProductSizes(product);
-              const matchesActiveColor = selectedColor && productColors.some(
-                (c) => c.toLowerCase() === selectedColor.toLowerCase() || c.toLowerCase().includes(selectedColor.toLowerCase())
-              );
-              const matchesActiveSize = selectedSize && productSizes.some(
-                (s) => s.toLowerCase() === selectedSize.toLowerCase() || s.toLowerCase().includes(selectedSize.toLowerCase())
-              );
+              const matchedColors = matchingValues(productColors, filters.colors);
+              const matchedSizes = matchingSizes(productSizes, filters.sizes);
 
               return (
                 <div
@@ -1167,16 +942,16 @@ export default function ProductComparison() {
                           Ready to Ship
                         </span>
                       )}
-                      {matchesActiveColor && (
+                      {matchedColors.length > 0 && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
                           <CheckCircle2 className="size-3 text-emerald-600" />
-                          <span>Color: {selectedColor}</span>
+                          <span>Color: {matchedColors.join(', ')}</span>
                         </span>
                       )}
-                      {matchesActiveSize && (
+                      {matchedSizes.length > 0 && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
                           <CheckCircle2 className="size-3 text-emerald-600" />
-                          <span>Size: {selectedSize}</span>
+                          <span>Size: {matchedSizes.join(', ')}</span>
                         </span>
                       )}
                     </div>
@@ -1317,12 +1092,13 @@ export default function ProductComparison() {
                           <span className="text-muted block text-[11px] font-semibold">Available Colors:</span>
                           <div className="flex flex-wrap items-center gap-1.5">
                             {productColors.map((c) => {
-                              const isMatched = selectedColor && (c.toLowerCase() === selectedColor.toLowerCase() || c.toLowerCase().includes(selectedColor.toLowerCase()));
+                              const isMatched = matchingValues([c], filters.colors).length > 0;
                               return (
                                 <button
                                   key={c}
                                   type="button"
-                                  onClick={() => setSelectedColor(selectedColor === c ? '' : c)}
+                                  aria-pressed={filters.colors.includes(c)}
+                                  onClick={() => toggleListFilter('colors', c)}
                                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
                                     isMatched
                                       ? 'bg-emerald-50 text-emerald-950 border-emerald-500 ring-1 ring-emerald-500/20 font-bold shadow-2xs'
@@ -1348,12 +1124,13 @@ export default function ProductComparison() {
                           <span className="text-muted block text-[11px] font-semibold">Available Sizes / Capacities:</span>
                           <div className="flex flex-wrap items-center gap-1.5">
                             {productSizes.map((s) => {
-                              const isMatched = selectedSize && (s.toLowerCase() === selectedSize.toLowerCase() || s.toLowerCase().includes(selectedSize.toLowerCase()));
+                              const isMatched = matchingSizes([s], filters.sizes).length > 0;
                               return (
                                 <button
                                   key={s}
                                   type="button"
-                                  onClick={() => setSelectedSize(selectedSize === s ? '' : s)}
+                                  aria-pressed={filters.sizes.includes(s)}
+                                  onClick={() => toggleListFilter('sizes', s)}
                                   className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
                                     isMatched
                                       ? 'bg-emerald-50 text-emerald-950 border-emerald-500 ring-1 ring-emerald-500/20 font-bold shadow-2xs'

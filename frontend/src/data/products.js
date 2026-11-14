@@ -242,7 +242,16 @@ export function buildPriceTiers(price, moq) {
   ];
 }
 
-const products = rows.map(([name, companyNumber, category, subcategory, price, unit, moq, stock, leadTimeDays, flags, image, summary, variants], index) => {
+/**
+ * Sample products withdrawn from the catalogue (e.g. their photo no longer loads).
+ * They are filtered out after ids are assigned, so every other product keeps its id
+ * and existing carts, wishlists and orders still point to the right products.
+ */
+export const REMOVED_PRODUCT_SLUGS = new Set(['modern-minimalist-coffee-table']);
+
+export const isRemovedProduct = (product) => Boolean(product?.slug && REMOVED_PRODUCT_SLUGS.has(product.slug));
+
+const allProducts = rows.map(([name, companyNumber, category, subcategory, price, unit, moq, stock, leadTimeDays, flags, image, summary, variants], index) => {
   const number = 1001 + index;
   const isNew = flags.includes('N');
   const isPhoto = image.startsWith('photo-');
@@ -296,5 +305,7 @@ const products = rows.map(([name, companyNumber, category, subcategory, price, u
     createdAt: daysAgo(isNew ? 2 + (index % 9) : 40 + index * 4),
   };
 });
+
+const products = allProducts.filter((product) => !isRemovedProduct(product));
 
 export default products;

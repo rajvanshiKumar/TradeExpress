@@ -32,7 +32,7 @@ const SOCIAL_LINKS = [
 ];
 
 const QUICK_LINKS = [
-  { label: 'Explore Products', to: '/products' },
+  { label: 'Products', to: '/products' },
   { label: 'All Categories', to: '/categories' },
   { label: 'Verified Suppliers', to: '/suppliers' },
   { label: 'Ready to Ship', to: '/products?ready=true' },

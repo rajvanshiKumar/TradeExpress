@@ -92,7 +92,7 @@ export async function optionalAuth(req, res, next) {
         sessionsValidAfter: true,
       },
     });
-    if (user && user.isActive !== false && user.status !== 'SUSPENDED' && !isRevokedToken(user, payload) && await isSessionActive(payload)) {
+    if (user && user.isActive !== false && user.status !== 'SUSPENDED' && user.status !== 'DEACTIVATED' && !isRevokedToken(user, payload) && await isSessionActive(payload)) {
       const { sessionsValidAfter, ...currentUser } = user; // eslint-disable-line no-unused-vars
       req.user = currentUser;
     } else {

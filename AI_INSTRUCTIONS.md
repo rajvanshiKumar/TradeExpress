@@ -210,12 +210,12 @@ Managed via Prisma in `backend/prisma/schema.prisma` with 50 relational models.
    - `POST /api/auth/send-email-verification-otp` and `verify-email-verification-otp` for buyer signup.
    - `POST /api/auth/send-email-otp` and `verify-email-otp` for buyer OTP login and sensitive account changes.
 
-### Role Authorization Middleware
-- `requireRole(...roles)`: Allows access if `req.user.role === 'SUPER_ADMIN'` or if `roles.includes(req.user.role)`.
+### Role Authorization Middleware 
+- `requireRole(...roles)`: Allows access if `req.user.role === 'SUPER_ADMIN'` or if `roles.includes(req.user.role)`. 
 - `requireSuperAdmin`: Restricts access strictly to `SUPER_ADMIN`.
 - `requirePermission(code)`: Checks permission codes and wildcards (e.g. `transport.*`, `transport.manage`) for sub-admins.
 
----
+---------------
 
 ## 9. Complete RFQ & Quotation Negotiation Workflow
 
@@ -404,3 +404,5 @@ Managed via Prisma in `backend/prisma/schema.prisma` with 50 relational models.
      - Production Build: `npm --prefix frontend run build`
    - Never claim a test passed unless it was executed and exited with code 0.
 4. **Adherence to CLAUDE.md**: All conventions and requirements outlined in `CLAUDE.md` remain permanently in effect and are complemented by this specification.
+
+

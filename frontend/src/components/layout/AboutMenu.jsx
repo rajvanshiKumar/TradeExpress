@@ -4,11 +4,8 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
-  HelpCircle,
   Info,
   Layers,
-  Mail,
-  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import { useTranslation } from '../../i18n/LanguageContext';
@@ -27,27 +24,6 @@ const ABOUT_ITEMS = [
     icon: Layers,
     badge: 'Guide',
     description: 'Discover products, check MOQ tiers and trade securely.',
-  },
-  {
-    title: 'Buyer Protection',
-    to: '/info/buyer-protection',
-    icon: ShieldCheck,
-    badge: 'Safety',
-    description: 'Escrow settlements, quality inspection and dispute resolution.',
-  },
-  {
-    title: 'Help Center & FAQs',
-    to: '/help',
-    icon: HelpCircle,
-    badge: 'Support',
-    description: 'Wholesale guides, policies, and support ticket resolution.',
-  },
-  {
-    title: 'Contact Support',
-    to: '/info/contact',
-    icon: Mail,
-    badge: 'Desk',
-    description: 'Direct inquiry form for customer care and partnerships.',
   },
 ];
 
@@ -102,13 +78,13 @@ export default function AboutMenu({ active = false }) {
         aria-expanded={open}
         aria-haspopup="true"
         aria-current={active ? 'page' : undefined}
-        className={`relative inline-flex h-9 xl:h-9.5 items-center gap-1.5 whitespace-nowrap rounded-full px-3 xl:px-3.5 text-xs xl:text-[13.5px] font-semibold transition-all duration-150 ${
+        className={`relative inline-flex h-8.5 xl:h-9 items-center gap-1 xl:gap-1.5 whitespace-nowrap rounded-full px-1.5 xl:px-2.5 2xl:px-3 text-xs xl:text-[13px] font-semibold transition-all duration-150 ${
           active || open
             ? 'bg-navy-900/[0.08] text-navy-950 font-bold ring-1 ring-navy-900/10'
             : 'text-navy-700 hover:bg-navy-900/[0.04] hover:text-navy-950'
         }`}
       >
-        <Info className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+        <Info className="hidden 2xl:block size-3.5 shrink-0 opacity-75" aria-hidden="true" />
         <span>{t('nav.about', {}, 'About Us')}</span>
         <button
           type="button"
@@ -131,7 +107,7 @@ export default function AboutMenu({ active = false }) {
         <div
           role="menu"
           aria-orientation="vertical"
-          className="ts-dropdown-anim-center absolute left-1/2 -translate-x-1/2 top-full mt-2.5 z-50 w-[23rem] overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 backdrop-blur-2xl p-2 text-slate-900 shadow-[0_20px_48px_-10px_rgba(11,39,22,0.18),0_0_0_1px_rgba(0,0,0,0.06)]"
+          className="ts-dropdown-anim-center absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 backdrop-blur-2xl p-2 text-slate-900 shadow-[0_20px_48px_-10px_rgba(11,39,22,0.18),0_0_0_1px_rgba(0,0,0,0.06)]"
         >
           {/* Subtle Emerald Top Accent */}
           <div

@@ -163,10 +163,17 @@ export default function SupplierDocuments() {
           <h2 id="certificate-heading" className="flex items-center gap-2 text-base font-bold text-navy-900">
             <FileBadge2 className="size-5 text-emerald-700" aria-hidden="true" /> Supplier Registration Certificate
           </h2>
-          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
+          <div className="relative mt-3 overflow-hidden rounded-xl border border-slate-200">
             {printable
               ? <DocumentImage load={() => myPreview('certificate').then((r) => r.blob)} loadKey={previewKey} alt="Your Registration Certificate" className="min-h-48" />
               : <div className="flex min-h-48 items-center justify-center bg-slate-50 p-4 text-center text-sm text-slate-500">Available once your details are complete.</div>}
+            {doc.documentStatus !== 'VERIFIED' && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="select-none font-display text-4xl sm:text-6xl font-black uppercase tracking-widest text-amber-600/35 -rotate-12 border-4 border-dashed border-amber-600/35 px-6 py-2 rounded-2xl shadow-sm">
+                  {doc.documentStatus === 'REJECTED' ? 'REJECTED' : 'PENDING'}
+                </span>
+              </div>
+            )}
           </div>
           <dl className="mt-3 flex-1">
             <Row label="Certificate Number" value={doc.certificateNumber} />
@@ -187,8 +194,26 @@ export default function SupplierDocuments() {
           <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl bg-slate-100 p-3">
             {printable ? (
               <>
-                <DocumentImage load={() => myPreview('id-card-front').then((r) => r.blob)} loadKey={previewKey} alt="Front of your Supplier ID Card" className="min-h-48" />
-                <DocumentImage load={() => myPreview('id-card-back').then((r) => r.blob)} loadKey={previewKey} alt="Back of your Supplier ID Card" className="min-h-48" />
+                <div className="relative overflow-hidden rounded-lg">
+                  <DocumentImage load={() => myPreview('id-card-front').then((r) => r.blob)} loadKey={previewKey} alt="Front of your Supplier ID Card" className="min-h-48" />
+                  {doc.documentStatus !== 'VERIFIED' && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <span className="select-none font-display text-xl sm:text-2xl font-black uppercase tracking-widest text-amber-600/35 -rotate-12 border-2 border-dashed border-amber-600/35 px-3 py-1 rounded-xl">
+                        {doc.documentStatus === 'REJECTED' ? 'REJECTED' : 'PENDING'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="relative overflow-hidden rounded-lg">
+                  <DocumentImage load={() => myPreview('id-card-back').then((r) => r.blob)} loadKey={previewKey} alt="Back of your Supplier ID Card" className="min-h-48" />
+                  {doc.documentStatus !== 'VERIFIED' && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <span className="select-none font-display text-xl sm:text-2xl font-black uppercase tracking-widest text-amber-600/35 -rotate-12 border-2 border-dashed border-amber-600/35 px-3 py-1 rounded-xl">
+                        {doc.documentStatus === 'REJECTED' ? 'REJECTED' : 'PENDING'}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </>
             ) : <div className="col-span-2 flex min-h-48 items-center justify-center p-4 text-center text-sm text-slate-500">Available once your details are complete.</div>}
           </div>

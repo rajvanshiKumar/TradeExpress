@@ -26,11 +26,12 @@ export default function useContactSupplier() {
       const targetSupplierId = company?.supplierId || product?.supplierId || null;
       const targetProductId = product?.id || null;
 
-      // 1. Instant cache match: check if a thread for this supplier/product already exists in memory
+      // 1. Instant match: check if a thread for this supplier/company already exists in memory
       const existing = (conversations || []).find((c) => {
-        if (targetProductId && (c.productId === targetProductId || c.product?.id === targetProductId || c.product?.slug === targetProductId)) return true;
         if (targetSupplierId && (c.supplierId === targetSupplierId || c.supplier?.id === targetSupplierId)) return true;
         if (targetCompanyId && (c.companyId === targetCompanyId || c.company?.id === targetCompanyId)) return true;
+        if (company?.name && (c.supplier?.company === company.name || c.subject?.includes(company.name))) return true;
+        if (targetProductId && (c.productId === targetProductId || c.product?.id === targetProductId || c.product?.slug === targetProductId)) return true;
         return false;
       });
 
@@ -39,15 +40,7 @@ export default function useContactSupplier() {
         return;
       }
 
-      // 2. Instant responsive navigation: navigate immediately to Messages with context params
-      const searchParams = new URLSearchParams();
-      if (targetCompanyId) searchParams.set('company', targetCompanyId);
-      if (targetSupplierId) searchParams.set('supplier', targetSupplierId);
-      if (targetProductId) searchParams.set('product', targetProductId);
-
-      navigate(`/messages?${searchParams.toString()}`);
-
-      // 3. Initiate or retrieve thread in background and switch to conversation id
+      // 2. Initiate or retrieve thread, then navigate directly to conversation id
       try {
         const id = await startConversation({
           company,
@@ -58,11 +51,20 @@ export default function useContactSupplier() {
           initialMessage,
         });
         if (id) {
-          navigate(`/messages?c=${id}`, { replace: true });
+          navigate(`/messages?c=${id}`);
+          return;
         }
       } catch (err) {
         console.warn('Start conversation error:', err);
       }
+
+      // Fallback navigation with params only if conversation could not be resolved immediately
+      const searchParams = new URLSearchParams();
+      if (targetCompanyId) searchParams.set('company', targetCompanyId);
+      if (targetSupplierId) searchParams.set('supplier', targetSupplierId);
+      if (targetProductId) searchParams.set('product', targetProductId);
+
+      navigate(`/messages?${searchParams.toString()}`);
     },
     [user, conversations, startConversation, navigate, location.pathname, location.search]
   );

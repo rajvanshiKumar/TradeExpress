@@ -27,6 +27,13 @@ describe('Account Settings structure', () => {
     assert.ok(!rows.find((row) => row.id === 'tax').roles.includes('super_admin'));
   });
 
+  it('never offers privacy, delete, sessions, or two-factor to buyers', () => {
+    assert.ok(!rows.find((row) => row.id === 'delete').roles.includes('buyer'));
+    assert.ok(!rows.find((row) => row.id === 'privacy').roles.includes('buyer'));
+    assert.ok(!rows.find((row) => row.id === 'sessions').roles.includes('buyer'));
+    assert.ok(!rows.find((row) => row.id === 'two-factor').roles.includes('buyer'));
+  });
+
   it('has a dashboard home for each role', () => {
     assert.deepEqual(DASHBOARD_HOME, { buyer: '/buyer', supplier: '/supplier', super_admin: '/super-admin' });
   });

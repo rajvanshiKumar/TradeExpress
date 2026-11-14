@@ -6,9 +6,8 @@ import seedUsers, { DEFAULT_NOTIFICATION_PREFS } from '../data/users';
 import { ADMIN_EMAIL, ADMIN_EMAILS, ADMIN_PASSWORD_HASH, ADMIN_PROFILE, SUPER_ADMIN_EMAIL, SUPER_ADMIN_PROFILE, isAdminConfigured } from '../config/admin';
 import { DEFAULT_PREFERENCES, STORAGE_KEYS } from '../utils/constants';
 import { normalizeEmail } from '../utils/validators';
-import { hashPassword, isCryptoAvailable, verifyPassword } from '../utils/passwords';
+import { isCryptoAvailable } from '../utils/passwords';
 import { fullKey, removeStorage } from '../utils/storage';
-import makeId from '../utils/ids';
 import { authFetch } from '../api/authClient';
 import {
   AUTH_CHANGED_EVENT,
@@ -390,30 +389,28 @@ export function AuthProvider({ children }) {
         }
       }
     } catch (err) {
-      console.warn('Backend registration failed.');
-      if (String(role).toLowerCase() === 'buyer') {
-        return { ok: false, error: err?.message || 'Unable to reach the registration server. Please try again.' };
-      }
+      return { ok: false, error: err?.message || 'Unable to reach the registration server. Please try again.' };
     }
 
-    // Only if backend was unreachable, fall back to checking local memory
-    if (!backendUser && (clean === ADMIN_EMAIL || accounts.some((item) => item.email.toLowerCase() === clean))) {
-      return { ok: false, error: 'An account with this email already exists.' };
+    // An account exists only once the server has created it: never sign in to a browser-only account
+    if (!backendUser?.id) {
+      return { ok: false, error: 'Registration could not be completed. Please try again.' };
     }
 
+    // The password itself (or a hash of it) is never kept in the browser
     const account = {
-      id: backendUser?.id || makeId('TS-U'), status: 'Active', name: name.trim(), email: clean, role, company: company.trim(), companyId: null,
-      country, city: city.trim(), phone, joinedAt: backendUser?.createdAt || new Date().toISOString(), notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
-      passwordHash: await hashPassword(password),
+      id: backendUser.id, status: 'Active', name: name.trim(), email: clean, role, company: company.trim(), companyId: null,
+      country, city: city.trim(), phone, joinedAt: backendUser.createdAt || new Date().toISOString(), notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
+      passwordHash: '',
     };
     // Replace any stale local entry for this email and save the new verified account
     setAccounts((previous) => [account, ...previous.filter((item) => item.email.toLowerCase() !== clean)]);
     setSession(newSession(account.id, account.role));
     return { ok: true, user: account };
-  }, [accounts, setAccounts, setSession]);
+  }, [setAccounts, setSession]);
 
   /** Directly sets session and local account state from successful backend auth */
-  const setAuthUser = useCallback(async (backendUser, token, rawPassword = '') => {
+  const setAuthUser = useCallback(async (backendUser, token) => {
     if (!backendUser?.id) return null;
     if (token) {
       storeAuthToken(token, slotForRole(backendUser.role));
@@ -433,7 +430,8 @@ export function AuthProvider({ children }) {
       avatarUrl: backendUser.avatarUrl || null,
       joinedAt: backendUser.createdAt || new Date().toISOString(),
       notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
-      passwordHash: rawPassword ? await hashPassword(rawPassword) : '',
+      // The password (or a hash of it) is never kept in the browser: the server is the only authority
+      passwordHash: '',
     };
     setAccounts((prev) => [activeAccount, ...prev.filter((a) => a.id !== activeAccount.id && a.email?.toLowerCase() !== activeAccount.email)]);
     startTransition(() => {

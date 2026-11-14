@@ -2,12 +2,75 @@
 
 const infoPages = {
   about: {
-    title: 'About TradeExpress',
-    intro: 'TradeExpress is an international B2B marketplace where importers, wholesalers and retailers discover manufacturers, exporters and trading companies, compare wholesale prices and request quotations.',
+    title: 'About Us – TradeExpress',
+    intro: 'Connecting Businesses. Creating Opportunities. Powering Growth.',
     sections: [
-      { heading: 'Built for business buyers', body: ['Every listing shows its minimum order quantity and quantity price tiers in Indian Rupees, so buyers can see what volume does to the unit cost before they ask for a quote.', 'Suppliers manage their own company profile, product listings, inquiries and orders from a supplier dashboard.'] },
-      { id: 'how-it-works', heading: 'How it works', body: ['Search the catalogue or browse by category, compare suppliers, send a request for quotation, then place an order with Buy Now or from your cart.'] },
-      { heading: 'Current limitations', body: ['TradeExpress does not yet verify suppliers, hold payments or arrange freight. Online payment processing is not yet connected, and account data is stored in your browser in this version of the site.'] },
+      {
+        heading: 'Who We Are',
+        body: [
+          'TradeExpress is a business-focused digital marketplace created to support the evolving needs of wholesale and commercial trade.',
+          'We aim to reduce the complexity of traditional B2B transactions by providing a centralized platform where buyers can explore multiple suppliers and sellers can showcase their products to a wider business audience.',
+          'Whether you are a manufacturer looking to expand your distribution network, a wholesaler seeking new customers, or a business owner sourcing products in bulk, TradeExpress is designed to make the process simpler and more organized.',
+          'Our focus is on building a professional trading environment that encourages transparency, fair competition, and long-term business relationships.',
+        ],
+      },
+      {
+        heading: 'Our Mission',
+        body: [
+          'To make B2B trading simpler, smarter, and more accessible for every business.',
+          'Our mission is to empower buyers and sellers through digital technology, efficient product discovery, transparent business information, and practical tools that support better purchasing and selling decisions.',
+          'We strive to create opportunities for businesses of different sizes to connect, compete, and grow in an increasingly digital marketplace.',
+        ],
+      },
+      {
+        heading: 'Our Vision',
+        body: [
+          'To become a trusted and preferred digital marketplace for B2B trade.',
+          'We envision a connected business ecosystem where geographical boundaries and traditional sourcing challenges are reduced through technology.',
+          'Our long-term vision is to help businesses expand their market reach, discover new trading opportunities, and establish sustainable commercial relationships.',
+        ],
+      },
+      {
+        id: 'how-it-works',
+        heading: 'What We Offer',
+        body: [
+          '1. A Comprehensive B2B Marketplace: Explore products across diverse business categories, compare available options, and discover suppliers based on your sourcing requirements.',
+          '2. Wholesale & Bulk Purchasing: Discover products with minimum order quantities (MOQ), available wholesale pricing, and quantity-based discounts offered by sellers.',
+          '3. Request for Quotation (RFQ): Submit product-specific or general sourcing requirements and receive quotations from relevant suppliers, helping you evaluate suitable purchasing options.',
+          '4. Product Comparison: Compare product specifications, pricing, minimum order quantities, and other relevant details to make more informed procurement decisions.',
+          '5. Business Growth Opportunities: Manufacturers, suppliers, and wholesalers can showcase their offerings, reach prospective business buyers, and explore opportunities beyond their existing customer networks.',
+          '6. Streamlined Trading Experience: Access tools for managing product listings, inquiries, quotations, orders, and other marketplace activities through an organized digital experience.',
+        ],
+      },
+      {
+        heading: 'Why Choose TradeExpress?',
+        body: [
+          'Built for Business: TradeExpress focuses on the specific requirements of B2B commerce, including bulk purchases, wholesale pricing, supplier discovery, and business procurement.',
+          'Transparency in Trading: We aim to provide clear product information, pricing details, supplier profiles, and marketplace policies to support informed business decisions.',
+          'Opportunities for Every Business: From emerging enterprises to established manufacturers and distributors, TradeExpress is designed to support businesses at different stages of growth.',
+          'Technology-Driven Convenience: Our platform brings important trading activities into one digital environment, helping businesses reduce manual processes and improve efficiency.',
+          'Long-Term Business Relationships: We believe successful B2B commerce is not only about completing transactions but also about building dependable and sustainable commercial connections.',
+        ],
+      },
+      {
+        heading: 'Our Core Values',
+        body: [
+          'Trust & Integrity: Encouraging responsible business practices, honest communication, and transparent marketplace interactions.',
+          'Customer Focus: Understanding the practical needs of buyers and sellers and continuously improving the platform experience.',
+          'Innovation: Using technology to simplify traditional trading processes and create better business opportunities.',
+          'Fairness: Promoting a marketplace environment where businesses can compete based on their products, pricing, service, and capabilities.',
+          'Growth & Collaboration: Supporting meaningful partnerships that contribute to long-term business success.',
+        ],
+      },
+      {
+        heading: 'Our Commitment',
+        body: [
+          'At TradeExpress, our commitment goes beyond providing an online product marketplace.',
+          'We are focused on developing a dependable digital trading ecosystem that supports business discovery, efficient communication, informed procurement, and transparent marketplace processes.',
+          'We recognize that trust plays an essential role in B2B transactions. Therefore, we aim to continuously strengthen our platform through clear policies, improved user experiences, responsible marketplace practices, and effective customer support.',
+          'Our goal is to make TradeExpress a valuable business partner in the digital trading journey of buyers and sellers.',
+        ],
+      },
     ],
   },
   'buyer-protection': {

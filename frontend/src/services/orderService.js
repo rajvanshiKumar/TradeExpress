@@ -2,6 +2,7 @@ import seedOrders from '../data/orders';
 import { STORAGE_KEYS } from '../utils/constants';
 import { createCollection } from './localCollection';
 import { apiGet, apiPost, isApiConfigured } from './apiClient';
+import { getAuthToken } from '../utils/authSession';
 
 const localOrders = createCollection(STORAGE_KEYS.orders, seedOrders);
 
@@ -63,7 +64,8 @@ function formatApiOrder(created, source = 'cart') {
 
 const orderService = {
   listOrders: async (options) => {
-    if (isApiConfigured) {
+    // "My orders" exists only for a signed-in user: no request (and no 401) for signed-out visitors
+    if (isApiConfigured && getAuthToken()) {
       try {
         const res = await apiGet('orders/my-orders');
         if (res.data && Array.isArray(res.data) && res.data.length > 0) {

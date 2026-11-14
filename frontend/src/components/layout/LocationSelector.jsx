@@ -203,7 +203,7 @@ export default function LocationSelector({ className = '' }) {
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`Delivery location: ${location.countryName}${location.postalCode ? ` ${location.postalCode}` : ''}. Change`}
-        className={`inline-flex h-8 items-center gap-1 rounded-full border border-slate-200/90 bg-white/95 px-2 text-xs font-bold text-slate-900 shadow-2xs transition-colors hover:border-emerald-600/50 sm:h-8.5 sm:gap-1.5 sm:px-3 xl:h-9 ${className}`}
+        className={`inline-flex h-8 items-center gap-1 rounded-full border border-slate-200/90 bg-white/95 px-2 text-xs font-bold text-slate-900 shadow-2xs transition-colors hover:border-emerald-600/50 sm:h-8.5 sm:gap-1.5 sm:px-2.5 ${className}`}
       >
         <CountryFlag code={location.countryCode} className="!h-2.5 !w-3.5 !rounded-[2px]" />
         {/* Smaller screens show only the country code, so a long postcode never pushes Sign up out of view */}

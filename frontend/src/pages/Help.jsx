@@ -10,7 +10,6 @@ import {
   Inbox,
   LifeBuoy,
   PackageSearch,
-  Scale,
   SearchX,
   ShieldAlert,
   X,
@@ -39,7 +38,6 @@ const QUICK_ACTIONS = [
   { title: 'Track My Order', description: 'Follow your order and shipment with your order number.', to: '/track', icon: PackageSearch },
   { title: 'Post an RFQ', description: 'Describe what you need and receive supplier quotations.', to: '/rfq', icon: ClipboardList },
   { title: 'Raise a Support Ticket', description: 'Ask our team about an order, billing or your account.', to: '#support', icon: LifeBuoy },
-  { title: 'File a Trade Dispute', description: 'Report a problem with an order and submit evidence.', to: '/buyer/disputes', icon: Scale },
 ];
 
 const POLICY_LINKS = [
@@ -291,8 +289,8 @@ export default function Help() {
         {/* Quick support actions */}
         <section aria-labelledby="help-quick-title">
           <SectionHeading id="help-quick-title" eyebrow="Quick actions" title="Get things done faster" />
-          {/* Two compact tiles per row on phones; full cards from tablet up */}
-          <ul className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          {/* One tile per row on phones; the three actions side by side from tablet up */}
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
             {QUICK_ACTIONS.map(({ title, description, to, icon: Icon }) => {
               const content = (
                 <>

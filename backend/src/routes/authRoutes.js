@@ -63,6 +63,7 @@ router.post(
   otpSendLimiter,
   validate([
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
+    body('purpose').optional().isIn(['PHONE_CHANGE']).withMessage('Invalid verification purpose.'),
   ]),
   authController.sendMobileOtp
 );
@@ -243,7 +244,17 @@ router.post(
 );
 
 router.get('/me', authenticateJWT, authController.me);
-router.put('/profile', authenticateJWT, authController.updateProfile);
+router.put(
+  '/profile',
+  authenticateJWT,
+  validate([
+    body('name').optional().isString().trim().isLength({ min: 2, max: 100 }).withMessage('Full name must be 2 to 100 characters.'),
+    body('company').optional().isString().trim().isLength({ max: 150 }).withMessage('Company name must be at most 150 characters.'),
+    body('city').optional().isString().trim().isLength({ max: 100 }).withMessage('City must be at most 100 characters.'),
+    body('country').optional().isString().trim().isLength({ max: 100 }).withMessage('Country must be at most 100 characters.'),
+  ]),
+  authController.updateProfile
+);
 
 router.post(
   '/change-password',

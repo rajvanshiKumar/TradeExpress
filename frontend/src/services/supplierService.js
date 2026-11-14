@@ -1,8 +1,9 @@
 import seedCompanies from '../data/companies';
-import { STORAGE_KEYS } from '../utils/constants';
+import { COUNTRY_FLAGS, STORAGE_KEYS } from '../utils/constants';
 import { createCollection } from './localCollection';
 import { readStorage } from '../utils/storage';
 import { slugify } from '../utils/validators';
+import { normalizeCountryName } from '../utils/countryData';
 import makeId from '../utils/ids';
 
 const companies = createCollection(STORAGE_KEYS.companies, seedCompanies);
@@ -27,6 +28,8 @@ export function mergeSuppliers(baseCompanies = [], localAccounts = [], remoteSup
     const isVer = Boolean(comp.verified || comp.isVerified || comp.kycStatus === 'VERIFIED');
     const kyc = comp.kycStatus || (isVer ? 'VERIFIED' : 'NOT_SUBMITTED');
     const verStatus = isVer ? 'reviewed' : (kyc === 'PENDING' ? 'under-review' : 'not-submitted');
+    const resolvedCountry = normalizeCountryName(comp.country) || 'India';
+    const resolvedFlag = comp.flag || COUNTRY_FLAGS[resolvedCountry] || COUNTRY_FLAGS[comp.country] || '';
 
     if (existingKey && map.has(existingKey)) {
       const existing = map.get(existingKey);
@@ -34,6 +37,8 @@ export function mergeSuppliers(baseCompanies = [], localAccounts = [], remoteSup
         ...existing,
         ...comp,
         name: cName,
+        country: resolvedCountry,
+        flag: resolvedFlag || existing.flag || '',
         verified: isVer,
         isVerified: isVer,
         kycStatus: kyc,
@@ -53,11 +58,11 @@ export function mergeSuppliers(baseCompanies = [], localAccounts = [], remoteSup
         status: comp.status === 'Suspended' ? 'Suspended' : 'Active',
         name: cName,
         slug: comp.slug || slugify(cName) || key,
-        flag: comp.flag ?? '',
+        flag: resolvedFlag,
         initials: comp.initials || cName.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'TE',
         industry: comp.industry || comp.businessType || 'General Trade',
         businessType: comp.businessType || 'Supplier',
-        country: comp.country || 'India',
+        country: resolvedCountry,
         city: comp.city || '',
         state: comp.state || '',
         established: comp.established || comp.yearEstablished || new Date().getFullYear(),
@@ -182,7 +187,15 @@ export function filterCompanies(companies, filters = {}) {
         : `${company.name} ${company.city} ${company.country} ${company.industry} ${company.businessType} ${(company.mainProducts ?? []).join(' ')}`).toLowerCase();
       if (!q.split(/\s+/).every((word) => haystack.includes(word))) return false;
     }
-    if (filters.country && company.country !== filters.country) return false;
+    if (filters.country) {
+      const selectedNorm = normalizeCountryName(filters.country).toLowerCase();
+      const rawFilter = filters.country.trim().toLowerCase();
+      const compNorm = normalizeCountryName(company.country).toLowerCase();
+      const rawComp = (company.country || '').trim().toLowerCase();
+      if (selectedNorm !== compNorm && rawFilter !== rawComp && selectedNorm !== rawComp) {
+        return false;
+      }
+    }
     if (filters.industry && company.industry !== filters.industry) return false;
     if (filters.businessType && company.businessType !== filters.businessType) return false;
     return true;

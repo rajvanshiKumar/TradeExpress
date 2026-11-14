@@ -21,7 +21,8 @@ const SUPPLIER_CONSEQUENCES = ['Your products will be removed from the marketpla
 const BUYER_CONSEQUENCES = ['Your open requests for quotation (RFQs) will be closed.'];
 
 const BLOCKER_LINKS = {
-  buyer: { ACTIVE_ORDERS: '/buyer/orders', ESCROW_HELD: '/buyer/orders', OPEN_DISPUTES: '/buyer/disputes' },
+  // Buyers have no disputes page; open disputes are handled through their orders and support
+  buyer: { ACTIVE_ORDERS: '/buyer/orders', ESCROW_HELD: '/buyer/orders', OPEN_DISPUTES: '/buyer/orders' },
   supplier: { ACTIVE_ORDERS: '/supplier/orders', ESCROW_HELD: '/supplier/payments', OPEN_DISPUTES: '/supplier/orders', PENDING_PAYOUTS: '/supplier/payments' },
 };
 

@@ -15,6 +15,7 @@ import useLocalStorage from '../../hooks/useLocalStorage';
 import useDisclosure from '../../hooks/useDisclosure';
 import { filterProducts } from '../../services/productService';
 import { PAGE_SIZE } from '../../utils/constants';
+import { normalizeCountryName } from '../../utils/countryData';
 import useCurrency from '../../hooks/useCurrency';
 
 /** Builds the removable chips shown above the results. */
@@ -53,7 +54,7 @@ export default function CatalogView({ lockedCategory = '' }) {
 
   const filters = useMemo(() => (lockedCategory ? { ...urlFilters, category: lockedCategory } : urlFilters), [urlFilters, lockedCategory]);
   const results = useMemo(() => filterProducts(products, companies, filters), [products, companies, filters]);
-  const countries = useMemo(() => [...new Set(companies.filter((company) => company.status !== 'Suspended').map((company) => company.country))].filter(Boolean).sort(), [companies]);
+  const countries = useMemo(() => [...new Set(companies.filter((company) => company.status !== 'Suspended').map((company) => normalizeCountryName(company.country)).filter(Boolean))].sort(), [companies]);
   const { displayMoney } = useCurrency();
   const chips = buildChips(filters, categories, lockedCategory, displayMoney);
 

@@ -74,7 +74,7 @@ export function siteUrl() {
 const websiteLabel = () => siteUrl().replace(/^https?:\/\//, '');
 const supportEmail = () => String(process.env.SUPPORT_EMAIL || 'support@tradeexpress.in').trim();
 
-/** PENDING, VERIFIED, REJECTED or SUSPENDED. Only the Super Admin's review can make a supplier VERIFIED. */
+/** PENDING, VERIFIED, REJECTED or SUSPENDED. Only an Admin / Super Admin review can make an account VERIFIED. */
 export function verificationStatus(user) {
   if (user.status === 'SUSPENDED' || user.isActive === false) return 'SUSPENDED';
   if (user.kycStatus === 'VERIFIED') return 'VERIFIED';
@@ -121,19 +121,22 @@ export function cleanRegistrationNumber(value) {
   return clean;
 }
 
-/** The details printed on a document, from the supplier's current record. */
+/** The details printed on a document, from the supplier's or buyer's current record. */
 export function buildSnapshot(user) {
   const location = [user.city, user.state].filter(Boolean).join(', ');
+  const isBuyer = user.role === 'BUYER';
   const address = String(user.businessAddress || '').trim()
-    || [location, user.postalCode, user.country].filter(Boolean).join(' - ');
+    || [location, user.postalCode, user.country].filter(Boolean).join(' - ')
+    || (isBuyer ? 'TradeExpress Verified Member' : '');
   const certificateType = user.businessType === 'Other' ? user.businessTypeOther : user.businessType;
   // Older signups recorded a certificate type here, whose number is in taxId
   const isGstType = /gst/i.test(String(user.businessType || ''));
   return {
+    audience: isBuyer ? 'buyer' : 'supplier',
     supplierName: String(user.name || '').trim(),
-    businessName: String(user.company || '').trim(),
+    businessName: String(user.company || (isBuyer ? user.name : '') || '').trim(),
     businessAddress: address,
-    businessType: user.legalStructure || certificateType || '',
+    businessType: user.legalStructure || certificateType || (isBuyer ? 'B2B Commercial Buyer' : ''),
     registrationNumber: user.registrationNumber || (!isGstType && user.taxId ? user.taxId : ''),
     gstin: user.gstin || '',
   };
@@ -146,26 +149,32 @@ const sameDetails = (a, b) => ['supplierName', 'businessName', 'businessAddress'
 const printedDetails = (user, doc) => (verificationStatus(user) !== 'PENDING' && verificationStatus(user) !== 'REJECTED' && doc.snapshot ? doc.snapshot : buildSnapshot(user));
 
 const missingDetails = (details) => [
-  !details.supplierName && 'supplier name',
+  !details.supplierName && (details.audience === 'buyer' ? 'buyer name' : 'supplier name'),
   !details.businessName && 'business name',
   !details.businessAddress && 'business address',
 ].filter(Boolean);
 
 async function loadSupplier(userId) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: SUPPLIER_SELECT });
-  if (!user || user.role !== 'SUPPLIER') throw fail('Supplier not found.', 404, 'SUPPLIER_NOT_FOUND');
+  if (!user || (!['SUPPLIER', 'BUYER'].includes(user.role))) throw fail('Account not found.', 404, 'ACCOUNT_NOT_FOUND');
   return user;
 }
 
 /**
- * Gives a supplier their permanent Supplier ID, Certificate Number and QR code, once. Safe to call repeatedly.
+ * Gives a supplier or buyer their permanent ID, Certificate Number and QR code, once. Safe to call repeatedly.
  * The number comes from the database's own counter, so two signups can never receive the same one.
  */
 export async function ensureSupplierDocument(userId, { photo } = {}) {
   const existing = await prisma.supplierDocument.findUnique({ where: { userId }, select: DOCUMENT_SELECT });
+  const user = await loadSupplier(userId);
+  const isBuyer = user.role === 'BUYER';
+  const prefix = isBuyer ? 'TE-BUY' : 'TE-SEL';
+  const certPrefix = isBuyer ? 'TE-BCERT' : 'TE-CERT';
+  const profilePath = isBuyer ? 'buyer' : 'supplier';
+
   if (existing?.supplierId) {
-    // The Supplier ID never changes, but the code follows the site's address, so moving to a new domain updates every QR
-    const currentUrl = `${siteUrl()}/supplier/${existing.supplierId}`;
+    // The ID never changes, but the code follows the site's address, so moving to a new domain updates every QR
+    const currentUrl = `${siteUrl()}/${profilePath}/${existing.supplierId}`;
     if (existing.publicProfileUrl === currentUrl) return existing;
     return prisma.supplierDocument.update({
       where: { userId },
@@ -174,9 +183,8 @@ export async function ensureSupplierDocument(userId, { photo } = {}) {
     });
   }
 
-  const user = await loadSupplier(userId);
   const now = new Date();
-  const alreadyVerified = verificationStatus(user) === 'VERIFIED' || user.kycStatus === 'VERIFIED';
+  const alreadyVerified = verificationStatus(user) === 'VERIFIED';
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -186,7 +194,7 @@ export async function ensureSupplierDocument(userId, { photo } = {}) {
           legacySupplierCode: user.supplierCode || null,
           issueDate: now,
           ...(photo ? { photoData: photo.bytes, photoMime: photo.mime } : {}),
-          // Suppliers approved before this feature keep their verified status
+          // Users approved before this feature keep their verified status
           ...(alreadyVerified ? {
             verifiedAt: now,
             snapshot: buildSnapshot(user),
@@ -197,16 +205,17 @@ export async function ensureSupplierDocument(userId, { photo } = {}) {
         select: { id: true, sequence: true },
       });
       const number = String(row.sequence).padStart(6, '0');
-      const supplierId = `TE-SEL-${number}`;
-      const publicProfileUrl = `${siteUrl()}/supplier/${supplierId}`;
+      const supplierId = `${prefix}-${number}`;
+      const publicProfileUrl = `${siteUrl()}/${profilePath}/${supplierId}`;
       const qrCodeDataUrl = await qrPngDataUrl(publicProfileUrl);
       const saved = await tx.supplierDocument.update({
         where: { id: row.id },
-        data: { supplierId, certificateNumber: `TE-CERT-${number}`, publicProfileUrl, qrCodeDataUrl },
+        data: { supplierId, certificateNumber: `${certPrefix}-${number}`, publicProfileUrl, qrCodeDataUrl },
         select: DOCUMENT_SELECT,
       });
-      // One ID everywhere on the platform; the old code stays on the document and still opens the profile
-      await tx.user.update({ where: { id: userId }, data: { supplierCode: supplierId } });
+      if (!isBuyer) {
+        await tx.user.update({ where: { id: userId }, data: { supplierCode: supplierId } });
+      }
       return saved;
     }, { maxWait: 15000, timeout: 30000 });
   } catch (error) {
@@ -279,7 +288,9 @@ async function templateData(user, doc, { withPhoto = false } = {}) {
     const row = await prisma.supplierDocument.findUnique({ where: { userId: user.id }, select: { photoData: true, photoMime: true } });
     if (row?.photoData) photo = `data:${row.photoMime};base64,${Buffer.from(row.photoData).toString('base64')}`;
   }
+  const isBuyer = user.role === 'BUYER';
   return {
+    audience: isBuyer ? 'buyer' : 'supplier',
     supplierId: doc.supplierId,
     certificateNumber: doc.certificateNumber,
     supplierName: details.supplierName,
@@ -291,7 +302,7 @@ async function templateData(user, doc, { withPhoto = false } = {}) {
     gstin: details.gstin,
     status: documentStatus(user, doc),
     issueDate: doc.issueDate,
-    // Dates of validity only exist once a Super Admin has approved the supplier
+    // Dates of validity only exist once approved/verified
     validUntil: doc.verifiedAt ? doc.validUntil : null,
     idCardValidUntil: doc.verifiedAt ? doc.idCardValidUntil : null,
     publicProfileUrl: doc.publicProfileUrl,
@@ -305,7 +316,7 @@ async function templateData(user, doc, { withPhoto = false } = {}) {
 function assertPrintable(data, { needsPhoto = false } = {}) {
   const missing = missingDetails(data);
   if (missing.length) throw fail(`These details are needed before documents can be generated: ${missing.join(', ')}.`, 422, 'DETAILS_MISSING');
-  if (needsPhoto && !data.photo) throw fail('A profile photograph is required for the Supplier ID Card. Please upload one.', 422, 'PHOTO_REQUIRED');
+  if (needsPhoto && !data.photo) throw fail(`A profile photograph is required for the ${data.audience === 'buyer' ? 'Buyer' : 'Supplier'} ID Card. Please upload one.`, 422, 'PHOTO_REQUIRED');
 }
 
 /** A document as a preview image (SVG with its fonts embedded). kind: certificate, id-card-front or id-card-back. */
@@ -325,7 +336,8 @@ export async function renderCertificate(userId) {
   const user = await loadSupplier(userId);
   const data = await templateData(user, doc);
   assertPrintable(data);
-  return { pdf: await renderCertificatePdf(data), fileName: `TradeExpress-Certificate-${doc.certificateNumber}.pdf` };
+  const label = user.role === 'BUYER' ? 'Buyer' : 'Registration';
+  return { pdf: await renderCertificatePdf(data), fileName: `TradeExpress-${label}-Certificate-${doc.certificateNumber}.pdf` };
 }
 
 export async function renderIdCard(userId) {
@@ -333,7 +345,8 @@ export async function renderIdCard(userId) {
   const user = await loadSupplier(userId);
   const data = await templateData(user, doc, { withPhoto: true });
   assertPrintable(data, { needsPhoto: true });
-  return { pdf: await renderIdCardPdf(data), fileName: `TradeExpress-ID-Card-${doc.supplierId}.pdf` };
+  const label = user.role === 'BUYER' ? 'Buyer' : 'Supplier';
+  return { pdf: await renderIdCardPdf(data), fileName: `TradeExpress-${label}-ID-Card-${doc.supplierId}.pdf` };
 }
 
 function summary(user, doc) {
@@ -396,14 +409,22 @@ export async function updateOwnPhoto(userId, dataUrl) {
   return getOwnDocuments(userId);
 }
 
-/** Business type and registration number for suppliers who registered before these were asked. Locked once verified. */
-export async function updateOwnDetails(userId, { legalStructure, registrationNumber }) {
+/** Business type and registration number for accounts who registered before these were asked. Locked once verified. */
+export async function updateOwnDetails(userId, { legalStructure, registrationNumber, company, businessAddress } = {}) {
   const doc = await ensureSupplierDocument(userId);
   if (doc.verifiedAt) throw fail('Verified documents cannot be changed here. Please contact TradeExpress support.', 409, 'DETAILS_LOCKED');
-  await prisma.user.update({
-    where: { id: userId },
-    data: { legalStructure: validateLegalStructure(legalStructure), registrationNumber: cleanRegistrationNumber(registrationNumber) },
-  });
+  const user = await loadSupplier(userId);
+  const data = {};
+  if (legalStructure !== undefined && legalStructure !== '') data.legalStructure = validateLegalStructure(legalStructure);
+  if (registrationNumber !== undefined) data.registrationNumber = cleanRegistrationNumber(registrationNumber);
+  if (company && typeof company === 'string' && !user.company) data.company = company.trim();
+  if (businessAddress && typeof businessAddress === 'string' && !user.businessAddress) data.businessAddress = businessAddress.trim();
+  if (Object.keys(data).length) {
+    await prisma.user.update({
+      where: { id: userId },
+      data,
+    });
+  }
   return getOwnDocuments(userId);
 }
 

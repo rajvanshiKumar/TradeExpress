@@ -7,6 +7,7 @@ import Button from '../components/common/Button';
 import NotFound from './NotFound';
 import Help from './Help';
 import TermsAndConditions from './TermsAndConditions';
+import AboutUs from './AboutUs';
 import infoPages from '../data/infoPages';
 import useLocalStorage from '../hooks/useLocalStorage';
 import useDocumentTitle from '../hooks/useDocumentTitle';
@@ -86,6 +87,9 @@ export default function Info() {
   }
   if (slug === 'terms' || slug === 'terms-and-conditions' || slug === 'terms-of-use') {
     return <TermsAndConditions />;
+  }
+  if (slug === 'about') {
+    return <AboutUs />;
   }
   const page = infoPages[slug];
   useDocumentTitle(page?.title ?? 'Page not found');

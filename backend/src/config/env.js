@@ -37,6 +37,9 @@ export const ENV = {
   // Google Sign-In (OAuth 2.0 authorization-code flow). The secret must stay server-side.
   GOOGLE_CLIENT_ID: (process.env.GOOGLE_CLIENT_ID || '').trim(),
   GOOGLE_CLIENT_SECRET: (process.env.GOOGLE_CLIENT_SECRET || '').trim(),
+  // Visual product search (image recognition). Server-side only; visual search is unavailable while unset.
+  GEMINI_API_KEY: (process.env.GEMINI_API_KEY || '').trim(),
+  GEMINI_VISION_MODEL: (process.env.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite').trim(),
 };
 
 

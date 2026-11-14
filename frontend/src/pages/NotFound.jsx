@@ -12,8 +12,8 @@ export default function NotFound() {
       <p className="mt-2 max-w-md text-muted">The link may be out of date, or the page may have moved. Try one of these instead.</p>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Button to="/">Back to home</Button>
-        <Button to="/products" variant="outline">Browse products</Button>
-        <Button to="/suppliers" variant="outline">Find suppliers</Button>
+        <Button to="/products" variant="outline">Products</Button>
+        <Button to="/suppliers" variant="outline">Suppliers</Button>
       </div>
     </div>
   );

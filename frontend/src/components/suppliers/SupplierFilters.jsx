@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { BUSINESS_TYPES, COUNTRY_FLAGS } from '../../utils/constants';
 import { SUPPLIER_SORT_OPTIONS } from '../../services/supplierService';
+import { normalizeCountryName } from '../../utils/countryData';
 
 /**
  * Custom Filter Dropdown Pill with Symbol, live search, checkmarks and animated panel
@@ -59,17 +60,21 @@ function FilterDropdown({
     }
   }, [open, searchable, options.length]);
 
-  const normalizedOptions = options.map((opt) =>
-    typeof opt === 'object' && opt !== null
-      ? { value: opt.value, label: opt.label }
-      : { value: opt, label: String(opt) }
-  );
+  const normalizedOptions = options.map((opt) => {
+    const rawVal = typeof opt === 'object' && opt !== null ? opt.value : opt;
+    const rawLabel = typeof opt === 'object' && opt !== null ? opt.label : String(opt);
+    const resolvedLabel = label === 'Country' ? (normalizeCountryName(rawLabel || rawVal) || rawLabel) : rawLabel;
+    return { value: rawVal, label: resolvedLabel };
+  });
 
   const filtered = normalizedOptions.filter((opt) =>
     opt.label.toLowerCase().includes(query.toLowerCase())
   );
 
-  const selectedOpt = normalizedOptions.find((opt) => opt.value === value);
+  const selectedOpt = normalizedOptions.find((opt) =>
+    opt.value === value ||
+    (label === 'Country' && value && normalizeCountryName(opt.value || opt.label).toLowerCase() === normalizeCountryName(value).toLowerCase())
+  );
   const isSelected = Boolean(value);
 
   return (
@@ -103,8 +108,8 @@ function FilterDropdown({
           <span className="text-slate-400 font-semibold">{label}:</span>
         </span>
 
-        <span className="truncate max-w-[130px] sm:max-w-[160px] text-slate-900 font-extrabold">
-          {selectedOpt ? selectedOpt.label : placeholder}
+        <span className="truncate max-w-[170px] sm:max-w-[220px] text-slate-900 font-extrabold">
+          {selectedOpt ? selectedOpt.label : (label === 'Country' && value ? normalizeCountryName(value) : placeholder)}
         </span>
 
         <ChevronDown
@@ -182,8 +187,10 @@ function FilterDropdown({
 
             {/* Individual Options */}
             {filtered.map((opt) => {
-              const optSelected = opt.value === value;
-              const flag = COUNTRY_FLAGS[opt.value];
+              const optSelected =
+                opt.value === value ||
+                (label === 'Country' && value && normalizeCountryName(opt.value || opt.label).toLowerCase() === normalizeCountryName(value).toLowerCase());
+              const flag = COUNTRY_FLAGS[opt.label] || COUNTRY_FLAGS[opt.value];
               return (
                 <button
                   key={opt.value}
@@ -191,7 +198,7 @@ function FilterDropdown({
                   role="option"
                   aria-selected={optSelected}
                   onClick={() => {
-                    onChange(opt.value);
+                    onChange(label === 'Country' ? opt.label : opt.value);
                     setOpen(false);
                   }}
                   className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold transition-all ${
@@ -200,7 +207,7 @@ function FilterDropdown({
                       : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
                   }`}
                 >
-                  <span className="flex items-center gap-2 truncate">
+                  <span className="flex items-center gap-2 min-w-0">
                     {flag && <span className="text-sm select-none shrink-0">{flag}</span>}
                     <span className="truncate">{opt.label}</span>
                   </span>
@@ -233,7 +240,8 @@ export default function SupplierFilters({
   onQueryChange,
   hasActive,
 }) {
-  const activeCountryFlag = COUNTRY_FLAGS[filters.country];
+  const fullCountryName = normalizeCountryName(filters.country);
+  const activeCountryFlag = COUNTRY_FLAGS[fullCountryName] || COUNTRY_FLAGS[filters.country];
   const activeSortLabel =
     SUPPLIER_SORT_OPTIONS.find((s) => s.value === filters.sort)?.label || 'Highest Rated';
 
@@ -358,7 +366,7 @@ export default function SupplierFilters({
           {filters.country && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/80 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-950 shadow-2xs">
               {activeCountryFlag && <span>{activeCountryFlag}</span>}
-              <span>{filters.country}</span>
+              <span>{fullCountryName || filters.country}</span>
               <button
                 type="button"
                 onClick={() => onChange({ country: '' })}

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { publicSupplierRouter, supplierDocumentRouter } from './supplierDocumentRoutes.js';
+import { buyerDocumentRouter } from './buyerDocumentRoutes.js';
 import authRoutes from './authRoutes.js';
 import currencyRoutes from './currencyRoutes.js';
 import productRoutes from './productRoutes.js';
@@ -44,6 +45,7 @@ router.use('/transport', transportRoutes);
 router.use('/public/suppliers', publicSupplierRouter);
 router.use('/suppliers', publicSupplierRouter);
 router.use('/supplier/documents', supplierDocumentRouter);
+router.use('/buyer/documents', buyerDocumentRouter);
 router.use('/supplier', supplierRoutes);
 router.use('/supplier/products', supplierProductRoutes);
 router.use('/supplier/orders', supplierOrderRoutes);

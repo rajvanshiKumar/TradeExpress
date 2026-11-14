@@ -1,9 +1,9 @@
 // All navigation lives here so the header, mobile menu, footer and dashboards stay in sync.
 
 export const mainNav = [
-  { label: 'Explore Products', to: '/products' },
+  { label: 'Products', to: '/products' },
   { label: 'Categories', to: '/categories', megaMenu: true },
-  { label: 'Find Suppliers', to: '/suppliers' },
+  { label: 'Suppliers', to: '/suppliers' },
   { label: 'Compare Products', to: '/compare-products' },
   { label: 'Wishlist', to: '/wishlist' },
   { label: 'Help', to: '/help' },
@@ -14,7 +14,7 @@ export const mainNav = [
 // Secondary shortcuts shown in the mobile menu and footer.
 export const quickLinks = [
   { label: 'Help Center', to: '/help' },
-  { label: 'Find Suppliers', to: '/suppliers' },
+  { label: 'Suppliers', to: '/suppliers' },
   { label: 'Request for Quotation (RFQ)', to: '/rfq' },
   { label: 'Ready to Ship', to: '/products?ready=1' },
   { label: 'Wholesale Deals', to: '/products?deal=1' },
@@ -34,9 +34,9 @@ export const footerColumns = [
   {
     title: 'For buyers',
     links: [
-      { label: 'Explore products', to: '/products' },
+      { label: 'Products', to: '/products' },
       { label: 'All categories', to: '/categories' },
-      { label: 'Find verified suppliers', to: '/suppliers' },
+      { label: 'Suppliers', to: '/suppliers' },
       { label: 'Request for quotation (RFQ)', to: '/rfq' },
       { label: 'Ready to ship', to: '/products?ready=1' },
       { label: 'Buyer protection guide', to: '/info/buyer-protection' },
@@ -71,12 +71,13 @@ export const dashboardNav = {
     { label: 'Request a Quote (RFQ)', to: '/rfq', icon: 'FileSpreadsheet' },
     { label: 'My Quotes', to: '/buyer/quotes', icon: 'ClipboardList' },
     { label: 'My Orders', to: '/buyer/orders', icon: 'Package' },
-    { label: 'Saved Products & Suppliers', to: '/buyer/wishlist', icon: 'Heart' },
+    { label: 'Messages', to: '/messages', icon: 'MessageSquare' },
     { label: 'Payments & Invoices', to: '/buyer/payments', icon: 'Receipt' },
+    { label: 'Saved Products', to: '/buyer/wishlist', icon: 'Heart' },
     { label: 'My Business Profile', to: '/buyer/profile', icon: 'Building2' },
+    { label: 'TradeExpress ID & Certificates', to: '/buyer/documents', icon: 'FileBadge2' },
     { label: 'Notifications', to: '/buyer/notifications', icon: 'Bell' },
-    { label: 'Help & Disputes', to: '/buyer/disputes', icon: 'ShieldAlert' },
-    { label: 'Settings', to: '/buyer/settings', icon: 'Settings' },
+    { label: 'Account Settings', to: '/buyer/account-settings', icon: 'Settings' },
   ],
   supplier: [
     { label: 'Overview', to: '/supplier/dashboard', icon: 'LayoutDashboard' },

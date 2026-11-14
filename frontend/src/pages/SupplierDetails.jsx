@@ -15,6 +15,7 @@ import useProducts from '../hooks/useProducts';
 import useContactSupplier from '../hooks/useContactSupplier';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { formatDate } from '../utils/formatDate';
+import { normalizeCountryName } from '../utils/countryData';
 
 export default function SupplierDetails() {
   const { slug } = useParams();
@@ -92,7 +93,7 @@ export default function SupplierDetails() {
                 <section className="ts-card p-5">
                   <h2 className="text-lg font-bold">Company facts</h2>
                   <dl className="mt-3 space-y-2.5 text-sm">
-                    {[['Business type', company.businessType], ['Industry', company.industry], ['Location', `${company.city ? `${company.city}, ` : ''}${company.country}`], ['Established', company.established], ['Employees', company.employees], ['Response time', company.responseTime]].map(([label, value]) => (
+                    {[['Business type', company.businessType], ['Industry', company.industry], ['Location', `${company.city ? `${company.city}, ` : ''}${normalizeCountryName(company.country) || company.country}`], ['Established', company.established], ['Employees', company.employees], ['Response time', company.responseTime]].map(([label, value]) => (
                       <div key={label} className="flex justify-between gap-4"><dt className="text-muted">{label}</dt><dd className="text-right font-semibold text-ink">{value}</dd></div>
                     ))}
                   </dl>

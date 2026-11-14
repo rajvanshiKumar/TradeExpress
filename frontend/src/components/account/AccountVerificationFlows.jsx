@@ -363,8 +363,8 @@ export function AccountPhoneSection({ settings, onPhoneChanged }) {
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!/^[6-9]d{9}$/.test(digits)) return setMessage({ type: 'error', text: 'Enter a valid 10-digit Indian mobile number.' });
-            if (settings.profile.phone && settings.profile.phone.replace(/D/g, '').endsWith(digits)) return setMessage({ type: 'error', text: 'This is already your phone number.' });
+            if (!/^[6-9]\d{9}$/.test(digits)) return setMessage({ type: 'error', text: 'Enter a valid 10-digit Indian mobile number.' });
+            if (settings.profile.phone && settings.profile.phone.replace(/\D/g, '').endsWith(digits)) return setMessage({ type: 'error', text: 'This is already your phone number.' });
             setNewPhone(digits);
             setMessage(null);
             setStep(2);
@@ -382,7 +382,7 @@ export function AccountPhoneSection({ settings, onPhoneChanged }) {
             maxLength={10}
             placeholder="10-digit mobile number"
             value={digits}
-            onChange={(e) => setDigits(e.target.value.replace(/D/g, '').slice(0, 10))}
+            onChange={(e) => setDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
           />
           <div className="flex justify-end">
             <Button type="submit">Continue</Button>
@@ -396,7 +396,7 @@ export function AccountPhoneSection({ settings, onPhoneChanged }) {
           onBack={() => { setMessage(null); setStep(1); }}
           send={async () => {
             const result = await sendPhoneCode(newPhone);
-            return { maskedTarget: `+91 ******${newPhone.slice(-4)}`, expiresInSeconds: 600, resendAfterSeconds: result?.cooldownSeconds || 60 };
+            return { maskedTarget: `+91 ******${newPhone.slice(-4)}`, expiresInSeconds: result?.expiresInSeconds || 300, resendAfterSeconds: result?.cooldownSeconds || 60 };
           }}
           verify={async (otp) => {
             const verified = await verifyPhoneCode(newPhone, otp);

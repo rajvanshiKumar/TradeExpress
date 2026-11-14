@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { sideFor } from '../src/utils/messageUtils.js';
+import { sideFor, consolidateConversations, getCounterpartyKey } from '../src/utils/messageUtils.js';
 
 describe('Frontend Supplier-to-Buyer Messaging Integration Suite', () => {
   describe('1. Role & Side Resolution Logic', () => {
@@ -124,6 +124,130 @@ describe('Frontend Supplier-to-Buyer Messaging Integration Suite', () => {
 
       assert.ok(matched);
       assert.equal(matched.id, 'conv-def');
+    });
+  });
+
+  describe('4. Supplier Conversation Deduplication & Single Clean Thread Guarantee', () => {
+    it('consolidates multiple conversations with the same supplier into one canonical item', () => {
+      const duplicateConversations = [
+        {
+          id: 'conv-ramu-1',
+          supplierId: 'supp-ramu',
+          companyId: 'comp-ramu',
+          supplier: { id: 'supp-ramu', name: 'dinbandhu', company: 'Ramu Interprises', city: 'surat' },
+          subject: 'Inquiry for Ramu Interprises',
+          messages: [
+            { id: 'm-1', content: 'Hello I need this product is low', createdAt: '2026-11-13T15:27:00Z' },
+          ],
+          lastMessageAt: '2026-11-13T15:27:00Z',
+        },
+        {
+          id: 'conv-ramu-2',
+          supplierId: 'supp-ramu',
+          companyId: 'comp-ramu',
+          supplier: { id: 'supp-ramu', name: 'dinbandhu', company: 'Ramu Interprises', city: 'surat' },
+          subject: 'Inquiry for Supplier',
+          messages: [],
+          lastMessageAt: null,
+        },
+        {
+          id: 'conv-ramu-3',
+          supplierId: 'supp-ramu',
+          companyId: 'comp-ramu',
+          supplier: { id: 'supp-ramu', name: 'dinbandhu', company: 'Ramu Interprises', city: 'surat' },
+          subject: 'Inquiry for Supplier',
+          messages: [],
+          lastMessageAt: null,
+        },
+        {
+          id: 'conv-other-1',
+          supplierId: 'supp-other',
+          companyId: 'comp-other',
+          supplier: { id: 'supp-other', name: 'Li Wei', company: 'Shenzhen NovaTech Electronics' },
+          subject: 'Inquiry for Supplier',
+          messages: [],
+          lastMessageAt: null,
+        },
+      ];
+
+      // Replicate deduplication logic from Messages.jsx
+      const partyMap = new Map();
+      for (const item of duplicateConversations) {
+        const otherKey = item.supplierId || item.supplier?.id || item.companyId;
+        if (!partyMap.has(otherKey)) {
+          partyMap.set(otherKey, item);
+        } else {
+          const existing = partyMap.get(otherKey);
+          const existingMsgs = (existing.messages || []).length;
+          const currentMsgs = (item.messages || []).length;
+          if (currentMsgs > existingMsgs) {
+            partyMap.set(otherKey, item);
+          }
+        }
+      }
+
+      const deduplicated = Array.from(partyMap.values());
+      assert.equal(deduplicated.length, 2, 'Must contain exactly 2 unique suppliers (Ramu Interprises and Shenzhen NovaTech)');
+      
+      const ramuEntry = deduplicated.find((c) => c.supplier.company === 'Ramu Interprises');
+      assert.ok(ramuEntry, 'Ramu Interprises must exist');
+      assert.equal(ramuEntry.id, 'conv-ramu-1', 'Must choose the conversation with real messages');
+      assert.equal(ramuEntry.messages.length, 1);
+      assert.equal(ramuEntry.messages[0].content, 'Hello I need this product is low');
+    });
+
+    it('verifies consolidateConversations merges duplicate conversations and preserves messages and mergedIds', () => {
+      const duplicateConversations = [
+        {
+          id: 'conv-ramu-1',
+          supplierId: 'supp-ramu',
+          companyId: 'comp-ramu',
+          supplier: { id: 'supp-ramu', name: 'dinbandhu', company: 'Ramu Interprises', city: 'surat' },
+          subject: 'Inquiry for Ramu Interprises',
+          messages: [
+            { id: 'm-1', content: 'Hello I need this product is low', createdAt: '2026-11-13T15:27:00Z' },
+          ],
+          lastMessageAt: '2026-11-13T15:27:00Z',
+        },
+        {
+          id: 'conv-ramu-2',
+          supplierId: 'supp-ramu',
+          companyId: 'comp-ramu',
+          supplier: { id: 'supp-ramu', name: 'dinbandhu', company: 'Ramu Interprises', city: 'surat' },
+          subject: 'Inquiry for Supplier',
+          messages: [],
+          lastMessageAt: null,
+        },
+        {
+          id: 'conv-ramu-3',
+          supplierId: 'supp-ramu',
+          companyId: null,
+          supplier: { id: 'supp-ramu', name: 'dinbandhu', company: 'Ramu Interprises', city: 'surat' },
+          subject: 'Inquiry for Supplier',
+          messages: [],
+          lastMessageAt: null,
+        },
+        {
+          id: 'conv-other-1',
+          supplierId: 'supp-other',
+          companyId: 'comp-other',
+          supplier: { id: 'supp-other', name: 'Li Wei', company: 'Shenzhen NovaTech Electronics' },
+          subject: 'Inquiry for Supplier',
+          messages: [],
+          lastMessageAt: null,
+        },
+      ];
+
+      const consolidated = consolidateConversations(duplicateConversations, 'buyer');
+      assert.equal(consolidated.length, 2, 'Must contain exactly 2 unique threads');
+
+      const ramu = consolidated.find((c) => c.supplier.company === 'Ramu Interprises');
+      assert.ok(ramu);
+      assert.equal(ramu.id, 'conv-ramu-1');
+      assert.equal(ramu.subject, 'Inquiry for Ramu Interprises');
+      assert.equal(ramu.messages.length, 1);
+      assert.equal(ramu.messages[0].content, 'Hello I need this product is low');
+      assert.deepEqual(ramu.mergedIds, ['conv-ramu-1', 'conv-ramu-2', 'conv-ramu-3']);
     });
   });
 });

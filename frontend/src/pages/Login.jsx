@@ -9,7 +9,6 @@ import { ROLE_HOME } from '../utils/constants';
 const ROLES = [
   { id: 'buyer', label: 'Buyer' },
   { id: 'supplier', label: 'Supplier' },
-  { id: 'exporter', label: 'Exporter' },
 ];
 
 export default function Login({ defaultRole = null }) {
@@ -17,11 +16,9 @@ export default function Login({ defaultRole = null }) {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const queryRole = searchParams.get('role');
-  const initialRole = queryRole === 'exporter' || defaultRole === 'exporter'
-    ? 'exporter'
-    : queryRole === 'supplier' || defaultRole === 'supplier'
-      ? 'supplier'
-      : 'buyer';
+  const initialRole = queryRole === 'supplier' || defaultRole === 'supplier'
+    ? 'supplier'
+    : 'buyer';
   const [role, setRole] = useState(initialRole);
   useDocumentTitle('Login');
   // Already signed in as this role: go to its dashboard. A link for another role (e.g. /supplier/login) shows the

@@ -8,6 +8,8 @@ import useProducts from '../../hooks/useProducts';
 import useWishlist from '../../hooks/useWishlist';
 import useAuth from '../../hooks/useAuth';
 import useContactSupplier from '../../hooks/useContactSupplier';
+import { normalizeCountryName } from '../../utils/countryData';
+import { COUNTRY_FLAGS } from '../../utils/constants';
 
 export function SaveSupplierButton({ company, className = '' }) {
   const { isSupplierSaved, toggleSupplier } = useWishlist();
@@ -60,7 +62,10 @@ export default function SupplierCard({ company }) {
           <div className="mb-1 min-w-0"><VerificationBadge company={company} /></div>
         </div>
         <h3 className="mt-3 font-display text-lg font-bold leading-snug"><Link to={href} className="hover:text-brand-600">{company.name}</Link></h3>
-        <p className="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-muted"><MapPin className="size-3.5 shrink-0" aria-hidden="true" />{company.flag} {company.city ? `${company.city}, ` : ''}{company.country}</p>
+        <p className="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-muted">
+          <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+          {company.flag || COUNTRY_FLAGS[normalizeCountryName(company.country)] || ''} {company.city ? `${company.city}, ` : ''}{normalizeCountryName(company.country) || company.country}
+        </p>
 
         <dl className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-ivory p-3 text-center text-[0.75rem]">
           <div><dt className="text-muted">Type</dt><dd className="mt-0.5 truncate font-semibold text-navy-900">{company.businessType}</dd></div>

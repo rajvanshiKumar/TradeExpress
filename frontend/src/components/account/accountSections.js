@@ -40,9 +40,9 @@ export const ACCOUNT_CARDS = [
       { id: 'password', label: 'Change Password', description: 'Verified with a code sent to your email', icon: KeyRound, available: true },
       { id: 'email', label: 'Change Email', description: 'Both the old and new address are verified', icon: Mail, available: true },
       { id: 'phone', label: 'Change Phone Number', description: 'Verified by email and SMS codes', icon: Phone, available: true },
-      { id: 'two-factor', label: 'Two-Factor Authentication', description: 'An extra code from an authenticator app', icon: Fingerprint, available: false },
-      { id: 'sessions', label: 'Active Login Sessions', description: 'Devices signed in to your account', icon: MonitorSmartphone, available: true },
-      { id: 'delete', label: 'Delete Account', description: 'Permanently close your account', icon: Trash2, available: true, danger: true, roles: ['buyer', 'supplier'] },
+      { id: 'two-factor', label: 'Two-Factor Authentication', description: 'An extra code from an authenticator app', icon: Fingerprint, available: false, roles: ['supplier', 'super_admin'] },
+      { id: 'sessions', label: 'Active Login Sessions', description: 'Devices signed in to your account', icon: MonitorSmartphone, available: true, roles: ['supplier', 'super_admin'] },
+      { id: 'delete', label: 'Delete Account', description: 'Permanently close your account', icon: Trash2, available: true, danger: true, roles: ['supplier'] },
     ],
   },
   {
@@ -50,7 +50,7 @@ export const ACCOUNT_CARDS = [
     title: 'Preferences',
     icon: Lock,
     rows: [
-      { id: 'privacy', label: 'Privacy Settings', description: 'Who sees your information; download your data', icon: Lock, available: true },
+      { id: 'privacy', label: 'Privacy Settings', description: 'Who sees your information; download your data', icon: Lock, available: true, roles: ['supplier', 'super_admin'] },
       { id: 'email-preferences', label: 'Email Preferences', description: 'Which emails you receive', icon: MailCheck, available: true },
       { id: 'notifications', label: 'Notification Preferences', description: 'Which in-app alerts you receive', icon: Bell, available: true },
       { id: 'language', label: 'Language Preferences', description: 'Language and region on every device', icon: Globe, available: true },

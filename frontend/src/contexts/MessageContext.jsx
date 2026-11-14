@@ -4,9 +4,9 @@ import messageService from '../services/messageService';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socketService';
 import { AuthContext } from './AuthContext';
 
-import { sideFor } from '../utils/messageUtils';
+import { sideFor, consolidateConversations } from '../utils/messageUtils';
 
-export { MessageContext, sideFor };
+export { MessageContext, sideFor, consolidateConversations };
 
 export function MessageProvider({ children }) {
   const { user } = useContext(AuthContext);
@@ -28,14 +28,14 @@ export function MessageProvider({ children }) {
     try {
       setError(null);
       const data = await messageService.listConversations();
-      setConversations(data || []);
+      setConversations(consolidateConversations(data || [], side));
     } catch (err) {
       console.warn('Failed to fetch conversations:', err);
       setError(err.message || 'Unable to load conversations.');
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, side]);
 
   // Initial load when user signs in
   useEffect(() => {
@@ -117,17 +117,20 @@ export function MessageProvider({ children }) {
       });
     };
 
-    const handleMessagesRead = ({ conversationId }) => {
+    // `readBy` is the user who opened the thread: only the messages they received become "read"
+    // (blue ticks). Our own unread badge resets only when we are the reader.
+    const handleMessagesRead = ({ conversationId, readBy }) => {
+      if (!readBy) return;
+      const readByMe = readBy === user.id;
       setConversations((prev) =>
         prev.map((c) => {
-          if (c.id !== conversationId) return c;
+          if (c.id !== conversationId && !c.mergedIds?.includes(conversationId)) return c;
           return {
             ...c,
-            unread: {
-              ...c.unread,
-              [side]: 0,
-            },
-            messages: (c.messages || []).map((m) => ({ ...m, isRead: true })),
+            unread: readByMe ? { ...c.unread, [side]: 0 } : c.unread,
+            messages: (c.messages || []).map((m) =>
+              m.senderId && m.senderId !== readBy && !m.isRead ? { ...m, isRead: true } : m
+            ),
           };
         })
       );
@@ -151,18 +154,18 @@ export function MessageProvider({ children }) {
     const pollConversations = () => {
       if (document.visibilityState !== 'visible' || inFlight) return;
       inFlight = true;
-      messageService.listConversations().then((data) => {
-        lastPollAt = Date.now();
-        if (Array.isArray(data)) {
-          setConversations((prev) => {
-            const prevTotal = prev.reduce((sum, c) => sum + (c.messages?.length || 0), 0);
-            const newTotal = data.reduce((sum, c) => sum + (c.messages?.length || 0), 0);
-            return prevTotal !== newTotal ? data : prev;
-          });
-        }
-      }).catch(() => {}).finally(() => {
-        inFlight = false;
-      });
+      messageService
+        .listConversations()
+        .then((data) => {
+          lastPollAt = Date.now();
+          if (Array.isArray(data)) {
+            setConversations(consolidateConversations(data, side));
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          inFlight = false;
+        });
     };
 
     const pollInterval = window.setInterval(pollConversations, 45000);
@@ -222,11 +225,8 @@ export function MessageProvider({ children }) {
 
         if (conv?.id) {
           setConversations((previous) => {
-            const exists = previous.find((item) => item.id === conv.id);
-            if (exists) {
-              return previous.map((item) => (item.id === conv.id ? { ...exists, ...conv } : item));
-            }
-            return [conv, ...previous];
+            const raw = [conv, ...previous.filter((item) => item.id !== conv.id)];
+            return consolidateConversations(raw, side);
           });
           return conv.id;
         }

@@ -6,18 +6,18 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  FileBadge2,
   FileSpreadsheet,
   Heart,
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageSquare,
   Package,
   Receipt,
   Scale,
   Search,
-  Settings,
   UserCog,
-  ShieldAlert,
   X,
 } from 'lucide-react';
 import Logo from '../common/Logo';
@@ -26,6 +26,9 @@ import useNotifications from '../../hooks/useNotifications';
 import useWishlist from '../../hooks/useWishlist';
 import useOrders from '../../hooks/useOrders';
 import useInquiries from '../../hooks/useInquiries';
+import useMessages from '../../hooks/useMessages';
+import { markQuotesSeen, readSeenQuotes, unseenQuotesCount, writeSeenQuotes } from '../../utils/quoteBadge';
+import { markSavedSeen, readSeenSaved, unseenSavedCount, writeSeenSaved } from '../../utils/savedProductsBadge';
 
 export const BUYER_NAV_GROUPS = [
   {
@@ -42,18 +45,18 @@ export const BUYER_NAV_GROUPS = [
     items: [
       { id: 'quotes', label: 'My Quotes', to: '/buyer/quotes', icon: ClipboardList, badgeKey: 'quotes' },
       { id: 'orders', label: 'My Orders', to: '/buyer/orders', icon: Package, badgeKey: 'orders' },
-      { id: 'saved', label: 'Saved Products & Suppliers', to: '/buyer/wishlist', icon: Heart, badgeKey: 'wishlist' },
+      { id: 'messages', label: 'Messages', to: '/messages', icon: MessageSquare, badgeKey: 'messages' },
       { id: 'payments', label: 'Payments & Invoices', to: '/buyer/payments', icon: Receipt },
+      { id: 'saved', label: 'Saved Products', to: '/buyer/wishlist', icon: Heart, badgeKey: 'wishlist' },
     ],
   },
   {
     group: 'Account & Support',
     items: [
       { id: 'profile', label: 'My Business Profile', to: '/buyer/profile', icon: Building2 },
+      { id: 'documents', label: 'TradeExpress ID & Certificates', to: '/buyer/documents', icon: FileBadge2 },
       { id: 'notifications', label: 'Notifications', to: '/buyer/notifications', icon: Bell, badgeKey: 'notifications' },
-      { id: 'disputes', label: 'Help & Disputes', to: '/buyer/disputes', icon: ShieldAlert },
       { id: 'account-settings', label: 'Account Settings', to: '/buyer/account-settings', icon: UserCog },
-      { id: 'settings', label: 'Settings', to: '/buyer/settings', icon: Settings },
     ],
   },
 ];
@@ -65,9 +68,10 @@ export default function BuyerSidebar() {
 
   // Badges data
   const { unreadCount: unreadNotifications } = useNotifications();
-  const { count: savedCount } = useWishlist();
+  const { items: savedProducts } = useWishlist();
   const { orders, unseenOrdersCount, markAllOrdersSeen } = useOrders();
   const { inquiries } = useInquiries();
+  const { unreadCount: unreadMessages } = useMessages();
 
   const activeOrdersCount = useMemo(() => {
     return (orders || []).filter(
@@ -75,11 +79,38 @@ export default function BuyerSidebar() {
     ).length;
   }, [orders, user?.id]);
 
-  const openQuotesCount = useMemo(() => {
-    return (inquiries || []).filter(
-      (i) => i.buyerId === user?.id && i.status !== 'Closed' && Boolean(i.quote)
-    ).length;
-  }, [inquiries, user?.id]);
+  // My Quotes badge: supplier quotes not seen yet (cleared by opening My Quotes, like My Orders)
+  const [seenQuoteKeys, setSeenQuoteKeys] = useState(() => readSeenQuotes(user?.id));
+  useEffect(() => {
+    setSeenQuoteKeys(readSeenQuotes(user?.id));
+  }, [user?.id]);
+  const newQuotesCount = useMemo(
+    () => unseenQuotesCount(inquiries, user?.id, seenQuoteKeys),
+    [inquiries, user?.id, seenQuoteKeys]
+  );
+  useEffect(() => {
+    if (!user?.id || location.pathname !== '/buyer/quotes' || newQuotesCount === 0) return;
+    const next = markQuotesSeen(inquiries, user.id, seenQuoteKeys);
+    writeSeenQuotes(user.id, next);
+    setSeenQuoteKeys(next);
+  }, [location.pathname, newQuotesCount, inquiries, user?.id, seenQuoteKeys]);
+
+  // Saved Products badge: products saved since the buyer last opened Saved Products
+  const savedProductIds = useMemo(() => (savedProducts || []).map((p) => p.id), [savedProducts]);
+  const [seenSavedIds, setSeenSavedIds] = useState(() => readSeenSaved(user?.id));
+  useEffect(() => {
+    setSeenSavedIds(readSeenSaved(user?.id));
+  }, [user?.id]);
+  const newSavedCount = useMemo(
+    () => unseenSavedCount(savedProductIds, seenSavedIds),
+    [savedProductIds, seenSavedIds]
+  );
+  useEffect(() => {
+    if (!user?.id || location.pathname !== '/buyer/wishlist' || newSavedCount === 0) return;
+    const next = markSavedSeen(savedProductIds);
+    writeSeenSaved(user.id, next);
+    setSeenSavedIds(next);
+  }, [location.pathname, newSavedCount, savedProductIds, user?.id]);
 
   // Desktop collapsible state (persisted)
   const [collapsed, setCollapsed] = useState(() => {
@@ -141,9 +172,10 @@ export default function BuyerSidebar() {
 
   const getBadgeValue = (key) => {
     if (key === 'notifications' && unreadNotifications > 0) return unreadNotifications;
-    if (key === 'wishlist' && savedCount > 0) return savedCount;
+    if (key === 'wishlist' && newSavedCount > 0) return newSavedCount;
     if (key === 'orders' && unseenOrdersCount > 0) return unseenOrdersCount;
-    if (key === 'quotes' && openQuotesCount > 0) return openQuotesCount;
+    if (key === 'quotes' && newQuotesCount > 0) return newQuotesCount;
+    if (key === 'messages' && unreadMessages > 0) return unreadMessages;
     return null;
   };
 
@@ -311,7 +343,13 @@ export default function BuyerSidebar() {
       >
         <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-card flex flex-col h-[calc(100dvh-7.5rem)] max-h-[calc(100dvh-7.5rem)]">
           {/* Header Brand Bar & Collapse Toggle */}
-          <div className="relative flex items-center justify-between border-b border-slate-100 p-3.5 bg-gradient-to-r from-emerald-900 via-emerald-800 to-emerald-900 text-white">
+          <div
+            className={`relative border-b border-emerald-950/40 bg-gradient-to-r from-emerald-900 via-emerald-800 to-emerald-900 text-white transition-all duration-200 ${
+              collapsed
+                ? 'flex flex-col items-center justify-center gap-3 py-3.5 px-2'
+                : 'flex items-center justify-between p-3.5'
+            }`}
+          >
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_70%_at_100%_0%,rgb(201_166_107/0.25),transparent_60%)] pointer-events-none" />
             {!collapsed ? (
               <div className="relative flex items-center gap-2.5 min-w-0">
@@ -326,7 +364,7 @@ export default function BuyerSidebar() {
                 </div>
               </div>
             ) : (
-              <div className="mx-auto">
+              <div className="relative flex items-center justify-center py-0.5">
                 <Logo size="xs" markOnly light to="/buyer" />
               </div>
             )}
@@ -348,27 +386,26 @@ export default function BuyerSidebar() {
               <div className="flex items-center gap-3">
                 <div className="relative flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-800 font-display font-extrabold text-brand-300 shadow-sm ring-1 ring-emerald-900/10">
                   {initials}
-                  <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                  <span className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full ${user?.kycStatus === 'VERIFIED' ? 'bg-emerald-500' : 'bg-amber-400'} ring-2 ring-white`} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <p className="truncate text-xs font-bold text-slate-900">
                       {user?.name || 'Buyer Partner'}
                     </p>
-                    <span className="inline-block size-1.5 rounded-full bg-emerald-600" />
+                    <span className={`inline-block size-1.5 rounded-full ${user?.kycStatus === 'VERIFIED' ? 'bg-emerald-600' : 'bg-amber-500'}`} />
                   </div>
                   <p className="truncate text-[11px] font-medium text-slate-500">
-                    {user?.company || 'Verified Buyer'}
+                    {user?.company || (user?.kycStatus === 'VERIFIED' ? 'Verified Buyer' : 'Verification Pending')}
                   </p>
                 </div>
               </div>
             ) : (
               <div
                 className="relative mx-auto flex size-9 items-center justify-center rounded-xl bg-emerald-800 font-display font-extrabold text-brand-300 shadow-sm cursor-default"
-                title={`${user?.name || 'Buyer Partner'} (${user?.company || 'Buyer'})`}
+                title={`${user?.name || 'Buyer Partner'} (${user?.company || (user?.kycStatus === 'VERIFIED' ? 'Verified Buyer' : 'Verification Pending')})`}
               >
                 {initials}
-                <span className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-white" />
               </div>
             )}
           </div>
@@ -400,17 +437,19 @@ export default function BuyerSidebar() {
                           }}
                           aria-current={active ? 'page' : undefined}
                           title={collapsed ? item.label : undefined}
-                          className={`group flex items-center rounded-xl transition-all duration-150 ${
+                          className={`group relative flex items-center rounded-xl transition-all duration-150 ${
                             collapsed
-                              ? 'justify-center p-2.5'
+                              ? 'justify-center mx-auto size-10'
                               : 'justify-between px-3 py-2 text-xs font-semibold'
                           } ${
                             active
-                              ? 'bg-emerald-50 text-emerald-900 font-bold border-l-[3.5px] border-emerald-700 shadow-2xs'
+                              ? collapsed
+                                ? 'bg-emerald-100 text-emerald-900 font-bold ring-1 ring-emerald-600/30 shadow-2xs'
+                                : 'bg-emerald-50 text-emerald-900 font-bold border-l-[3.5px] border-emerald-700 shadow-2xs'
                               : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                           }`}
                         >
-                          <div className={`flex items-center ${collapsed ? '' : 'gap-2.5 min-w-0'}`}>
+                          <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-2.5 min-w-0'}`}>
                             <Icon
                               className={`size-4.5 shrink-0 transition-colors ${
                                 active
@@ -421,17 +460,11 @@ export default function BuyerSidebar() {
                             {!collapsed && <span className="truncate">{item.label}</span>}
                           </div>
 
-                          {/* Badge indicator */}
-                          {badge !== null && (
-                            <>
-                              {!collapsed ? (
-                                <span className="ml-2 shrink-0 rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-bold text-white shadow-2xs">
-                                  {badge}
-                                </span>
-                              ) : (
-                                <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-emerald-600 ring-2 ring-white" />
-                              )}
-                            </>
+                          {/* Badge indicator: only shown when expanded to avoid floating dots when closed */}
+                          {!collapsed && badge !== null && (
+                            <span className="ml-2 shrink-0 rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-bold text-white shadow-2xs">
+                              {badge}
+                            </span>
                           )}
                         </Link>
                       </li>
@@ -449,8 +482,8 @@ export default function BuyerSidebar() {
               onClick={handleLogout}
               aria-label="Sign out of buyer account"
               title={collapsed ? 'Sign Out' : undefined}
-              className={`flex w-full items-center rounded-xl text-xs font-semibold text-rose-700 hover:bg-rose-50 hover:text-rose-800 transition-colors ${
-                collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2'
+              className={`flex items-center rounded-xl text-xs font-semibold text-rose-700 hover:bg-rose-50 hover:text-rose-800 transition-colors ${
+                collapsed ? 'mx-auto size-10 justify-center' : 'w-full gap-2.5 px-3 py-2'
               }`}
             >
               <LogOut className="size-4 shrink-0 text-rose-500" />
