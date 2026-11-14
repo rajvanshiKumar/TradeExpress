@@ -50,6 +50,18 @@ const MAX_VERIFY_ATTEMPTS = 5;
 const RESEND_WINDOW_MS = 60 * 60 * 1000;
 
 /** The pending entry's resend window if it is still running, otherwise null (a fresh window starts). */
+/**
+ * Ends a pending email code after too many wrong attempts. The entry stays in its store (only the code hash is
+ * removed), so requesting a new code still waits for the resend cooldown and counts toward the hourly limit.
+ */
+export function lockOtpSession(session) {
+  session.otpHash = null;
+  session.locked = true;
+  const error = new Error('Too many incorrect verification attempts. Please request a new OTP.');
+  error.statusCode = 429;
+  return error;
+}
+
 export const activeResendWindow = (entry) =>
   entry && entry.windowStartedAt && Date.now() - entry.windowStartedAt < RESEND_WINDOW_MS ? entry : null;
 const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
@@ -636,6 +648,7 @@ export function validateEmailLoginOtp({ email, otp, consume = false }) {
     return true;
   }
 
+  if (session?.locked && !session.consumed) throw lockOtpSession(session);
   if (!session || session.consumed) {
     throw authError(AUTH_MESSAGES.OTP_NOT_REQUESTED, 400, AUTH_ERROR_CODES.OTP_NOT_REQUESTED);
   }
@@ -645,10 +658,8 @@ export function validateEmailLoginOtp({ email, otp, consume = false }) {
   }
 
   if (session.attempts >= MAX_VERIFY_ATTEMPTS) {
-    emailLoginOtpStore.delete(normalizedEmail);
-    const error = new Error('Too many incorrect verification attempts. Please request a new OTP.');
-    error.statusCode = 429;
-    throw error;
+    // The code is dead, but the entry is kept so the resend cooldown and hourly limit still apply
+    throw lockOtpSession(session);
   }
 
   const candidateHash = hashOtp(cleanOtp);
@@ -977,6 +988,7 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
   }
 
   const session = emailVerificationStore.get(normalizedEmail);
+  if (session?.locked) throw lockOtpSession(session);
   if (!session || !session.otpHash) {
     throw authError(AUTH_MESSAGES.OTP_NOT_REQUESTED, 400, AUTH_ERROR_CODES.OTP_NOT_REQUESTED);
   }
@@ -986,10 +998,8 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
   }
 
   if (session.attempts >= MAX_VERIFY_ATTEMPTS) {
-    emailVerificationStore.delete(normalizedEmail);
-    const error = new Error('Too many incorrect verification attempts. Please request a new OTP.');
-    error.statusCode = 429;
-    throw error;
+    // The code is dead, but the entry is kept so the resend cooldown and hourly limit still apply
+    throw lockOtpSession(session);
   }
 
   const candidateHash = hashOtp(cleanOtp);

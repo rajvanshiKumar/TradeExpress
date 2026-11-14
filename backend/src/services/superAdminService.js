@@ -10,6 +10,10 @@ import bcrypt from 'bcryptjs';
 import { logAuditAction } from './auditService.js';
 import { runOrderTransition } from './inventoryLifecycleService.js';
 import { validatePassword } from '../utils/passwordValidator.js';
+import { Role } from '@prisma/client';
+
+// Valid account roles, straight from the Prisma schema's Role enum
+const USER_ROLES = Object.values(Role);
 
 // ==========================================
 // 1. DASHBOARD & ANALYTICS
@@ -190,12 +194,21 @@ export async function getUsers({
   sortBy = 'createdAt',
   sortOrder = 'desc',
 } = {}) {
-  const take = Math.min(100, Math.max(1, parseInt(limit, 10)));
-  const skip = (Math.max(1, parseInt(page, 10)) - 1) * take;
+  const toInt = (value, fallback) => (Number.isFinite(parseInt(value, 10)) ? parseInt(value, 10) : fallback);
+  const take = Math.min(100, Math.max(1, toInt(limit, 20)));
+  const skip = (Math.max(1, toInt(page, 1)) - 1) * take;
 
   const where = {};
-  if (role && role !== 'ALL') {
-    where.role = role;
+  // The role filter comes from the URL: accept any letter case, and answer an unknown role with a clear 400
+  // instead of passing it to Prisma (which fails with "Invalid value for argument `role`. Expected Role.")
+  const roleFilter = String(role ?? 'ALL').trim().toUpperCase();
+  if (roleFilter && roleFilter !== 'ALL') {
+    if (!USER_ROLES.includes(roleFilter)) {
+      const error = new Error(`Invalid role filter. Use one of: ALL, ${USER_ROLES.join(', ')}.`);
+      error.statusCode = 400;
+      throw error;
+    }
+    where.role = roleFilter;
   }
   if (status && status !== 'ALL') {
     where.status = status;

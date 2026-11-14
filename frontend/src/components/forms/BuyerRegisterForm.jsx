@@ -90,6 +90,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const [emailVerifying, setEmailVerifying] = useState(false);
   const [emailToken, setEmailToken] = useState('');
   const [emailOtpError, setEmailOtpError] = useState('');
+  // Set when the server locks the current code (too many wrong attempts): only a new code can be verified
+  const [emailOtpLocked, setEmailOtpLocked] = useState(false);
 
   // Step 2: Mobile OTP Verification State
   const [phoneOtp, setPhoneOtp] = useState('');
@@ -100,6 +102,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const [phoneVerifying, setPhoneVerifying] = useState(false);
   const [phoneToken, setPhoneToken] = useState('');
   const [phoneOtpError, setPhoneOtpError] = useState('');
+  const [phoneOtpLocked, setPhoneOtpLocked] = useState(false);
 
   // Step 3: PAN-Aadhaar Link Verification States
   const [panAadhaarVerifying, setPanAadhaarVerifying] = useState(false);
@@ -255,6 +258,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setEmailOtpSent(true);
+        setEmailOtpLocked(false);
         setEmailCooldown(data.cooldownSeconds || 30);
         setEmailOtp('');
         if (data.resumeSignup) showToast(data.message, 'warning');
@@ -306,6 +310,11 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           setCurrentStep(2);
           window.scrollTo({ top: 80, behavior: 'smooth' });
         }, 300);
+      } else if (res.status === 429) {
+        // The server no longer accepts this code: block further attempts until a new code is sent
+        setEmailOtpLocked(true);
+        setEmailOtp('');
+        setEmailOtpError(data.message || 'Too many incorrect verification attempts. Please request a new OTP.');
       } else {
         setEmailOtpError(data.message || 'Invalid OTP. Please enter the correct verification code.');
       }
@@ -378,6 +387,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setPhoneOtpSent(true);
+        setPhoneOtpLocked(false);
         setPhoneCooldown(data.cooldownSeconds || 30);
         setPhoneOtp('');
         setTimeout(() => phoneOtpInputsRef.current[0]?.focus(), 150);
@@ -432,6 +442,10 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           setCurrentStep(3);
           window.scrollTo({ top: 80, behavior: 'smooth' });
         }, 300);
+      } else if (res.status === 429) {
+        setPhoneOtpLocked(true);
+        setPhoneOtp('');
+        setPhoneOtpError(data.message || 'Too many incorrect verification attempts. Please request a new OTP.');
       } else {
         setPhoneOtpError(data.message || 'Invalid OTP. Please enter the correct verification code.');
       }
@@ -1128,7 +1142,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                   <button
                     type="button"
                     onClick={handleVerifyEmailOtp}
-                    disabled={emailVerifying || emailOtp.length < 6}
+                    disabled={emailVerifying || emailOtpLocked || emailOtp.length < 6}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-800 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-40 transition shadow-xs"
                   >
                     {emailVerifying ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
@@ -1327,7 +1341,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                 <button
                   type="button"
                   onClick={handleVerifyPhoneOtp}
-                  disabled={phoneVerifying || phoneOtp.length < 6}
+                  disabled={phoneVerifying || phoneOtpLocked || phoneOtp.length < 6}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40 transition"
                 >
                   {phoneVerifying ? (

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import prisma from '../../src/config/db.js';
 import { changePassword, loginUser, registerBuyer } from '../../src/services/authService.js';
-import { activeResendWindow, issueVerifiedEmailToken } from '../../src/services/otpService.js';
+import { activeResendWindow, issueVerifiedEmailToken, lockOtpSession } from '../../src/services/otpService.js';
 
 // Phase 1 audit regressions: admin access through the public login, password change sign-out,
 // email OTP resend window and invented signup location data.
@@ -118,6 +118,38 @@ describe('Email OTP resend limit window', () => {
     const recent = { resendCount: 5, windowStartedAt: Date.now() - 10 * 60 * 1000 };
     assert.equal(activeResendWindow(recent), recent, 'still limited inside the hour');
     assert.equal(activeResendWindow({ resendCount: 5, windowStartedAt: Date.now() - 61 * 60 * 1000 }), null, 'limit lifts after an hour');
+  });
+});
+
+describe('Super Admin user list role filter', () => {
+  it('accepts any letter case, and rejects unknown roles with 400 instead of a Prisma error', async (t) => {
+    const { getUsers } = await import('../../src/services/superAdminService.js');
+    const seen = [];
+    stubQueries(t, async (query) => {
+      if (query.model === 'User' && (query.action === 'count' || query.action === 'findMany')) {
+        seen.push(query.args.where?.role);
+        return query.action === 'count' ? 0 : [];
+      }
+      return null;
+    });
+    await getUsers({ role: 'buyer' });
+    await getUsers({ role: 'all' });
+    assert.ok(seen.includes('BUYER'), 'lowercase role is normalised to the enum value');
+    assert.ok(seen.includes(undefined), '"all" means no role filter');
+    await assert.rejects(getUsers({ role: 'HACKER' }), (error) => error.statusCode === 400);
+  });
+});
+
+describe('Email OTP lockout keeps its limits', () => {
+  it('kills the code but keeps the send time, resend count and window', () => {
+    const session = { otpHash: 'hash', attempts: 5, lastSentAt: 1000, resendCount: 3, windowStartedAt: 500 };
+    const error = lockOtpSession(session);
+    assert.equal(error.statusCode, 429);
+    assert.equal(session.otpHash, null, 'the locked code can never match again');
+    assert.equal(session.locked, true);
+    assert.equal(session.lastSentAt, 1000, 'resend cooldown still measured from the last send');
+    assert.equal(session.resendCount, 3, 'hourly limit keeps counting');
+    assert.equal(session.windowStartedAt, 500);
   });
 });
 
