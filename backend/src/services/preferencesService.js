@@ -101,7 +101,9 @@ export async function updatePreferences(userId, changes = {}) {
     next.location = { countryCode: code, countryName: countryName(code), postalCode: postal.value, displayCurrency: currency, currencyManual: manual, savedAt: new Date().toISOString() };
   }
 
-  await prisma.user.update({ where: { id: userId }, data: { preferences: next } });
+  // Keep groups this service does not manage (e.g. supplier operating settings)
+  const stored = user.preferences && typeof user.preferences === 'object' ? user.preferences : {};
+  await prisma.user.update({ where: { id: userId }, data: { preferences: { ...stored, ...next } } });
   if (changes.email !== undefined) {
     // Marketing consent changes are recorded for compliance
     await prisma.auditLog.create({

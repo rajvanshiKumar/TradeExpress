@@ -213,7 +213,10 @@ async function queryProvider({ aadhaar, pan, request }) {
  * NOT_LINKED) always win, and the result is labelled as a test, never as an Income Tax confirmation.
  */
 export function isPanAadhaarTestMode() {
-  return process.env.PAN_AADHAAR_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production';
+  return (
+    (process.env.PAN_AADHAAR_TEST_MODE === 'true' || process.env.PAN_AADHAAR_MOCK_FALLBACK === 'true') &&
+    process.env.NODE_ENV !== 'production'
+  );
 }
 
 function testModeOutcome(providerOutcome) {
@@ -432,7 +435,10 @@ const GST_SERVICE = { service: 'GST verification service', inputs: 'GSTIN' };
  * reached, the GSTIN is treated as verified so signup can be tested. Real provider answers always win.
  */
 export function isGstTestMode() {
-  return process.env.GST_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production';
+  return (
+    (process.env.GST_TEST_MODE === 'true' || process.env.GST_MOCK_FALLBACK === 'true') &&
+    process.env.NODE_ENV !== 'production'
+  );
 }
 
 const firstText = (...values) => values.map((v) => (v == null ? '' : String(v).trim())).find(Boolean) || null;

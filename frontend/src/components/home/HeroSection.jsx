@@ -99,10 +99,10 @@ export default function HeroSection() {
             <span>· ISO & GST Compliant B2B Sourcing</span>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-2.5 ml-auto">
+          <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-2.5 sm:ml-auto">
             <Link
               to="/rfq"
-              className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-bold text-[#166534] shadow-sm transition-all hover:bg-white/95 hover:shadow"
+              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-bold text-[#166534] shadow-sm transition-all hover:bg-white/95 hover:shadow"
             >
               <FileText className="size-3.5 text-[#15803d]" />
               <span>Post Requirement</span>
@@ -112,7 +112,7 @@ export default function HeroSection() {
             {user?.role === "supplier" ? (
               <Link
                 to="/supplier/dashboard"
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
+                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
               >
                 <TrendingUp className="size-3.5 text-brand-300" />
                 <span>Supplier Dashboard</span>
@@ -121,7 +121,7 @@ export default function HeroSection() {
             ) : !user ? (
               <Link
                 to="/supplier/register"
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
+                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
               >
                 <TrendingUp className="size-3.5 text-brand-300" />
                 <span>Start Selling</span>
@@ -131,7 +131,7 @@ export default function HeroSection() {
 
             <Link
               to={user ? ROLE_HOME[user.role] || "/buyer" : "/login"}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
+              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-white/10 px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs font-semibold text-white border border-white/20 backdrop-blur-sm transition-all hover:bg-white/20 hover:text-white"
             >
               <UserCheck className="size-3.5 text-brand-300" />
               <span>{user ? "Dashboard" : "Login"}</span>

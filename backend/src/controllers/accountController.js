@@ -3,6 +3,7 @@ import * as sessionService from '../services/sessionService.js';
 import * as accountService from '../services/accountService.js';
 import * as accountSecurityService from '../services/accountSecurityService.js';
 import * as accountDeletionService from '../services/accountDeletionService.js';
+import { publicBackendUrl } from '../utils/publicUrl.js';
 
 // The account is always the authenticated user's own: req.user comes from the verified login token.
 
@@ -27,7 +28,7 @@ export async function updateProfile(req, res, next) {
 
 export async function uploadAvatar(req, res, next) {
   try {
-    const data = await accountService.saveAvatar(req.user.id, req.file, `${req.protocol}://${req.get('host')}`);
+    const data = await accountService.saveAvatar(req.user.id, req.file, publicBackendUrl(req));
     res.json({ success: true, message: 'Profile photo updated.', data });
   } catch (error) {
     next(error);

@@ -44,20 +44,23 @@ export async function getUserNotifications(userId, { limit = 30, unreadOnly = fa
     where.read = false;
   }
 
-  const [notifications, unreadCount] = await Promise.all([
+  const take = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 30));
+  const [notifications, unreadCount, totalCount] = await Promise.all([
     prisma.notification.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: Number(limit) || 30,
+      take,
     }),
     prisma.notification.count({
       where: { userId, read: false },
     }),
+    prisma.notification.count({ where: { userId } }),
   ]);
 
   return {
     notifications,
     unreadCount,
+    totalCount,
   };
 }
 
@@ -79,6 +82,43 @@ export async function markNotificationAsRead(id, userId) {
     where: { id },
     data: { read: true },
   });
+}
+
+/**
+ * Mark one of the user's own notifications as unread again
+ */
+export async function markNotificationAsUnread(id, userId) {
+  const notification = await prisma.notification.findFirst({
+    where: { id, userId },
+  });
+
+  if (!notification) {
+    const error = new Error('Notification not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return prisma.notification.update({
+    where: { id },
+    data: { read: false },
+  });
+}
+
+/** Deletes one of the user's own notifications (someone else's id is "not found"). */
+export async function deleteNotification(id, userId) {
+  const { count } = await prisma.notification.deleteMany({ where: { id: String(id), userId } });
+  if (count !== 1) {
+    const error = new Error('Notification not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+  return { deleted: true };
+}
+
+/** Deletes all of the user's own notifications. */
+export async function deleteAllNotifications(userId) {
+  const { count } = await prisma.notification.deleteMany({ where: { userId } });
+  return { deleted: count };
 }
 
 /**

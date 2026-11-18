@@ -5,6 +5,7 @@ import prisma from './config/db.js';
 import { initSocket } from './services/socketService.js';
 import { RESERVATION_MINUTES, startReservationSweeper } from './services/inventoryLifecycleService.js';
 import { bootstrapSuperAdmin } from '../scripts/bootstrapSuperAdmin.js';
+import { startDeletionWorker } from './services/supplierDeletionService.js';
 
 async function startServer() {
   try {
@@ -25,6 +26,8 @@ async function startServer() {
 
     // Releases stock held by online orders that were not paid within the reservation window
     startReservationSweeper();
+    // Closes supplier accounts whose approved deletion grace period has ended (hourly)
+    startDeletionWorker();
     console.log(`✓ Stock reservations expire after ${RESERVATION_MINUTES} minutes without payment.`);
 
     httpServer.on('error', (err) => {

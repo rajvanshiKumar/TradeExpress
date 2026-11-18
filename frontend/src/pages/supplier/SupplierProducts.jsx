@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import useMyProducts, { deleteMyProduct, refreshMyProducts, updateMyProduct } from '../../hooks/useMyProducts';
+import ErrorState from '../../components/common/ErrorState';
+import { TableSkeleton } from '../../components/common/Skeleton';
 import { Link } from 'react-router-dom';
 import { Boxes, Eye, EyeOff, Pencil, Plus, Search, Trash2, UploadCloud, Download, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
@@ -15,6 +18,7 @@ import useCurrency from '../../hooks/useCurrency';
 import useNotifications from '../../hooks/useNotifications';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { apiPost } from '../../services/apiClient';
+import { apiUrl } from '../../config/api.js';
 
 /** Stock cell that saves when the field loses focus or Enter is pressed. */
 function StockInput({ product, onSave }) {
@@ -32,8 +36,11 @@ function StockInput({ product, onSave }) {
   );
 }
 
-function ProductTable({ products, company }) {
-  const { updateProduct, deleteProduct, getCategory, addProduct } = useProducts();
+/** The supplier's products from the database: the same list the dashboard counts. */
+function ProductTable({ company }) {
+  const { products, loading, error, reload } = useMyProducts();
+  const { getCategory } = useProducts();
+  const [savingId, setSavingId] = useState(null);
   const { money } = useCurrency();
   const { showToast } = useNotifications();
   const [search, setSearch] = useState('');
@@ -64,26 +71,7 @@ function ProductTable({ products, company }) {
       const data = res?.data || res;
       setBulkResult(data);
 
-      if (data?.createdProducts?.length) {
-        data.createdProducts.forEach((p) => {
-          addProduct({
-            id: p.id,
-            name: p.name,
-            sku: p.sku,
-            category: p.category,
-            summary: p.summary,
-            description: p.description,
-            price: Number(p.price),
-            unit: p.unit,
-            moq: Number(p.moq),
-            stock: Number(p.stock),
-            leadTimeDays: Number(p.leadTimeDays),
-            hsnCode: p.hsnCode,
-            gstRate: Number(p.gstRate),
-            companyId: company?.id,
-          });
-        });
-      }
+      if (data?.createdProducts?.length) refreshMyProducts();
       showToast(`Bulk upload complete: ${data.createdCount} products imported.`);
     } catch (err) {
       showToast(err.message || 'Failed to process bulk upload.', 'error');
@@ -102,17 +90,44 @@ function ProductTable({ products, company }) {
     return true;
   });
 
+  const save = async (product, changes, done) => {
+    if (savingId) return;
+    setSavingId(product.id);
+    try {
+      await updateMyProduct(product.id, changes);
+      refreshMyProducts();
+      showToast(done, 'info');
+    } catch (err) {
+      showToast(err?.message || `${product.name} could not be updated.`, 'error');
+    } finally {
+      setSavingId(null);
+    }
+  };
   const toggleStatus = (product) => {
     const next = product.status === 'Active' ? 'Hidden' : 'Active';
-    updateProduct(product.id, { status: next });
-    showToast(next === 'Active' ? `${product.name} is visible in the catalogue.` : `${product.name} is hidden from the catalogue.`, 'info');
+    save(product, { status: next }, next === 'Active' ? `${product.name} is visible in the catalogue.` : `${product.name} is hidden from the catalogue.`);
+  };
+  const confirmDelete = async () => {
+    const product = deleting;
+    if (!product || savingId) return;
+    setSavingId(product.id);
+    try {
+      await deleteMyProduct(product.id);
+      refreshMyProducts();
+      showToast(`${product.name} deleted.`, 'info');
+      setDeleting(null);
+    } catch (err) {
+      showToast(err?.message || `${product.name} could not be deleted.`, 'error');
+    } finally {
+      setSavingId(null);
+    }
   };
 
   return (
     <div>
       <SectionHeading
         title="Products & inventory"
-        description="Changes are saved in this browser and show in the catalogue immediately."
+        description="Your listings on TradeExpress. Changes are saved to your account straight away."
         actions={
           <div className="flex items-center gap-2">
             <Button onClick={() => setBulkModalOpen(true)} size="sm" variant="outline" icon={UploadCloud}>
@@ -150,7 +165,7 @@ function ProductTable({ products, company }) {
                   <p className="text-[11px] text-muted">Includes pre-filled sample rows with HSN, GST rate, unit, MOQ and price tiers.</p>
                 </div>
                 <a
-                  href="http://localhost:5000/api/supplier/products/bulk/template"
+                  href={apiUrl('/supplier/products/bulk/template')}
                   download="tradeexpress_products_template.xlsx"
                   className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand-600 shadow-sm border border-navy-900/[0.1] hover:bg-slate-50"
                 >
@@ -259,7 +274,11 @@ function ProductTable({ products, company }) {
       </div>
 
       <div className="ts-card overflow-hidden">
-        {products.length === 0 ? (
+        {loading ? (
+          <TableSkeleton rows={4} />
+        ) : error ? (
+          <ErrorState text={error} onRetry={reload} />
+        ) : products.length === 0 ? (
           <EmptyState icon={Boxes} title="No products yet" text="Add your first listing. It will appear in the catalogue straight away." action={<Button to="/supplier/products/new" icon={Plus}>Add product</Button>} />
         ) : visible.length === 0 ? (
           <EmptyState icon={Search} title="No matching products" text="Try a different search or filter." action={<Button variant="outline" onClick={() => { setSearch(''); setFilter(''); }}>Clear filters</Button>} />
@@ -278,7 +297,7 @@ function ProductTable({ products, company }) {
                           <Image photo={product.photo} illustration={product.illustration} width={96} height={96} alt="" className="size-11 shrink-0 rounded-lg bg-surface object-cover" />
                           <div className="min-w-0">
                             <Link to={`/supplier/products/${product.id}/edit`} className="line-clamp-1 font-semibold text-ink hover:text-brand-600">{product.name}</Link>
-                            <p className="text-xs text-muted">{product.sku} · {getCategory(product.category)?.name ?? product.category}</p>
+                            <p className="text-xs text-muted">{product.sku} · {getCategory(product.category)?.name ?? product.categoryName}</p>
                           </div>
                         </div>
                       </td>
@@ -286,14 +305,19 @@ function ProductTable({ products, company }) {
                       <td className="whitespace-nowrap">{product.moq.toLocaleString('en-IN')}</td>
                       <td>
                         <div className="flex items-center gap-2">
-                          <StockInput key={`${product.id}-${product.stock}`} product={product} onSave={(stock) => { updateProduct(product.id, { stock }); showToast(`Stock updated for ${product.name}.`); }} />
+                          <StockInput key={`${product.id}-${product.stock}`} product={product} onSave={(stock) => save(product, { stock }, `Stock updated for ${product.name}.`)} />
                           {low ? <Badge tone={product.stock <= 0 ? 'danger' : 'warning'}>{product.stock <= 0 ? 'Out' : 'Low'}</Badge> : null}
                         </div>
                       </td>
-                      <td><Badge tone={product.status === 'Active' ? 'success' : 'neutral'}>{product.status}</Badge></td>
+                      <td>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge tone={product.status === 'Active' ? 'success' : 'neutral'}>{product.status}</Badge>
+                          {product.moderationStatus === 'PENDING' ? <Badge tone="warning">Pending review</Badge> : product.moderationStatus === 'REJECTED' ? <Badge tone="danger">Rejected</Badge> : null}
+                        </div>
+                      </td>
                       <td>
                         <div className="flex justify-end gap-1">
-                          <IconButton icon={product.status === 'Active' ? EyeOff : Eye} size="sm" tone="muted" label={product.status === 'Active' ? `Hide ${product.name} from the catalogue` : `Show ${product.name} in the catalogue`} onClick={() => toggleStatus(product)} />
+                          <IconButton icon={product.status === 'Active' ? EyeOff : Eye} size="sm" tone="muted" label={product.status === 'Active' ? `Hide ${product.name} from the catalogue` : `Show ${product.name} in the catalogue`} disabled={savingId === product.id} onClick={() => toggleStatus(product)} />
                           <Link to={`/supplier/products/${product.id}/edit`} aria-label={`Edit ${product.name}`} title="Edit" className="inline-flex size-9 items-center justify-center rounded-[0.625rem] text-muted hover:bg-navy-50 hover:text-navy-900"><Pencil className="size-5" aria-hidden="true" /></Link>
                           <IconButton icon={Trash2} size="sm" tone="danger" label={`Delete ${product.name}`} onClick={() => setDeleting(product)} />
                         </div>
@@ -309,8 +333,8 @@ function ProductTable({ products, company }) {
 
       <ConfirmDialog
         open={Boolean(deleting)} onCancel={() => setDeleting(null)} title="Delete this product?" confirmLabel="Delete product"
-        text={deleting ? `“${deleting.name}” will be removed from the catalogue, carts and wishlists in this browser. This cannot be undone (except by resetting the sample data).` : ''}
-        onConfirm={() => { deleteProduct(deleting.id); showToast(`${deleting.name} deleted.`, 'info'); setDeleting(null); }}
+        text={deleting ? `“${deleting.name}” will be removed from your catalogue and from buyers. Past orders that include it are kept.` : ''}
+        onConfirm={confirmDelete}
       />
     </div>
   );
@@ -318,6 +342,6 @@ function ProductTable({ products, company }) {
 
 export default function SupplierProducts() {
   useDocumentTitle('Products & inventory');
-  return <SupplierGuard>{(company, products) => <ProductTable products={products} company={company} />}</SupplierGuard>;
+  return <SupplierGuard>{(company) => <ProductTable company={company} />}</SupplierGuard>;
 }
 

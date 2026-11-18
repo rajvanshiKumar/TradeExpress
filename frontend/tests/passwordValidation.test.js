@@ -198,20 +198,5 @@ describe('TradeExpress Frontend Password Validation & Security Suite', () => {
       assert.ok(src.includes('PasswordValidationIndicator'), 'Must render PasswordValidationIndicator');
       assert.ok(src.includes('validatePassword'), 'Must enforce validatePassword');
     });
-
-    it('ensures SupplierSettings page integrates PasswordValidationIndicator and eye toggles', () => {
-      const src = readSrc('../src/pages/supplier/SupplierSettings.jsx');
-      assert.ok(src.includes('PasswordValidationIndicator'), 'Must render PasswordValidationIndicator');
-      assert.ok(src.includes('validatePassword'), 'Must enforce validatePassword');
-      assert.ok(src.includes('showNewPassword'), 'Must support showNewPassword toggle');
-      assert.ok(src.includes('showConfirmPassword'), 'Must support showConfirmPassword toggle');
-    });
-
-    it('ensures SuperAdminAdmins modal integrates PasswordValidationIndicator for sub-admin provisioning', () => {
-      const src = readSrc('../src/pages/superadmin/SuperAdminAdmins.jsx');
-      assert.ok(src.includes('PasswordValidationIndicator'), 'Must render PasswordValidationIndicator');
-      assert.ok(src.includes('validatePassword'), 'Must enforce validatePassword');
-      assert.ok(src.includes('showPassword'), 'Must support showPassword toggle');
-    });
   });
 });

@@ -1,5 +1,6 @@
 import { getTokenForSlot, handleRejectedToken } from '../utils/authSession.js';
-const API_BASE = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:5000/api').replace(/\/+$/, '');
+import { API_BASE_URL } from '../config/api.js';
+const API_BASE = API_BASE_URL;
 
 function buildQueryString(params = {}) {
   const cleanParams = new URLSearchParams();
@@ -79,9 +80,6 @@ export const superAdminApi = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
-  // Emails the user a secure reset link; the Super Admin never sets another user's password
-  sendPasswordResetLink: (id) =>
-    request(`/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({}) }),
   getUserDeletionCheck: (id) => request(`/users/${id}/deletion-check`),
   deleteUser: (id, payload) =>
     request(`/users/${id}/delete`, { method: 'POST', body: JSON.stringify(payload) }),
@@ -187,50 +185,6 @@ export const superAdminApi = {
       body: JSON.stringify(payload),
     }),
 
-  // Disputes & Support
-  getDisputes: (params = {}) => {
-    return request(`/disputes${buildQueryString(params)}`);
-  },
-  getDisputeDetails: (id) => request(`/disputes/${id}`),
-  addDisputeMessage: (id, payload) =>
-    request(`/disputes/${id}/messages`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  resolveDispute: (id, payload) =>
-    request(`/disputes/${id}/resolve`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-
-  // Support Tickets
-  getSupportTickets: (params = {}) => {
-    return request(`/tickets${buildQueryString(params)}`);
-  },
-  getSupportTicketDetails: (id) => request(`/tickets/${id}`),
-  replySupportTicket: (id, payload) =>
-    request(`/tickets/${id}/reply`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-
-  // Sub-Admins
-  getAdminUsers: () => request('/admins'),
-  createSubAdmin: (payload) =>
-    request('/admins', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  updateSubAdmin: (id, payload) =>
-    request(`/admins/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
-  deleteSubAdmin: (id) =>
-    request(`/admins/${id}`, {
-      method: 'DELETE',
-    }),
-
   // Settings & Integrations
   getPlatformSettings: () => request('/settings'),
   updatePlatformSetting: (payload) =>
@@ -244,6 +198,12 @@ export const superAdminApi = {
   getAuditLogs: (params = {}) => {
     return request(`/audit-logs${buildQueryString(params)}`);
   },
+
+  // Supplier account deletion requests
+  getDeletionRequests: (params = {}) => request(`/deletion-requests${buildQueryString(params)}`),
+  getDeletionRequest: (id) => request(`/deletion-requests/${encodeURIComponent(id)}`),
+  decideDeletionRequest: (id, payload) => request(`/deletion-requests/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify(payload) }),
+  retryDeletionRequest: (id) => request(`/deletion-requests/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
 
   // Financial Reports
   getFinancialReport: (params = {}) => {

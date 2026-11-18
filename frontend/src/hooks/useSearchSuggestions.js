@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { API_BASE_URL } from '../config/api.js';
 
-const BASE_URL = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').trim().replace(/\/+$/, '') || '/api';
+const BASE_URL = API_BASE_URL;
 export const SUGGESTION_DEBOUNCE_MS = 300;
 const CACHE_TTL_MS = 60 * 1000;
 

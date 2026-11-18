@@ -13,11 +13,10 @@ import { TableSkeleton } from '../../components/common/Skeleton';
 import OrderDetails from '../../components/forms/OrderDetails';
 import TaxInvoiceModal from '../../components/common/TaxInvoiceModal';
 import SupplierGuard from './SupplierGuard';
-import useOrders from '../../hooks/useOrders';
+import useSupplierOrders, { SUPPLIER_ORDER_FILTERS } from '../../hooks/useSupplierOrders';
 import useCurrency from '../../hooks/useCurrency';
 import useNotifications from '../../hooks/useNotifications';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import { ORDER_STATUSES } from '../../utils/constants';
 import { companyOrderValue } from '../../utils/analytics';
 import { formatDate } from '../../utils/formatDate';
 import { apiPost, apiPut } from '../../services/apiClient';
@@ -26,7 +25,9 @@ const PREPARATION_STATUSES = ['Pending', 'Confirmed', 'In Production', 'Packed']
 
 function Orders({ company }) {
   const navigate = useNavigate();
-  const { orders, loading, error, reload, updateOrderStatus } = useOrders();
+  // The supplier's own orders from the database (same orders the dashboard counts)
+  const { orders, loading, error, reload } = useSupplierOrders(company.id);
+  const [busyId, setBusyId] = useState(null);
   const { money } = useCurrency();
   const { showToast } = useNotifications();
   const [status, setStatus] = useState('');
@@ -40,7 +41,7 @@ function Orders({ company }) {
 
   const [invoiceOrder, setInvoiceOrder] = useState(null);
 
-  const mine = orders.filter((order) => order.items.some((item) => item.companyId === company.id));
+  const mine = orders; // already limited to this supplier by the server
   const visible = mine.filter((order) => {
     if (status && order.status !== status) return false;
     const q = search.trim().toLowerCase();
@@ -49,13 +50,16 @@ function Orders({ company }) {
   const selected = mine.find((order) => order.id === openId) ?? null;
 
   const handleAccept = async (order) => {
+    if (busyId) return;
+    setBusyId(order.id);
     try {
-      await apiPost(`supplier/orders/${order.id}/accept`, {});
-      updateOrderStatus(order.id, 'Confirmed');
-      showToast(`Order ${order.id} accepted! Buyer has been notified.`);
-    } catch {
-      updateOrderStatus(order.id, 'Confirmed');
-      showToast(`Order ${order.id} accepted.`);
+      await apiPost(`supplier/orders/${order.backendId || order.id}/accept`, {});
+      showToast(`Order ${order.id} accepted. The buyer has been notified.`);
+      reload();
+    } catch (err) {
+      showToast(err?.message || `Order ${order.id} could not be accepted.`, 'error');
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -64,18 +68,15 @@ function Orders({ company }) {
     if (!rejectingOrder) return;
     setRejectLoading(true);
     try {
-      await apiPost(`supplier/orders/${rejectingOrder.id}/reject`, {
+      await apiPost(`supplier/orders/${rejectingOrder.backendId || rejectingOrder.id}/reject`, {
         rejectionReason: rejectionReason.trim() || 'Supplier capacity full or unable to fulfill at this time.',
       });
-      updateOrderStatus(rejectingOrder.id, 'Cancelled');
       showToast(`Order ${rejectingOrder.id} rejected.`);
       setRejectingOrder(null);
       setRejectionReason('');
-    } catch {
-      updateOrderStatus(rejectingOrder.id, 'Cancelled');
-      setRejectingOrder(null);
-      setRejectionReason('');
-      showToast(`Order marked as cancelled.`);
+      reload();
+    } catch (err) {
+      showToast(err?.message || `Order ${rejectingOrder.id} could not be rejected.`, 'error');
     } finally {
       setRejectLoading(false);
     }
@@ -87,9 +88,9 @@ function Orders({ company }) {
     const backendStatusMap = { Confirmed: 'ORDER_CONFIRMED', Packed: 'PACKED' };
     if (!backendStatusMap[next] || next === order.status) return;
     try {
-      await apiPut(`supplier/orders/${order.id}/status`, { status: backendStatusMap[next] });
-      updateOrderStatus(order.id, next);
+      await apiPut(`supplier/orders/${order.backendId || order.id}/status`, { status: backendStatusMap[next] });
       showToast(`Order ${order.id} marked as ${next}.`);
+      reload();
     } catch (err) {
       showToast(err.message || 'The order status could not be updated.', 'error');
     }
@@ -113,8 +114,8 @@ function Orders({ company }) {
             value={status}
             onChange={(event) => setStatus(event.target.value)}
             options={[
-              { value: '', label: 'All statuses' },
-              ...ORDER_STATUSES.map((item) => ({ value: item, label: item })),
+              { value: '', label: `All orders (${mine.length})` },
+              ...SUPPLIER_ORDER_FILTERS.map((item) => ({ value: item, label: item })),
             ]}
             placeholder="All statuses"
             searchable={false}

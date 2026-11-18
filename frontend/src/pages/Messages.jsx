@@ -142,9 +142,16 @@ export default function Messages() {
     if (activeId || loading || autoInitRef.current) return;
 
     if (rfqParam || buyerParam || productParam || supplierParam || companyParam) {
-      const found = conversations.find((c) => {
-        if (supplierParam && (c.supplierId === supplierParam || c.supplier?.id === supplierParam)) return true;
-        if (companyParam && (c.companyId === companyParam || c.company?.id === companyParam)) return true;
+      const found = uniqueConversations.find((c) => {
+        if (supplierParam) {
+          if (c.supplierId === supplierParam || c.supplier?.id === supplierParam) return true;
+          if (c.supplier?.name?.toLowerCase() === supplierParam.toLowerCase()) return true;
+          if (c.supplier?.company?.toLowerCase() === supplierParam.toLowerCase()) return true;
+        }
+        if (companyParam) {
+          if (c.companyId === companyParam || c.company?.id === companyParam || c.company?.slug === companyParam) return true;
+          if (c.supplier?.company?.toLowerCase() === companyParam.toLowerCase()) return true;
+        }
         if (rfqParam && (c.rfqId === rfqParam || c.rfq?.rfqNumber === rfqParam)) return true;
         if (buyerParam && c.buyerId === buyerParam) return true;
         if (productParam && (c.productId === productParam || c.product?.slug === productParam)) return true;
@@ -173,7 +180,7 @@ export default function Messages() {
           });
       }
     }
-  }, [activeId, rfqParam, buyerParam, productParam, supplierParam, companyParam, conversations, loading, startConversation]);
+  }, [activeId, rfqParam, buyerParam, productParam, supplierParam, companyParam, uniqueConversations, loading, startConversation]);
 
   // Describe the "other party" of a conversation based on role
   const describe = (conversation) => {

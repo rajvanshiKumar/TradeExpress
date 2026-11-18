@@ -50,7 +50,10 @@ export default function OrderDetails({ order, companyId = null, trackDelivery = 
               <li key={item.productId} className="flex items-center gap-3 px-4 py-3">
                 <Image photo={item.photo} illustration={item.illustration} width={120} height={120} alt="" className="size-14 shrink-0 rounded-lg bg-surface object-cover" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink"><Link to={`/products/${item.slug}`} className="hover:text-brand-600">{item.name}</Link></p>
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {/* Order lines keep their own name, quantity and price: a product deleted later stays readable here */}
+                    {item.productAvailable === false ? <>{item.name} <span className="text-xs font-normal text-muted">(no longer listed)</span></> : <Link to={`/products/${item.slug}`} className="hover:text-brand-600">{item.name}</Link>}
+                  </p>
                   <p className="text-xs text-muted">{quantityLabel(item.quantity, item.unit)} × {money(item.unitPrice)}{item.variant ? ` · ${Object.values(item.variant).join(', ')}` : ''}</p>
                   {company && !companyId ? <p className="truncate text-xs text-muted">{company.name}</p> : null}
                 </div>

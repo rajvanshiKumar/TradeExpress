@@ -69,7 +69,8 @@ export async function listSupplierInventory(supplierUser, query = {}) {
   const skip = (parsedPage - 1) * parsedLimit;
 
   // Build Prisma filter clauses
-  const conditions = [{ ...whereSupplier }];
+  // Deleted products are excluded everywhere (same rule as Product Catalogue and the dashboard)
+  const conditions = [{ ...whereSupplier }, { status: { not: 'Deleted' } }];
 
   if (search && search.trim()) {
     const q = search.trim();
@@ -77,6 +78,7 @@ export async function listSupplierInventory(supplierUser, query = {}) {
       OR: [
         { name: { contains: q } },
         { sku: { contains: q } },
+        { id: q }, // exact Product ID
       ],
     });
   }
@@ -232,7 +234,19 @@ export async function listSupplierInventory(supplierUser, query = {}) {
     };
   });
 
+  // Category filter options: categories of this supplier's own products (independent of the active filters)
+  const categoryGroups = await prisma.product.groupBy({ by: ['categorySlug'], where: whereSupplier, _count: { _all: true } });
+  const categorySlugs = (Array.isArray(categoryGroups) ? categoryGroups : []).map((g) => g.categorySlug).filter(Boolean);
+  const categoryRows = categorySlugs.length
+    ? await prisma.category.findMany({ where: { slug: { in: categorySlugs } }, select: { slug: true, name: true } })
+    : [];
+  const categoryNames = new Map((categoryRows || []).map((c) => [c.slug, c.name]));
+  const categories = categorySlugs
+    .map((slug) => ({ slug, name: categoryNames.get(slug) || slug }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return {
+    categories,
     metrics: {
       totalProducts: allSupplierProducts.length,
       totalPhysicalStock,

@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { splitSpecifications } from './productSpecService.js';
 
 /**
  * Public supplier details sent with each listed product, for product cards. Only what the supplier record holds:
@@ -20,6 +21,7 @@ export function listingSupplier(sup) {
 
 export async function listProducts({
   category,
+  subcategory,
   search,
   minPrice,
   maxPrice,
@@ -38,6 +40,10 @@ export async function listProducts({
 
   if (category) {
     where.categorySlug = category;
+  }
+  // Subcategory filter (exact subcategory name, as stored on the product)
+  if (typeof subcategory === 'string' && subcategory.trim()) {
+    where.subcategory = subcategory.trim();
   }
 
   const textMatch = (q) => [
@@ -219,23 +225,58 @@ export async function getProductById(id) {
   return formatProduct(product);
 }
 
+/**
+ * All categories for buyers and suppliers, in taxonomy display order (see src/data/categoryTaxonomy.js).
+ * Existing fields keep their meaning (`productCount` = all products, `subcategories` = names). Added:
+ * group / display order / regulated flag, structured `subcategoryDetails`, and REAL active-listing counts
+ * (`activeProductCount`, per-subcategory `productCount`) from one grouped query. Inactive categories are hidden.
+ */
 export async function listCategories() {
-  const categories = await prisma.category.findMany({
-    orderBy: { name: 'asc' },
-    include: {
-      _count: { select: { products: true } },
-    },
-  });
+  const [categories, activeCounts] = await Promise.all([
+    prisma.category.findMany({
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { products: true } } },
+    }),
+    prisma.product.groupBy({ by: ['categorySlug', 'subcategory'], where: { status: 'Active' }, _count: { _all: true } }),
+  ]);
 
-  return categories.map((cat) => ({
-    id: cat.id,
-    slug: cat.slug,
-    name: cat.name,
-    description: cat.description,
-    photo: cat.photo,
-    subcategories: cat.subcategories || [],
-    productCount: cat._count.products,
-  }));
+  const activeByCategory = new Map();
+  const activeBySub = new Map();
+  for (const row of Array.isArray(activeCounts) ? activeCounts : []) {
+    activeByCategory.set(row.categorySlug, (activeByCategory.get(row.categorySlug) || 0) + row._count._all);
+    const key = `${row.categorySlug}::${String(row.subcategory || '').toLowerCase()}`;
+    activeBySub.set(key, (activeBySub.get(key) || 0) + row._count._all);
+  }
+
+  return categories
+    .map((cat) => {
+      const taxonomy = cat.attributes && typeof cat.attributes === 'object' ? cat.attributes.taxonomy : null;
+      const names = Array.isArray(cat.subcategories) ? cat.subcategories : [];
+      const details = Array.isArray(taxonomy?.subcategories)
+        ? taxonomy.subcategories
+        : names.map((name, i) => ({ slug: String(name).toLowerCase().replace(/&/g, ' ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''), name, order: i + 1 }));
+      return {
+        id: cat.id,
+        slug: cat.slug,
+        name: cat.name,
+        description: cat.description,
+        photo: cat.photo,
+        subcategories: names,
+        productCount: cat._count.products,
+        activeProductCount: activeByCategory.get(cat.slug) || 0,
+        group: taxonomy?.group || null,
+        groupSlug: taxonomy?.groupSlug || null,
+        displayOrder: Number.isFinite(taxonomy?.displayOrder) ? taxonomy.displayOrder : null,
+        isActive: taxonomy?.isActive !== false,
+        regulated: Boolean(taxonomy?.regulated),
+        subcategoryDetails: details.map((sub) => ({
+          ...sub,
+          productCount: activeBySub.get(`${cat.slug}::${String(sub.name).toLowerCase()}`) || 0,
+        })),
+      };
+    })
+    .filter((cat) => cat.isActive)
+    .sort((a, b) => (a.displayOrder ?? Infinity) - (b.displayOrder ?? Infinity) || a.name.localeCompare(b.name));
 }
 
 export async function getCategoryBySlug(slug) {
@@ -272,7 +313,7 @@ function formatProduct(p) {
     ...p,
     price: Number(p.price),
     variants: p.variants || null,
-    specifications: p.specifications || {},
+    ...splitSpecifications(p.specifications),
     packaging: p.packaging || {},
     priceTiers: p.priceTiers || [],
     rating,
@@ -542,7 +583,7 @@ export async function compareProductSuppliers(slugOrId, requestedSupplierIds = [
  * Extract material from specifications, variants, or title/summary
  */
 export function extractMaterial(product) {
-  const specs = product.specifications || {};
+  const specs = splitSpecifications(product.specifications).specifications;
   const vars = product.variants || {};
   if (specs.Material) return String(specs.Material);
   if (specs.material) return String(specs.material);
@@ -584,7 +625,7 @@ export function extractMaterial(product) {
  */
 export function extractSizes(product) {
   const vars = product.variants || {};
-  const specs = product.specifications || {};
+  const specs = splitSpecifications(product.specifications).specifications;
   const sizeVal = vars.Size || vars.size || vars.Capacity || vars.capacity || vars.Battery || vars.Dimensions || specs.Dimensions || specs.Size || null;
   if (!sizeVal) return null;
   if (Array.isArray(sizeVal)) return sizeVal.join(', ');
@@ -595,7 +636,7 @@ export function extractSizes(product) {
  * Format product into a complete, clean B2B comparison record
  */
 export function formatProductForComparison(product, supplier = null) {
-  const specs = product.specifications || {};
+  const specs = splitSpecifications(product.specifications).specifications;
   const leadDays = product.leadTimeDays || 7;
   const dispatchText = specs['Estimated Dispatch'] || `${leadDays} business days`;
   const material = extractMaterial(product);

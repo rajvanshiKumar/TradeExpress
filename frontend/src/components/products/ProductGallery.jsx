@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Play, Film, Image as ImageIcon } from 'lucide-react';
 import Image from '../common/Image';
+import { BACKEND_ORIGIN } from '../../config/api.js';
 
 const resolveMediaUrl = (url) => {
   if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
     return url;
   }
-  const base = (import.meta.env.VITE_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, '');
+  const base = BACKEND_ORIGIN;
   return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 

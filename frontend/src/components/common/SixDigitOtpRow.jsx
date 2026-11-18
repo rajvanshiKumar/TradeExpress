@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { Check, RefreshCw, X, ShieldAlert } from 'lucide-react';
+import { enterOtpDigits, isCompleteOtp, otpSlots, pastedOtp } from '../../utils/otpDigits';
 
 export default function SixDigitOtpRow({
   otp = '',
@@ -16,10 +17,9 @@ export default function SixDigitOtpRow({
 }) {
   const inputsRef = useRef([]);
 
-  // Ensure digits array always has 6 slots
-  const digits = Array(6)
-    .fill('')
-    .map((_, i) => (otp && otp[i] !== undefined ? otp[i] : ''));
+  // One value per box; an empty box keeps its position (see utils/otpDigits)
+  const digits = otpSlots(otp);
+  const complete = isCompleteOtp(otp);
 
   // Auto-focus first empty slot when mounted
   useEffect(() => {
@@ -31,42 +31,9 @@ export default function SixDigitOtpRow({
   }, []);
 
   const handleDigitChange = (index, value) => {
-    // Only accept numeric digits
-    const cleaned = value.replace(/\D/g, '');
-    if (!cleaned) {
-      // Clear current slot
-      const newDigits = [...digits];
-      newDigits[index] = '';
-      onChange(newDigits.join(''));
-      return;
-    }
-
-    // If pasted or multi-char
-    if (cleaned.length > 1) {
-      const pastedDigits = cleaned.slice(0, 6).split('');
-      const newDigits = [...digits];
-      pastedDigits.forEach((char, i) => {
-        if (index + i < 6) {
-          newDigits[index + i] = char;
-        }
-      });
-      const combined = newDigits.join('');
-      onChange(combined);
-      const nextFocus = Math.min(5, index + pastedDigits.length);
-      inputsRef.current[nextFocus]?.focus();
-      return;
-    }
-
-    // Single digit
-    const newDigits = [...digits];
-    newDigits[index] = cleaned[0];
-    const combined = newDigits.join('');
-    onChange(combined);
-
-    // Auto-advance to next box
-    if (index < 5) {
-      inputsRef.current[index + 1]?.focus();
-    }
+    const { value: next, focusIndex } = enterOtpDigits(otp, index, value);
+    onChange(next);
+    if (focusIndex !== null) inputsRef.current[focusIndex]?.focus();
   };
 
   const handleKeyDown = (index, e) => {
@@ -80,7 +47,7 @@ export default function SixDigitOtpRow({
       inputsRef.current[index + 1]?.focus();
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (otp.length === 6 && !verifying) {
+      if (complete && !verifying) {
         onVerify();
       }
     }
@@ -88,7 +55,7 @@ export default function SixDigitOtpRow({
 
   const handlePaste = (e) => {
     e.preventDefault();
-    const pasted = e.clipboardData.getData('text/plain').replace(/\D/g, '').slice(0, 6);
+    const pasted = pastedOtp(e.clipboardData.getData('text/plain'));
     if (!pasted) return;
 
     onChange(pasted);
@@ -145,7 +112,7 @@ export default function SixDigitOtpRow({
         <button
           type="button"
           onClick={onVerify}
-          disabled={verifying || otp.length < 6}
+          disabled={verifying || !complete}
           className="h-11 sm:h-12 px-4 sm:px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm transition-all shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
         >
           {verifying ? (

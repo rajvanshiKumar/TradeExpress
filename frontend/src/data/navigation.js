@@ -84,7 +84,6 @@ export const dashboardNav = {
     { label: 'My Products', to: '/supplier/products', icon: 'Boxes' },
     { label: 'Inventory Management', to: '/supplier/inventory', icon: 'Warehouse' },
     { label: 'Buyer Inquiries/RFQs', to: '/supplier/inquiries', icon: 'FileText' },
-    { label: 'My Quotations', to: '/supplier/quotations', icon: 'ClipboardList' },
     { label: 'Orders', to: '/supplier/orders', icon: 'Package' },
     { label: 'Transport & Delivery Management', to: '/supplier/transport', icon: 'Truck' },
     { label: 'Payments & Earnings', to: '/supplier/payments', icon: 'CircleDollarSign' },
@@ -92,7 +91,6 @@ export const dashboardNav = {
     { label: 'Business Profile', to: '/supplier/profile', icon: 'Building2' },
     { label: 'Notifications', to: '/supplier/notifications', icon: 'Bell' },
     { label: 'Analytics', to: '/supplier/analytics', icon: 'ChartColumn' },
-    { label: 'Settings & Security', to: '/supplier/settings', icon: 'Settings' },
   ],
   admin: [
     { label: 'Overview', to: '/admin', icon: 'LayoutDashboard' },

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import * as deletionController from '../controllers/supplierDeletionController.js';
 import { body } from 'express-validator';
 import * as controller from '../controllers/superAdminController.js';
 import { authenticateJWT, requireRole } from '../middleware/authMiddleware.js';
@@ -41,6 +42,12 @@ router.post('/users/:id/verify', controller.reviewSupplierKyc);
 
 // Suppliers & KYC
 router.get('/suppliers/kyc', controller.listSuppliersKyc);
+
+// Supplier account deletion requests (approval workflow)
+router.get('/deletion-requests', deletionController.listRequests);
+router.get('/deletion-requests/:id', deletionController.getRequest);
+router.post('/deletion-requests/:id/decision', deletionController.decide);
+router.post('/deletion-requests/:id/retry', deletionController.retry);
 router.post('/suppliers/:id/kyc/review', controller.reviewSupplierKyc);
 
 // Products & Categories

@@ -63,7 +63,9 @@ router.post(
   otpSendLimiter,
   validate([
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
-    body('purpose').optional().isIn(['PHONE_CHANGE']).withMessage('Invalid verification purpose.'),
+    // "registration" (signup forms) behaves like no purpose; PHONE_CHANGE is the Account Settings code
+    body('purpose').optional().isIn(['PHONE_CHANGE', 'registration']).withMessage('Invalid verification purpose.'),
+    body('role').optional().isIn(['BUYER', 'SUPPLIER', 'buyer', 'supplier']).withMessage('Invalid account type.'),
   ]),
   authController.sendMobileOtp
 );
@@ -83,6 +85,7 @@ router.post(
   otpSendLimiter,
   validate([
     body('phone').trim().notEmpty().withMessage('Mobile number is required.'),
+    body('role').optional().isIn(['BUYER', 'SUPPLIER', 'buyer', 'supplier']).withMessage('Invalid account type.'),
   ]),
   authController.resendMobileOtp
 );

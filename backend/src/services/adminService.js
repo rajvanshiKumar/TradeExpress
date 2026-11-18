@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { readEncryptedField } from '../utils/dataCrypto.js';
 import { syncAfterVerification } from './supplierDocumentService.js';
 import { getActiveCommissionPolicy } from './commissionTierService.js';
 
@@ -32,7 +33,7 @@ export async function listPendingKyc() {
     orderBy: { updatedAt: 'desc' },
   });
 
-  return users;
+  return users.map((u) => ({ ...u, bankAccountNumber: readEncryptedField(u.bankAccountNumber) }));
 }
 
 export async function reviewKyc(userId, { status, rejectionReason = '', notes = '' }) {

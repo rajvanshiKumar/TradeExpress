@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, LogOut, Pencil, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ChevronRight, LogOut, Pencil, RefreshCw, Search } from 'lucide-react';
 import Breadcrumbs from '../../components/common/Breadcrumbs';
 import Button from '../../components/common/Button';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import useAuth from '../../hooks/useAuth';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { getAccountSettings } from '../../services/accountApi';
-import { ACCOUNT_CARDS, ACCOUNT_SECTION_TITLES, DASHBOARD_HOME } from '../../components/account/accountSections';
+import { ACCOUNT_CARDS, ALL_SECTION_TITLES, DASHBOARD_HOME, SUPPLIER_SETTINGS_GROUPS } from '../../components/account/accountSections';
 import { AccountAvatar, AccountSkeleton } from '../../components/account/AccountUi';
 import AccountProfileSection from '../../components/account/AccountProfileSection';
 import { AccountConnectedSection, AccountMemberSection, AccountTaxSection } from '../../components/account/AccountInfoSections';
@@ -71,9 +71,21 @@ export default function AccountSettingsPage() {
       return !row.roles || row.roles.includes(role);
     }),
   }));
-  const sectionRow = visibleCards.flatMap((card) => card.rows).find((row) => row.id === section);
+  // Suppliers get the 12 settings groups; buyers and the Super Admin keep their cards
+  const isSupplierSettings = role === 'supplier' && !isBuyerDashboard;
+  const cards = isSupplierSettings ? SUPPLIER_SETTINGS_GROUPS : visibleCards;
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const shownCards = q
+    ? cards.map((card) => ({
+      ...card,
+      rows: card.title.toLowerCase().includes(q) ? card.rows : card.rows.filter((row) => `${row.label} ${row.description}`.toLowerCase().includes(q)),
+    })).filter((card) => card.rows.length)
+    : cards;
+  const sectionRow = cards.flatMap((card) => card.rows).find((row) => row.id === section && !row.to);
   const SectionComponent = sectionRow?.available ? SECTION_COMPONENTS[section] : null;
-  useDocumentTitle(section && ACCOUNT_SECTION_TITLES[section] ? `${ACCOUNT_SECTION_TITLES[section]} | Account Settings` : 'Account Settings | TradeExpress');
+  const sectionTitle = sectionRow?.label || ALL_SECTION_TITLES[section];
+  useDocumentTitle(section && sectionTitle ? `${sectionTitle} | Account Settings` : 'Account Settings | TradeExpress');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,7 +140,7 @@ export default function AccountSettingsPage() {
   const breadcrumbs = [
     { label: 'Dashboard', to: DASHBOARD_HOME[role] || '/' },
     section && SectionComponent ? { label: 'Account Settings', to: basePath } : { label: 'Account Settings' },
-    ...(section && SectionComponent ? [{ label: ACCOUNT_SECTION_TITLES[section] }] : []),
+    ...(section && SectionComponent ? [{ label: sectionTitle }] : []),
   ];
 
   return (
@@ -136,7 +148,7 @@ export default function AccountSettingsPage() {
       <div>
         <Breadcrumbs items={breadcrumbs} />
         <h1 className="mt-2 font-display text-2xl font-extrabold tracking-tight text-navy-900 sm:text-3xl">
-          {section && SectionComponent ? ACCOUNT_SECTION_TITLES[section] : 'Account Settings'}
+          {section && SectionComponent ? sectionTitle : 'Account Settings'}
         </h1>
       </div>
 
@@ -188,14 +200,32 @@ export default function AccountSettingsPage() {
             />
           </section>
 
+          {isSupplierSettings ? (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search settings, e.g. password, bank, notifications…"
+                aria-label="Search settings"
+                className="h-11 w-full rounded-xl border border-line bg-white pl-10 pr-3 text-sm text-ink shadow-card placeholder:text-muted focus:border-success focus:outline-none focus:ring-2 focus:ring-success/20"
+              />
+            </div>
+          ) : null}
+
           {/* Settings cards */}
+          {q && !shownCards.length ? (
+            <p className="rounded-2xl border border-line bg-white p-6 text-center text-sm text-muted shadow-card">No settings match “{query}”.</p>
+          ) : null}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {visibleCards.map((card) => {
+            {shownCards.map((card) => {
               const CardIcon = card.icon;
               return (
                 <section key={card.id} aria-labelledby={`account-card-${card.id}`} className="rounded-2xl border border-line bg-white shadow-card">
                   <h2 id={`account-card-${card.id}`} className="flex items-center gap-2 border-b border-line px-5 py-4 font-display text-base font-bold text-navy-900">
                     <CardIcon className="size-4 text-success" aria-hidden="true" /> {card.title}
+                    {card.description ? <span className="ml-auto hidden text-right text-xs font-normal text-muted sm:inline">{card.description}</span> : null}
                   </h2>
                   <ul className="p-2">
                     {card.rows.map((row) => {
@@ -209,17 +239,19 @@ export default function AccountSettingsPage() {
                             <span className={`block text-sm font-semibold ${row.danger ? 'text-danger' : 'text-navy-900'}`}>{row.label}</span>
                             <span className="block truncate text-xs text-muted">{row.description}</span>
                           </span>
-                          {row.available ? (
+                          {row.to ? (
+                            <ArrowUpRight className="size-4 shrink-0 text-muted transition-transform motion-safe:group-hover:-translate-y-0.5 motion-safe:group-hover:translate-x-0.5" aria-label="Opens its page" />
+                          ) : row.available ? (
                             <ChevronRight className="size-4 shrink-0 text-muted transition-transform motion-safe:group-hover:translate-x-0.5" aria-hidden="true" />
                           ) : (
-                            <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-[0.6875rem] font-semibold text-muted">Coming soon</span>
+                            <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-[0.6875rem] font-semibold text-muted">{row.planned || 'Coming soon'}</span>
                           )}
                         </>
                       );
                       return (
                         <li key={row.id}>
-                          {row.available ? (
-                            <Link to={`${basePath}/${row.id}`} className="group flex min-h-14 items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success">
+                          {row.to || row.available ? (
+                            <Link to={row.to || `${basePath}/${row.id}`} className="group flex min-h-14 items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success">
                               {content}
                             </Link>
                           ) : (

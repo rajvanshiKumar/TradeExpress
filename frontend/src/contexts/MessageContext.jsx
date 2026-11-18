@@ -57,7 +57,9 @@ export function MessageProvider({ children }) {
 
     const handleNewMessage = (newMessage) => {
       setConversations((prev) => {
-        const convIndex = prev.findIndex((c) => c.id === newMessage.conversationId);
+        const convIndex = prev.findIndex(
+          (c) => c.id === newMessage.conversationId || (Array.isArray(c.mergedIds) && c.mergedIds.includes(newMessage.conversationId))
+        );
         if (convIndex === -1) {
           // If conversation not in current list, fetch full list
           reload();
@@ -69,7 +71,9 @@ export function MessageProvider({ children }) {
         const updatedMessages = alreadyHas ? conv.messages : [...(conv.messages || []), newMessage];
 
         const isMine = newMessage.senderId === user.id;
-        const isActive = activeConversationIdRef.current === conv.id;
+        const isActive =
+          activeConversationIdRef.current === conv.id ||
+          (Array.isArray(conv.mergedIds) && conv.mergedIds.includes(activeConversationIdRef.current));
 
         const updatedConv = {
           ...conv,
@@ -89,7 +93,9 @@ export function MessageProvider({ children }) {
 
     const handleConversationUpdated = (updatedConv) => {
       setConversations((prev) => {
-        const existsIndex = prev.findIndex((c) => c.id === updatedConv.id);
+        const existsIndex = prev.findIndex(
+          (c) => c.id === updatedConv.id || (Array.isArray(c.mergedIds) && c.mergedIds.includes(updatedConv.id))
+        );
         if (existsIndex !== -1) {
           const current = prev[existsIndex];
           const existingMessages = current.messages || [];
@@ -104,6 +110,8 @@ export function MessageProvider({ children }) {
           const merged = {
             ...current,
             ...updatedConv,
+            id: current.id,
+            mergedIds: [...new Set([...(current.mergedIds || []), ...(updatedConv.mergedIds || [updatedConv.id])])],
             messages: mergedMessages.length > 0 ? mergedMessages : current.messages,
             unread: {
               ...current.unread,
@@ -162,7 +170,7 @@ export function MessageProvider({ children }) {
             setConversations(consolidateConversations(data, side));
           }
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => {
           inFlight = false;
         });
@@ -247,9 +255,10 @@ export function MessageProvider({ children }) {
       setSending(true);
       try {
         const message = await messageService.sendMessage(conversationId, text.trim());
-        setConversations((previous) =>
-          previous.map((item) => {
-            if (item.id !== conversationId) return item;
+        setConversations((previous) => {
+          const updated = previous.map((item) => {
+            const matches = item.id === conversationId || (Array.isArray(item.mergedIds) && item.mergedIds.includes(conversationId));
+            if (!matches) return item;
             const alreadyHas = item.messages?.some((m) => m.id === message.id);
             const messages = alreadyHas ? item.messages : [...(item.messages || []), message];
             return {
@@ -257,8 +266,9 @@ export function MessageProvider({ children }) {
               messages,
               lastMessageAt: message.createdAt || new Date().toISOString(),
             };
-          })
-        );
+          });
+          return consolidateConversations(updated, side);
+        });
         return message;
       } catch (err) {
         console.error('Failed to send message:', err);
@@ -279,7 +289,8 @@ export function MessageProvider({ children }) {
       // Optimistic state update
       setConversations((previous) =>
         previous.map((item) => {
-          if (item.id !== conversationId) return item;
+          const matches = item.id === conversationId || (Array.isArray(item.mergedIds) && item.mergedIds.includes(conversationId));
+          if (!matches) return item;
           if ((item.unread?.[side] ?? 0) === 0) return item;
           return {
             ...item,

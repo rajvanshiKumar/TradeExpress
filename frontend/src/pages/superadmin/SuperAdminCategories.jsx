@@ -12,6 +12,7 @@ import {
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
 import Image from '../../components/common/Image';
+import { API_BASE_URL } from '../../config/api.js';
 
 export default function SuperAdminCategories() {
   const { showToast } = useNotifications();
@@ -48,7 +49,7 @@ export default function SuperAdminCategories() {
     } catch (err) {
       console.warn('SuperAdminCategories fetch error, trying fallback:', err);
       try {
-        const apiBase = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:5000/api').replace(/\/+$/, '');
+        const apiBase = API_BASE_URL;
         const fallbackRes = await fetch(`${apiBase}/categories`);
         if (fallbackRes.ok) {
           const fallbackData = await fallbackRes.json();

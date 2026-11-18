@@ -130,9 +130,10 @@ describe('Buyer password sign-in', () => {
 });
 
 describe('Buyer OTP provider handling', () => {
-  const otpSource = fs.readFileSync(path.resolve('src/services/otpService.js'), 'utf8');
-  const authSource = fs.readFileSync(path.resolve('src/services/authService.js'), 'utf8');
-  const routeSource = fs.readFileSync(path.resolve('src/routes/authRoutes.js'), 'utf8');
+  const resolveBackend = (rel) => (fs.existsSync(path.resolve(rel)) ? path.resolve(rel) : path.resolve('backend', rel));
+  const otpSource = fs.readFileSync(resolveBackend('src/services/otpService.js'), 'utf8');
+  const authSource = fs.readFileSync(resolveBackend('src/services/authService.js'), 'utf8');
+  const routeSource = fs.readFileSync(resolveBackend('src/routes/authRoutes.js'), 'utf8');
 
   it('requires OTP expiry, attempt limits and one-time verification token consumption', () => {
     assert.match(otpSource, /new Date\(\)\s*>\s*new Date\(verification\.expiresAt\)/);

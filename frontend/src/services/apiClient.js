@@ -1,4 +1,5 @@
 import { getAuthToken, handleRejectedToken } from '../utils/authSession.js';
+import { API_BASE_URL, IS_API_CONFIGURED } from '../config/api.js';
 // Optional public API adapter.
 //
 // TradeExpress ships with NO external API configured: every service works from seeded
@@ -8,9 +9,9 @@ import { getAuthToken, handleRejectedToken } from '../utils/authSession.js';
 //
 // Never put private keys in VITE_ variables: they are bundled into the public site.
 
-const BASE_URL = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').trim().replace(/\/+$/, '');
+const BASE_URL = IS_API_CONFIGURED ? API_BASE_URL : '';
 
-export const isApiConfigured = Boolean(BASE_URL);
+export const isApiConfigured = IS_API_CONFIGURED;
 
 export class ApiError extends Error {
   constructor(message, status, data = null) {

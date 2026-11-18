@@ -9,7 +9,6 @@ describe('Supplier Enterprise Portal & Media Test Suite', () => {
       { label: 'My Products', to: '/supplier/products' },
       { label: 'Inventory Management', to: '/supplier/inventory' },
       { label: 'Buyer Inquiries/RFQs', to: '/supplier/inquiries' },
-      { label: 'My Quotations', to: '/supplier/quotations' },
       { label: 'Orders', to: '/supplier/orders' },
       { label: 'Transport & Delivery Management', to: '/supplier/transport' },
       { label: 'Payments & Earnings', to: '/supplier/payments' },
@@ -17,7 +16,6 @@ describe('Supplier Enterprise Portal & Media Test Suite', () => {
       { label: 'Business Profile', to: '/supplier/profile' },
       { label: 'Notifications', to: '/supplier/notifications' },
       { label: 'Analytics', to: '/supplier/analytics' },
-      { label: 'Settings & Security', to: '/supplier/settings' },
     ];
 
     it('contains all required supplier enterprise navigation items with valid routes and icons', () => {

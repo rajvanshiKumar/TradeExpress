@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, PackageX, Save, Upload, Image as ImageIcon } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
@@ -9,6 +9,9 @@ import Image from '../../components/common/Image';
 import EmptyState from '../../components/common/EmptyState';
 import PriceTiers from '../../components/products/PriceTiers';
 import ProductMediaUploader from '../../components/products/ProductMediaUploader';
+import DynamicSpecFields from '../../components/products/DynamicSpecFields';
+import useCategorySpecSchema from '../../hooks/useCategorySpecSchema';
+import { incompatibleValueKeys, pickSchemaValues, validateSpecValues } from '../../utils/specValidation';
 import SupplierGuard from './SupplierGuard';
 import useProducts from '../../hooks/useProducts';
 import useNotifications from '../../hooks/useNotifications';
@@ -16,6 +19,9 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { buildPriceTiers } from '../../data/products';
 import { focusFirstError, hasErrors, rules, validate } from '../../utils/validators';
 import { apiPost, apiPut } from '../../services/apiClient';
+import { getMyProduct, refreshMyProducts } from '../../hooks/useMyProducts';
+import ErrorState from '../../components/common/ErrorState';
+import { TableSkeleton } from '../../components/common/Skeleton';
 import { photoUrl } from '../../utils/images';
 
 const UNITS = ['piece', 'set', 'pair', 'unit', 'box', 'roll', 'kg', 'meter', 'litre'];
@@ -70,6 +76,17 @@ function Form({ company, product }) {
   const [tier3MinQty, setTier3MinQty] = useState(product?.priceTiers?.[2]?.minQty ? String(product.priceTiers[2].minQty) : '');
   const [tier3Price, setTier3Price] = useState(product?.priceTiers?.[2]?.price ? String(product.priceTiers[2].price) : '');
 
+  // Category-specific specifications (dynamic fields), kept by stable attribute key
+  const [productType, setProductType] = useState(product?.specData?.productType ?? '');
+  const [specValues, setSpecValues] = useState(() => ({ ...(product?.specData?.values || {}) }));
+  const [specErrors, setSpecErrors] = useState({});
+  const { schema: specSchema, loading: specLoading, error: specLoadError } = useCategorySpecSchema(values.category, values.subcategory, productType);
+  const droppedSpecKeys = incompatibleValueKeys(specSchema, specValues);
+  const setSpec = (key, value) => {
+    setSpecValues((prev) => ({ ...prev, [key]: value }));
+    if (specErrors[key]) setSpecErrors((prev) => ({ ...prev, [key]: '' }));
+  };
+
   const [uploadingImage, setUploadingImage] = useState(false);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -82,22 +99,22 @@ function Form({ company, product }) {
     const moq = Math.round(Number(values.moq));
     if (basePrice <= 0 || moq < 1) return [];
 
-    const t2Min = Number(tier2MinQty) > moq ? Number(tier2MinQty) : moq * 5;
-    const t2Price = Number(tier2Price) > 0 ? Number(tier2Price) : Math.round(basePrice * 0.92);
-
-    const t3Min = Number(tier3MinQty) > t2Min ? Number(tier3MinQty) : moq * 20;
-    const t3Price = Number(tier3Price) > 0 ? Number(tier3Price) : Math.round(basePrice * 0.85);
-
-    return [
-      { minQty: moq, maxQty: t2Min - 1, price: basePrice },
-      { minQty: t2Min, maxQty: t3Min - 1, price: t2Price },
-      { minQty: t3Min, maxQty: null, price: t3Price },
-    ];
+    // Only tiers the supplier actually entered, each with a higher quantity AND a lower price than the previous
+    // tier (no invented discounts; equal prices are not shown as volume pricing)
+    const tiers = [{ minQty: moq, price: basePrice }];
+    for (const [minQty, price] of [[Number(tier2MinQty), Number(tier2Price)], [Number(tier3MinQty), Number(tier3Price)]]) {
+      const last = tiers[tiers.length - 1];
+      if (Number.isFinite(minQty) && Number.isFinite(price) && minQty > last.minQty && price > 0 && price < last.price) tiers.push({ minQty, price });
+    }
+    if (tiers.length < 2) return [];
+    return tiers.map((tier, i) => ({ ...tier, maxQty: tiers[i + 1] ? tiers[i + 1].minQty - 1 : null }));
   }, [pricingModel, values.price, values.moq, tier2MinQty, tier2Price, tier3MinQty, tier3Price]);
 
   const set = (field) => (event) => {
     const value = event.target.value;
     setValues((previous) => ({ ...previous, [field]: value, ...(field === 'category' ? { subcategory: '' } : {}) }));
+    // A product type belongs to its subcategory; entered specification values are kept where they still apply
+    if (field === 'category' || field === 'subcategory') setProductType('');
     if (errors[field]) setErrors((previous) => ({ ...previous, [field]: '' }));
   };
   const setFlag = (field) => (checked) => setValues((previous) => ({ ...previous, [field]: checked }));
@@ -136,12 +153,31 @@ function Form({ company, product }) {
     }
   };
 
+  /** Shows the server's field errors next to the fields (specValues.<key> -> specification field). */
+  const applyServerErrors = (err) => {
+    const list = Array.isArray(err?.data?.errors) ? err.data.errors : [];
+    const specs = {};
+    const fields = {};
+    for (const item of list) {
+      const field = String(item?.field || '');
+      if (field.startsWith('specValues.')) specs[field.slice(11)] = item.message;
+      else if (field === 'categorySlug') fields.category = item.message;
+      else if (field) fields[field] = item.message;
+    }
+    if (Object.keys(specs).length) { setSpecErrors(specs); focusFirstError(specs, 'spec-'); }
+    if (Object.keys(fields).length) setErrors((prev) => ({ ...prev, ...fields }));
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     if (submitting) return;
     const found = validate(schema, values);
     setErrors(found);
     if (hasErrors(found)) return focusFirstError(found, 'product-');
+    if (specLoading) { showToast('Specification fields are still loading. Please try again in a moment.', 'error'); return undefined; }
+    const foundSpec = validateSpecValues(specSchema, specValues);
+    setSpecErrors(foundSpec);
+    if (hasErrors(foundSpec)) return focusFirstError(foundSpec, 'spec-');
 
     const colours = values.colours.split(',').map((item) => item.trim()).filter(Boolean);
     const leadTimeDays = Number(values.leadTimeDays);
@@ -164,6 +200,7 @@ function Form({ company, product }) {
       leadTimeDays,
       variants: colours.length ? { Colour: colours } : {},
       specifications: textToSpecs(values.specifications),
+      ...(specSchema ? { productType: productType || null, specValues: pickSchemaValues(specSchema, specValues) } : {}),
       sampleAvailable: values.sampleAvailable,
       samplePrice,
       readyToShip: values.readyToShip,
@@ -185,8 +222,11 @@ function Form({ company, product }) {
         // Sync to backend MySQL
         try {
           await apiPut(`supplier/products/${product.id}`, data);
-        } catch {
-          // Fallback smoothly
+          refreshMyProducts();
+        } catch (err) {
+          applyServerErrors(err);
+          showToast(err?.message || 'The product could not be saved. Please try again.', 'error');
+          return undefined;
         }
         updateProduct(product.id, {
           ...data,
@@ -198,14 +238,12 @@ function Form({ company, product }) {
         let createdBackendProduct = null;
         try {
           const res = await apiPost('supplier/products', { ...data, companyId: company.id });
+          refreshMyProducts();
           createdBackendProduct = res?.data || res?.product || null;
         } catch (err) {
-          if (err?.status === 400 || err?.status === 422) {
-            showToast(err.message || 'Validation error while creating product.', 'error');
-            setSubmitting(false);
-            return;
-          }
-          console.warn('Backend product creation warning:', err);
+          applyServerErrors(err);
+          showToast(err?.message || 'The product could not be created. Please try again.', 'error');
+          return undefined;
         }
         addProduct({
           ...data,
@@ -236,10 +274,32 @@ function Form({ company, product }) {
               <Input id="product-name" label="Product name" required value={values.name} onChange={set('name')} error={errors.name} wrapperClassName="sm:col-span-2" />
               <Select id="product-category" label="Category" required placeholder="Choose a category" options={categories.map((item) => ({ value: item.slug, label: item.name }))} value={values.category} onChange={set('category')} error={errors.category} />
               <Select id="product-subcategory" label="Subcategory" placeholder={category ? 'Choose a subcategory' : 'Choose a category first'} options={category?.subcategories ?? []} value={values.subcategory} onChange={set('subcategory')} disabled={!category?.subcategories.length} />
+              {specSchema?.productTypes?.length ? (
+                <Select id="product-productType" label="Product type" placeholder="Choose a product type (optional)" options={specSchema.productTypes} value={productType} onChange={(e) => setProductType(e.target.value)} error={errors.productType} hint="Adds the fields specific to this product type." />
+              ) : null}
               <Input id="product-summary" label="Short summary" required value={values.summary} onChange={set('summary')} error={errors.summary} hint={`${values.summary.length}/160 characters. Shown on product cards.`} wrapperClassName="sm:col-span-2" />
               <Textarea id="product-description" label="Description" rows={5} value={values.description} onChange={set('description')} error={errors.description} hint="Optional. Uses the summary if left empty." wrapperClassName="sm:col-span-2" />
             </div>
           </fieldset>
+
+          {values.category ? (
+            <fieldset className="ts-card p-5 sm:p-6" aria-busy={specLoading || undefined}>
+              <legend className="float-left mb-1 w-full font-display text-base font-bold text-navy-900">Product specifications</legend>
+              <p className="clear-both mb-4 text-[0.8125rem] text-muted">
+                {specSchema ? `Fields for ${[category?.name, values.subcategory, productType].filter(Boolean).join(' › ')}. Fields marked * are required.` : 'Specification fields appear here once a category is chosen.'}
+              </p>
+              {specLoading ? <p className="text-sm text-muted" role="status">Loading specification fields…</p> : null}
+              {specLoadError ? <p className="text-sm font-medium text-danger" role="alert">{specLoadError}</p> : null}
+              {droppedSpecKeys.length ? (
+                <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-[0.8125rem] text-amber-900" role="status">
+                  {droppedSpecKeys.length === 1
+                    ? '1 previously entered specification does not apply here and will not be saved. Switch back to keep it.'
+                    : `${droppedSpecKeys.length} previously entered specifications do not apply here and will not be saved. Switch back to keep them.`}
+                </p>
+              ) : null}
+              {specSchema && !specLoading ? <DynamicSpecFields schema={specSchema} values={specValues} errors={specErrors} onChange={setSpec} /> : null}
+            </fieldset>
+          ) : null}
 
           <fieldset className="ts-card p-5 sm:p-6">
             <legend className="float-left mb-4 w-full font-display text-base font-bold text-navy-900">Pricing and inventory</legend>
@@ -273,8 +333,6 @@ function Form({ company, product }) {
                   type="button"
                   onClick={() => {
                     setPricingModel('volume');
-                    if (!tier2Price && values.price) setTier2Price(String(Math.round(Number(values.price) * 0.92)));
-                    if (!tier3Price && values.price) setTier3Price(String(Math.round(Number(values.price) * 0.85)));
                   }}
                   className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
                     pricingModel === 'volume'
@@ -404,7 +462,7 @@ function Form({ company, product }) {
             <legend className="float-left mb-4 w-full font-display text-base font-bold text-navy-900">Options, Sample & Specifications</legend>
             <div className="grid clear-both gap-4">
               <Input id="product-colours" label="Colour options" value={values.colours} onChange={set('colours')} hint="Optional. Separate with commas, e.g. Black, Ivory, Navy." />
-              <Textarea id="product-specifications" label="Specifications" rows={4} value={values.specifications} onChange={set('specifications')} hint="One per line as “Label: value”, e.g. Material: Stainless steel." />
+              <Textarea id="product-specifications" label="Additional specifications" rows={4} value={values.specifications} onChange={set('specifications')} hint="Optional extra details not covered above, one per line as “Label: value”." />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 items-center">
                 <Checkbox id="product-sampleAvailable" label="Sample available" checked={values.sampleAvailable} onChange={setFlag('sampleAvailable')} />
                 <Checkbox id="product-readyToShip" label="Ready to ship" checked={values.readyToShip} onChange={setFlag('readyToShip')} />
@@ -501,20 +559,43 @@ function Form({ company, product }) {
 }
 
 
+/**
+ * Edit: the product comes from the server (only the owner gets it). Products that exist only in this browser's
+ * sample catalogue are still editable as before.
+ */
+function EditProduct({ id, company }) {
+  const { getProduct } = useProducts();
+  const local = getProduct(id);
+  const localOwned = local && local.companyId === company.id ? local : null;
+  const [state, setState] = useState({ product: null, loading: !localOwned, error: '' });
+
+  useEffect(() => {
+    if (localOwned) return undefined;
+    let cancelled = false;
+    setState({ product: null, loading: true, error: '' });
+    getMyProduct(id)
+      .then((product) => { if (!cancelled) setState({ product, loading: false, error: '' }); })
+      .catch((err) => { if (!cancelled) setState({ product: null, loading: false, error: err?.status === 404 || err?.status === 403 ? 'NOT_FOUND' : (err?.message || 'The product could not be loaded.') }); });
+    return () => { cancelled = true; };
+  }, [id, localOwned]);
+
+  const product = localOwned || state.product;
+  if (!localOwned && state.loading) return <div className="ts-card"><TableSkeleton rows={4} /></div>;
+  if (!product) {
+    return state.error && state.error !== 'NOT_FOUND'
+      ? <div className="ts-card"><ErrorState text={state.error} /></div>
+      : <div className="ts-card"><EmptyState icon={PackageX} headingLevel={1} title="Product not found" text="This product does not exist or belongs to another supplier." action={<Button to="/supplier/products" variant="navy">Back to products</Button>} /></div>;
+  }
+  return <Form key={product.id} company={company} product={product} />;
+}
+
 export default function SupplierProductForm() {
   const { id } = useParams();
-  const { getProduct } = useProducts();
   useDocumentTitle(id ? 'Edit product' : 'Add product');
 
   return (
     <SupplierGuard>
-      {(company) => {
-        const product = id ? getProduct(id) : null;
-        if (id && (!product || product.companyId !== company.id)) {
-          return <div className="ts-card"><EmptyState icon={PackageX} headingLevel={1} title="Product not found" text="This product does not exist or belongs to another supplier." action={<Button to="/supplier/products" variant="navy">Back to products</Button>} /></div>;
-        }
-        return <Form key={product?.id ?? 'new'} company={company} product={product} />;
-      }}
+      {(company) => (id ? <EditProduct id={id} company={company} /> : <Form key="new" company={company} product={null} />)}
     </SupplierGuard>
   );
 }

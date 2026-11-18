@@ -2,30 +2,24 @@ import prisma from '../config/db.js';
 import { createNotification } from './notificationService.js';
 import { availabilitySnapshot, publishInventoryChanges, transitionOrderInventory } from './inventoryLifecycleService.js';
 
-export async function getSupplierOrders(supplierUser) {
-  const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
+/**
+ * The one ownership rule for supplier orders (list, dashboard counts and order actions): the order's supplierId is
+ * the signed-in supplier, or it contains a product of theirs. Company names are never used (they are not unique).
+ * Deleted products keep their rows, so orders for them stay visible.
+ */
+export const ownedOrdersWhere = (supplierUser) => ({
+  OR: [
+    { supplierId: supplierUser.id },
+    { items: { some: { product: { supplierId: supplierUser.id } } } },
+  ],
+});
 
+export async function getSupplierOrders(supplierUser) {
   const orders = await prisma.order.findMany({
-    where: {
-      OR: [
-        { supplierId: supplierUser.id },
-        ...(companyId ? [{ supplierCompanyId: String(companyId) }] : []),
-        {
-          items: {
-            some: {
-              product: {
-                OR: [
-                  { supplierId: supplierUser.id },
-                  ...(companyId ? [{ companyId: String(companyId) }] : []),
-                ],
-              },
-            },
-          },
-        },
-      ],
-    },
+    where: ownedOrdersWhere(supplierUser),
     include: {
-      items: true,
+      // The line keeps its own snapshot (name, SKU, photo, price), so a deleted product never hides the order
+      items: { include: { product: { select: { supplierId: true, status: true } } } },
       payments: true,
       statusHistory: { orderBy: { createdAt: 'desc' } },
     },
@@ -43,10 +37,13 @@ export async function getSupplierOrders(supplierUser) {
     total: Number(o.total),
     advanceAmount: Number(o.advanceAmount),
     balanceDue: Number(o.balanceDue),
-    items: o.items.map((i) => ({
+    items: o.items.map(({ product, ...i }) => ({
       ...i,
       unitPrice: Number(i.unitPrice),
       lineTotal: Number(i.lineTotal),
+      // Whose line this is, and whether the product is still listed (history stays readable either way)
+      mine: o.supplierId === supplierUser.id || product?.supplierId === supplierUser.id,
+      productAvailable: Boolean(product && product.status === 'Active'),
     })),
   }));
 }
@@ -62,13 +59,7 @@ async function findSupplierOrder(supplierUser, orderId, include) {
   const order = await prisma.order.findFirst({
     where: isStaff
       ? { id: orderId }
-      : {
-          id: orderId,
-          OR: [
-            { supplierId: supplierUser.id },
-            { items: { some: { product: { supplierId: supplierUser.id } } } },
-          ],
-        },
+      : { id: orderId, ...ownedOrdersWhere(supplierUser) },
     include,
   });
 

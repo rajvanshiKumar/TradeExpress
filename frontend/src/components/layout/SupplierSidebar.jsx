@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import useMyProducts from '../../hooks/useMyProducts';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -8,8 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
-  ClipboardList,
   FileBadge2,
+  FileText,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -32,6 +33,8 @@ import useInquiries from '../../hooks/useInquiries';
 import useMessages from '../../hooks/useMessages';
 import useProducts from '../../hooks/useProducts';
 import useSupplierCompany from '../../pages/supplier/useSupplierCompany';
+import { markProductsSeen, readSeenCatalogue, unseenProductCount, writeSeenCatalogue } from '../../utils/catalogueBadge';
+import { markRfqsSeen, readSeenRfqs, unseenRfqCount, writeSeenRfqs } from '../../utils/supplierRfqBadge';
 
 export const SUPPLIER_NAV_GROUPS = [
   {
@@ -54,7 +57,8 @@ export const SUPPLIER_NAV_GROUPS = [
     items: [
       { id: 'orders', label: 'Purchase Orders', to: '/supplier/orders', icon: Package, badgeKey: 'orders' },
       { id: 'messages', label: 'Messages', to: '/messages', icon: MessageSquare, badgeKey: 'messages' },
-      { id: 'quotations', label: 'Quotations & RFQs', to: '/supplier/quotations', icon: ClipboardList, badgeKey: 'quotes' },
+      // Badge = open buyer requests awaiting the supplier (same count as before)
+      { id: 'buyer-rfqs', label: 'Buyer RFQs', to: '/supplier/inquiries', icon: FileText, badgeKey: 'quotes' },
       { id: 'transport', label: 'Transport & Delivery Management', to: '/supplier/transport', icon: Truck },
     ],
   },
@@ -72,7 +76,6 @@ export const SUPPLIER_NAV_GROUPS = [
       { id: 'profile', label: 'Company Profile', to: '/supplier/profile', icon: Building2 },
       { id: 'notifications', label: 'Notifications', to: '/supplier/notifications', icon: Bell, badgeKey: 'notifications' },
       { id: 'account-settings', label: 'Account Settings', to: '/supplier/account-settings', icon: UserCog },
-      { id: 'settings', label: 'Store Settings', to: '/supplier/settings', icon: Settings },
     ],
   },
 ];
@@ -81,7 +84,9 @@ export default function SupplierSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { company, companyProducts } = useSupplierCompany();
+  const { company } = useSupplierCompany();
+  // Badges use the supplier's products from the database (same list as Product Catalogue and the dashboard)
+  const { products: companyProducts } = useMyProducts();
 
   // Badges & Real Counts
   const { unreadCount: unreadNotifications } = useNotifications();
@@ -91,6 +96,21 @@ export default function SupplierSidebar() {
 
   const myCompanyId = company?.id || user?.companyId || user?.id;
 
+  // Product Catalogue badge: products added since the supplier last opened the catalogue (cleared on opening it)
+  const productIds = useMemo(() => (companyProducts || []).map((p) => p.id), [companyProducts]);
+  const [seenProductIds, setSeenProductIds] = useState(() => readSeenCatalogue(user?.id));
+  useEffect(() => {
+    setSeenProductIds(readSeenCatalogue(user?.id));
+  }, [user?.id]);
+  const newProductsCount = useMemo(() => unseenProductCount(productIds, seenProductIds), [productIds, seenProductIds]);
+  const onCatalogue = location.pathname === '/supplier/products' || location.pathname === '/supplier/products/';
+  useEffect(() => {
+    if (!user?.id || !onCatalogue || newProductsCount === 0) return;
+    const next = markProductsSeen(productIds);
+    writeSeenCatalogue(user.id, next);
+    setSeenProductIds(next);
+  }, [onCatalogue, newProductsCount, productIds, user?.id]);
+
   const activeOrdersCount = useMemo(() => {
     return (orders || []).filter(
       (o) =>
@@ -99,11 +119,24 @@ export default function SupplierSidebar() {
     ).length;
   }, [orders, myCompanyId]);
 
-  const openQuotesCount = useMemo(() => {
+  // Buyer RFQs badge: open RFQs not seen yet (cleared by opening Buyer RFQs; a buyer counter-offer shows again)
+  const openRfqs = useMemo(() => {
     return (inquiries || []).filter(
       (i) => (i.companyId === myCompanyId || i.supplierId === user?.id) && i.status !== 'Closed'
-    ).length;
+    );
   }, [inquiries, myCompanyId, user?.id]);
+  const [seenRfqKeys, setSeenRfqKeys] = useState(() => readSeenRfqs(user?.id));
+  useEffect(() => {
+    setSeenRfqKeys(readSeenRfqs(user?.id));
+  }, [user?.id]);
+  const openQuotesCount = useMemo(() => unseenRfqCount(openRfqs, seenRfqKeys), [openRfqs, seenRfqKeys]);
+  const onBuyerRfqs = location.pathname === '/supplier/inquiries' || location.pathname === '/supplier/inquiries/';
+  useEffect(() => {
+    if (!user?.id || !onBuyerRfqs || openQuotesCount === 0) return;
+    const next = markRfqsSeen(openRfqs, seenRfqKeys);
+    writeSeenRfqs(user.id, next);
+    setSeenRfqKeys(next);
+  }, [onBuyerRfqs, openQuotesCount, openRfqs, seenRfqKeys, user?.id]);
 
   const lowStockCount = useMemo(() => {
     return (companyProducts || []).filter(
@@ -173,7 +206,7 @@ export default function SupplierSidebar() {
       case 'lowStock':
         return lowStockCount > 0 ? `${lowStockCount} low` : null;
       case 'products':
-        return companyProducts?.length > 0 ? companyProducts.length : null;
+        return newProductsCount > 0 ? (newProductsCount > 99 ? '99+' : newProductsCount) : null;
       default:
         return null;
     }
@@ -334,21 +367,21 @@ export default function SupplierSidebar() {
         }`}
         aria-label="Supplier Enterprise Sidebar"
       >
-        <div className="flex flex-col rounded-2xl border border-slate-200/90 bg-white shadow-2xs overflow-hidden">
+        <div className="flex flex-col rounded-[1.25rem] border border-[#E2E8E5] bg-white shadow-[0_1px_2px_rgba(20,45,36,0.04),0_8px_24px_-16px_rgba(6,78,59,0.18)] overflow-hidden">
           {/* Header Brand Bar */}
           <div
-            className={`relative border-b border-slate-200/80 bg-gradient-to-b from-slate-50/90 to-white transition-all duration-200 ${
+            className={`relative border-b border-[#E2E8E5] bg-gradient-to-b from-[#ECFDF5]/70 to-white transition-all duration-200 ${
               collapsed ? 'p-2.5 flex flex-col items-center gap-2' : 'p-3.5 flex items-center justify-between'
             }`}
           >
             {!collapsed ? (
               <div className="min-w-0 flex items-center gap-2.5">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-800 to-navy-950 font-display font-extrabold text-white shadow-2xs text-sm">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#047857] to-[#064E3B] font-display text-base font-extrabold text-white shadow-[0_6px_14px_-8px_rgba(6,78,59,0.8)]">
                   {displayName.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-bold text-navy-950">{displayName}</p>
-                  <p className="text-[11px] font-semibold text-emerald-700">Supplier Dashboard</p>
+                  <p className="truncate text-[0.8125rem] font-bold text-[#142D24]">{displayName}</p>
+                  <p className="text-[11px] font-semibold text-[#047857]">Supplier Dashboard</p>
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                     <span>{supplierCode}</span>
                     {isVerified && <ShieldCheck className="size-3 text-emerald-600" title="Verified" />}
@@ -374,11 +407,11 @@ export default function SupplierSidebar() {
           </div>
 
           {/* Navigation Items */}
-          <div className="p-2 space-y-3.5 overflow-y-auto max-h-[calc(100vh-14rem)] ts-no-scrollbar">
-            {SUPPLIER_NAV_GROUPS.map((grp) => (
-              <div key={grp.group} className="space-y-1">
+          <div className="p-2.5 overflow-y-auto max-h-[calc(100vh-14rem)] ts-no-scrollbar">
+            {SUPPLIER_NAV_GROUPS.map((grp, gi) => (
+              <div key={grp.group} className={`space-y-1 ${gi ? 'mt-3 border-t border-[#E2E8E5] pt-3' : ''}`}>
                 {!collapsed && (
-                  <p className="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                  <p className="px-3 pb-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[#64748B]/80">
                     {grp.group}
                   </p>
                 )}
@@ -397,17 +430,17 @@ export default function SupplierSidebar() {
                         className={`group relative flex items-center rounded-xl transition-all ${
                           collapsed
                             ? 'justify-center p-2.5'
-                            : 'justify-between px-3 py-2 text-xs font-semibold'
+                            : 'justify-between px-3 py-2.5 text-[0.8125rem] font-semibold'
                         } ${
                           active
-                            ? 'bg-emerald-800 text-white font-bold shadow-2xs'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-navy-950'
+                            ? 'bg-[#064E3B] text-white font-bold shadow-[0_6px_14px_-8px_rgba(6,78,59,0.8)]'
+                            : 'text-slate-600 hover:bg-[#ECFDF5] hover:text-[#064E3B]'
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Icon
                             className={`size-4 shrink-0 transition-colors ${
-                              active ? 'text-amber-300' : 'text-slate-400 group-hover:text-slate-700'
+                              active ? 'text-emerald-200' : 'text-slate-400 group-hover:text-[#047857]'
                             }`}
                           />
                           {!collapsed && <span className="truncate">{item.label}</span>}
@@ -417,8 +450,8 @@ export default function SupplierSidebar() {
                           <span
                             className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold shrink-0 ${
                               active
-                                ? 'bg-amber-400 text-navy-950 font-extrabold'
-                                : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                ? 'bg-white text-[#064E3B] font-extrabold'
+                                : 'bg-[#ECFDF5] text-[#047857] ring-1 ring-emerald-600/15'
                             }`}
                           >
                             {badge}

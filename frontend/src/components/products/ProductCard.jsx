@@ -326,8 +326,6 @@ function QuantityPricingDropdown({
  */
 export default function ProductCard({ product, layout = 'grid' }) {
   const { addToCart, removeFromCart, inCart } = useCart();
-  const { user } = useAuth();
-  const { addNotification } = useNotifications();
   const { displayMoney } = useCurrency();
   const { t } = useTranslation();
   const [isPricingOpen, setIsPricingOpen] = useState(false);
@@ -368,29 +366,9 @@ export default function ProductCard({ product, layout = 'grid' }) {
     e.stopPropagation();
     const qtyToAdd = moq ?? 1;
 
-    if (isItemInCart) {
-      removeFromCart(product.id);
-      if (addNotification) {
-        addNotification({
-          audience: user?.id || 'all',
-          type: 'orders',
-          title: 'Item removed from cart',
-          body: `${product.name} removed from cart.`,
-          link: '/cart',
-        });
-      }
-    } else {
-      addToCart(product, qtyToAdd, defaultVariant(product));
-      if (addNotification) {
-        addNotification({
-          audience: user?.id || 'all',
-          type: 'orders',
-          title: 'Item added to cart',
-          body: `${product.name} (${qtyToAdd} ${unit || 'unit'}) added to cart. Tap to view or checkout.`,
-          link: '/cart',
-        });
-      }
-    }
+    // The cart badge and the button state confirm the change (no notification for cart clicks)
+    if (isItemInCart) removeFromCart(product.id);
+    else addToCart(product, qtyToAdd, defaultVariant(product));
   };
 
   return (

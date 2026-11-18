@@ -1,9 +1,11 @@
 import crypto from 'crypto';
+import { encryptIfConfigured, readEncryptedField } from '../utils/dataCrypto.js';
 import { cleanRegistrationNumber, ensureSupplierDocument, parseProfilePhoto, validateLegalStructure } from './supplierDocumentService.js';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { issueLoginToken, invalidateSessionCache, reissueCurrentToken } from './sessionService.js';
 import { getRequestContext } from '../utils/requestContext.js';
+import { ENV } from '../config/env.js';
 import { normalizeMobile, validateVerifiedMobile, validateVerifiedEmail, validateEmailLoginOtp, issueVerifiedEmailToken } from './otpService.js';
 import { resolveSignupGstin, resolveSignupPanAadhaar } from './verificationService.js';
 import { getVerifiedGoogleProfile } from './googleAuthService.js';
@@ -1313,7 +1315,7 @@ export async function loginUser({ email, password, role, otp, country = 'India',
   }
 
   const token = await issueLoginToken(user, { method: isAdminLogin ? 'ADMIN' : (otp ? 'OTP' : 'PASSWORD') });
-  const { passwordHash, googleId, ...safeUser } = user; // eslint-disable-line no-unused-vars
+  const { passwordHash, googleId, bankAccountNumber, ...safeUser } = user; // eslint-disable-line no-unused-vars
   return { user: safeUser, token };
 }
 
@@ -1399,7 +1401,7 @@ export async function forgotPassword(email) {
     },
   });
 
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const frontendUrl = ENV.FRONTEND_URL; // from backend/.env (config/env.js)
   const resetUrl = `${frontendUrl}/forgot-password?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
 
   import('./emailService.js').then((m) => {
@@ -1613,7 +1615,7 @@ function shapeBusinessVerification(user) {
       gstin: user.gstin || '',
       pan: user.pan || '',
       bankName: user.bankName || '',
-      bankAccountNumber: user.bankAccountNumber || '',
+      bankAccountNumber: readEncryptedField(user.bankAccountNumber) || '',
       bankIfsc: user.bankIfsc || '',
     },
     warehouse: {
@@ -1676,6 +1678,8 @@ function buildBusinessUpdate({ business = {}, statutory = {}, warehouse = {} }) 
   if (data.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(data.pan)) throw kycError('Enter a valid 10-character PAN (e.g. ABCDE1234F).', 400, 'pan');
   if (data.bankIfsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(data.bankIfsc)) throw kycError('Enter a valid 11-character IFSC (e.g. HDFC0001234).', 400, 'bankIfsc');
   if (data.bankAccountNumber && !/^\d{9,18}$/.test(data.bankAccountNumber)) throw kycError('Bank account number must be 9 to 18 digits.', 400, 'bankAccountNumber');
+  // Stored encrypted at rest when DATA_ENCRYPTION_KEY is configured
+  if (data.bankAccountNumber) data.bankAccountNumber = encryptIfConfigured(data.bankAccountNumber);
   if (data.postalCode && !/^[1-9][0-9]{5}$/.test(data.postalCode) && !/^[A-Za-z0-9 -]{3,10}$/.test(data.postalCode)) throw kycError('Enter a valid PIN / postal code.', 400, 'postalCode');
   if (data.warehousePincode && !/^[1-9][0-9]{5}$/.test(data.warehousePincode)) throw kycError('Enter a valid 6-digit warehouse PIN code.', 400, 'warehousePincode');
 

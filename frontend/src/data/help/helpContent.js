@@ -356,7 +356,7 @@ const ARTICLE_SOURCE = [
     summary: 'Respond to buyer RFQs with a quotation and negotiate terms.',
     body: [
       { steps: [
-        'Open Quotations in your supplier dashboard to see RFQs you can respond to.',
+        'Open Buyer RFQs in your supplier dashboard to see RFQs you can respond to.',
         'Send a quotation with your unit price, GST, freight and any other charges.',
         'Respond to buyer counteroffers. Each quotation can be negotiated for up to three rounds.',
       ] },
@@ -364,7 +364,7 @@ const ARTICLE_SOURCE = [
     ],
     keywords: ['supplier quotation', 'respond to rfq', 'send quote', 'buyer requirement', 'inquiry'],
     related: ['negotiate-quotation', 'supplier-accept-orders'],
-    action: { to: '/supplier/quotations', label: 'Open quotations' },
+    action: { to: '/supplier/inquiries', label: 'Open Buyer RFQs' },
   },
 
   // ── Orders & Logistics ─────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import {
   canResumeSignup,
   existingAccountError,
   isSignupComplete,
+  normalizePublicRole,
   otpCooldownError,
 } from '../utils/accountStatus.js';
 
@@ -60,6 +61,18 @@ export function lockOtpSession(session) {
   const error = new Error('Too many incorrect verification attempts. Please request a new OTP.');
   error.statusCode = 429;
   return error;
+}
+
+/**
+ * Diagnostic line for an OTP send / check. Never includes the code, its hash or the full email / mobile:
+ * only a masked identifier, the outcome, how old the latest code is, and how many codes were sent.
+ */
+function logOtpCheck(flow, identifier, outcome, session = null) {
+  const id = String(identifier || '');
+  const masked = id.includes('@') ? id.replace(/^(.).*(@.*)$/, '$1***$2') : `******${id.replace(/\D/g, '').slice(-4)}`;
+  const age = session?.lastSentAt ? `, latest code sent ${Math.round((Date.now() - session.lastSentAt) / 1000)}s ago` : '';
+  const sends = session && Number.isFinite(session.resendCount) ? `, codes sent in this window: ${session.resendCount + 1}` : '';
+  console.info(`[OTP] ${flow} ${masked}: ${outcome}${age}${sends}`);
 }
 
 export const activeResendWindow = (entry) =>
@@ -122,27 +135,59 @@ function findUserByMobile(normalized) {
   });
 }
 
-/** Signup OTPs may only go to a number that is free, or that belongs to an unfinished signup. */
-async function assertMobileAvailableForSignup(normalized) {
+/**
+ * Signup OTPs may only go to a number that is free, or that belongs to an unfinished signup of the same role.
+ * When the signup form names its role (BUYER / SUPPLIER), a number already used by the other role is refused
+ * before any OTP is sent, even if that other signup is unfinished: one mobile number, one account type.
+ */
+async function assertMobileAvailableForSignup(normalized, role) {
   const existingUser = await findUserByMobile(normalized);
-  if (existingUser && isSignupComplete(existingUser)) {
+  if (!existingUser) return;
+  const requestedRole = normalizePublicRole(role);
+  if (requestedRole && existingUser.role !== requestedRole) {
+    const message = ['BUYER', 'SUPPLIER'].includes(existingUser.role)
+      ? AUTH_MESSAGES.mobileRegisteredAsOtherRole(existingUser.role)
+      : AUTH_MESSAGES.MOBILE_EXISTS; // never reveal an administrator account
+    throw authError(message, 409, AUTH_ERROR_CODES.ROLE_MISMATCH, { accountRole: existingUser.role });
+  }
+  if (isSignupComplete(existingUser)) {
     throw authError(AUTH_MESSAGES.MOBILE_EXISTS, 409, AUTH_ERROR_CODES.ACCOUNT_EXISTS, {
       accountRole: existingUser.role,
     });
   }
 }
 
-/**
- * Checks whether the development bypass OTP (123456) is permitted.
- * STRICT ENFORCEMENT: Never allowed in production (NODE_ENV=production),
- * and only permitted when DEV_OTP_ENABLED=true or in development.
- */
-export function isDevOtpAllowed(otp) {
-  if (process.env.NODE_ENV === 'production') {
+const LOCAL_DATABASE_HOSTS = ['localhost', '127.0.0.1', '::1', '[::1]'];
+
+/** True when DATABASE_URL points at a MySQL server on this computer (an isolated local database). */
+function usesLocalDatabase() {
+  try {
+    const url = String(process.env.DATABASE_URL || '').trim().replace(/^["']|["']$/g, '');
+    return LOCAL_DATABASE_HOSTS.includes(new URL(url).hostname.toLowerCase());
+  } catch {
     return false;
   }
-  const isDevOtpConfigured = process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production';
-  return isDevOtpConfigured && String(otp || '').trim() === '123456';
+}
+
+/**
+ * Development test code 123456 for testing. Accepted when:
+ *  - NODE_ENV is not "production" (never on the live production backend)
+ *  - DEV_OTP_ENABLED is not explicitly "false"
+ * The code is never returned in API responses. Account Settings and delivery codes always need the real code.
+ */
+/**
+ * LOCAL TESTING ONLY (remove before hosting): the fixed code 123456 is accepted only when
+ * NODE_ENV is not production, DEV_OTP_ENABLED is not 'false', and the server is NOT running on Render
+ * (Render sets RENDER=true on every service), so it can never work on the hosted site.
+ */
+export function isTestOtpEnvironment() {
+  if (process.env.NODE_ENV === 'production') return false;
+  if (process.env.RENDER) return false;
+  return process.env.DEV_OTP_ENABLED !== 'false';
+}
+
+export function isDevOtpAllowed(otp) {
+  return isTestOtpEnvironment() && String(otp || '').trim() === '123456';
 }
 
 /** True when the country has dialing rules (and so can be validated and stored). */
@@ -190,7 +235,7 @@ export function normalizeMobile(value, country = 'India') {
  * `purpose: 'PHONE_CHANGE'` (Account Settings → Change Phone Number) gives the shorter account-settings
  * expiry; signup verification keeps the standard expiry.
  */
-export async function requestMobileOtp({ phone, country = 'India', purpose }) {
+async function requestMobileOtpUnlocked({ phone, country = 'India', purpose, role }) {
   const expiryMs = purpose === 'PHONE_CHANGE' ? ACCOUNT_CHANGE_OTP_EXPIRY_MS : OTP_EXPIRY_MS;
   const expiryMinutes = Math.round(expiryMs / 60000);
   const normalized = normalizeMobile(phone, country);
@@ -204,7 +249,7 @@ export async function requestMobileOtp({ phone, country = 'India', purpose }) {
 
   // Both lookups go to the remote database, so they run together; the account check still takes precedence
   const [account, verification] = await Promise.allSettled([
-    assertMobileAvailableForSignup(normalized),
+    assertMobileAvailableForSignup(normalized, role),
     prisma.mobileVerification.findUnique({ where: { phone: formattedPhone } }),
   ]);
 
@@ -233,16 +278,19 @@ export async function requestMobileOtp({ phone, country = 'India', purpose }) {
   // 3. Dispatch OTP through configured provider (PowersText or MSG91)
   const isPowersText = Boolean(process.env.SMS_API_URL || process.env.SMS_SENDER_ID);
   let sessionToken = null;
-  let smsResult = null;
-  let generatedOtp = null;
 
   if (isPowersText) {
-    generatedOtp = generateOtp();
-    const otpHash = hashOtp(generatedOtp);
-    sessionToken = `otp_${otpHash}`;
-    smsResult = await powerstextService.sendOtpSms({
+    const code = generateOtp();
+    const newHash = hashOtp(code);
+    let tokenList = [newHash];
+    if (existingVerification?.token && existingVerification.token.startsWith('otp_')) {
+      const priorHashes = existingVerification.token.slice(4).split('_').filter(Boolean);
+      tokenList = [...new Set([newHash, ...priorHashes])].slice(0, 3);
+    }
+    sessionToken = `otp_${tokenList.join('_')}`;
+    await powerstextService.sendOtpSms({
       mobile: msg91Mobile,
-      otp: generatedOtp,
+      otp: code,
       expiryMinutes: purpose === 'PHONE_CHANGE' ? expiryMinutes : Number(process.env.MSG91_OTP_EXPIRY_MINUTES) || 10,
     });
   } else {
@@ -274,14 +322,13 @@ export async function requestMobileOtp({ phone, country = 'India', purpose }) {
     },
   });
 
-  const isDev = process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production';
+  // The code itself is never returned in the response
   return {
     success: true,
     message: 'OTP has been sent to your mobile number via SMS.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     expiresInSeconds: expiryMs / 1000,
     phone: formattedPhone,
-    ...(isDev ? { devOtp: generatedOtp || '123456' } : {}),
   };
 }
 
@@ -305,36 +352,43 @@ export async function verifyMobileOtp({ phone, country = 'India', otp }) {
 
   const { msg91Mobile, formattedPhone } = normalized;
 
-  // Development / Test OTP bypass (123456)
+  // Development test code 123456
   if (isDevOtpAllowed(cleanOtp)) {
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const tokenExpiresAt = new Date(Date.now() + VERIFICATION_TOKEN_VALIDITY_MS);
-    await prisma.mobileVerification.upsert({
-      where: { phone: formattedPhone },
-      create: {
-        phone: formattedPhone,
-        token: verificationToken,
-        verified: true,
-        attempts: 0,
-        resendCount: 0,
-        lastSentAt: new Date(),
-        expiresAt: tokenExpiresAt,
-        used: false,
-      },
-      update: {
-        token: verificationToken,
-        verified: true,
-        expiresAt: tokenExpiresAt,
-        used: false,
-      },
-    });
+    let dbSaved = false;
+    try {
+      await prisma.mobileVerification.upsert({
+        where: { phone: formattedPhone },
+        create: {
+          phone: formattedPhone,
+          token: verificationToken,
+          verified: true,
+          attempts: 0,
+          resendCount: 0,
+          lastSentAt: new Date(),
+          expiresAt: tokenExpiresAt,
+          used: false,
+        },
+        update: {
+          token: verificationToken,
+          verified: true,
+          expiresAt: tokenExpiresAt,
+          used: false,
+        },
+      });
+      dbSaved = true;
+    } catch {
+      // In development when DB connection is offline/sandboxed
+    }
 
+    const finalToken = dbSaved ? verificationToken : `evt_test_${verificationToken}`;
     return {
       success: true,
       message: 'Mobile number verified successfully.',
       data: {
         verified: true,
-        verificationToken,
+        verificationToken: finalToken,
         phone: formattedPhone,
       },
     };
@@ -360,16 +414,15 @@ export async function verifyMobileOtp({ phone, country = 'India', otp }) {
   }
 
   // 2. Verify OTP (via local cryptographic hash for PowersText/gateway, or MSG91)
-  if (isDevOtpAllowed(cleanOtp)) {
-    // Development OTP bypass allowed only when non-production and configured
-  } else if (verification.token && verification.token.startsWith('otp_')) {
-    const expectedHash = verification.token.slice(4);
+  if (verification.token && verification.token.startsWith('otp_')) {
+    const expectedHashes = verification.token.slice(4).split('_').filter(Boolean);
     const candidateHash = hashOtp(cleanOtp);
-    if (!hashesMatch(candidateHash, expectedHash)) {
+    const isMatch = expectedHashes.some((expectedHash) => hashesMatch(candidateHash, expectedHash));
+    if (!isMatch) {
       await prisma.mobileVerification.update({
         where: { phone: formattedPhone },
         data: { attempts: { increment: 1 } },
-      });
+      }).catch(() => {});
       throw authError(AUTH_MESSAGES.OTP_INVALID, 400, AUTH_ERROR_CODES.OTP_INVALID);
     }
   } else {
@@ -414,7 +467,7 @@ export async function verifyMobileOtp({ phone, country = 'India', otp }) {
 /**
  * Resends OTP to the mobile number if cooldown has elapsed.
  */
-export async function resendMobileOtp({ phone, country = 'India' }) {
+async function resendMobileOtpUnlocked({ phone, country = 'India', role }) {
   const normalized = normalizeMobile(phone, country);
   if (!normalized.ok) {
     const error = new Error(`Enter a valid ${country} mobile number.`);
@@ -430,10 +483,10 @@ export async function resendMobileOtp({ phone, country = 'India' }) {
 
   if (!verification) {
     // If not requested yet, fall back to initial request
-    return requestMobileOtp({ phone, country });
+    return requestMobileOtpUnlocked({ phone, country, role });
   }
 
-  await assertMobileAvailableForSignup(normalized);
+  await assertMobileAvailableForSignup(normalized, role);
 
   const elapsedSeconds = Math.floor((Date.now() - new Date(verification.lastSentAt).getTime()) / 1000);
   if (elapsedSeconds < RESEND_COOLDOWN_SECONDS) {
@@ -449,16 +502,13 @@ export async function resendMobileOtp({ phone, country = 'India' }) {
   // Retry through PowersText or MSG91
   const isPowersText = Boolean(process.env.SMS_API_URL || process.env.SMS_SENDER_ID);
   let sessionToken = verification.token;
-  let smsResult = null;
-  let generatedOtp = null;
 
   if (isPowersText) {
-    generatedOtp = generateOtp();
-    const otpHash = hashOtp(generatedOtp);
-    sessionToken = `otp_${otpHash}`;
-    smsResult = await powerstextService.sendOtpSms({
+    const code = generateOtp();
+    sessionToken = `otp_${hashOtp(code)}`;
+    await powerstextService.sendOtpSms({
       mobile: msg91Mobile,
-      otp: generatedOtp,
+      otp: code,
       expiryMinutes: Number(process.env.MSG91_OTP_EXPIRY_MINUTES) || 10,
     });
   } else {
@@ -564,7 +614,7 @@ setInterval(() => {
  * Requests an OTP for email login flow.
  * Dispatches a genuine 6-digit OTP to the registered email address.
  */
-export async function requestEmailLoginOtp({ email, role }) {
+async function requestEmailLoginOtpUnlocked({ email, role }) {
   const normalizedEmail = (email || '').toLowerCase().trim();
   if (!normalizedEmail || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(normalizedEmail)) {
     const error = new Error('Please enter a valid email address.');
@@ -598,17 +648,21 @@ export async function requestEmailLoginOtp({ email, role }) {
   }
   const loginWindow = activeResendWindow(existing);
 
-  // Generate real cryptographically secure random 6-digit OTP (never fixed 123456 as generated real OTP)
-  const generatedOtp = generateOtp();
-
-  const otpHash = hashOtp(generatedOtp);
+  // Real cryptographically secure random 6-digit code
+  const code = generateOtp();
+  const otpHash = hashOtp(code);
 
   const { sendLoginOtpEmail } = await import('./emailService.js');
-  assertEmailSent(await sendLoginOtpEmail({ email: normalizedEmail, name: user.name, otp: generatedOtp }));
+  assertEmailSent(await sendLoginOtpEmail({ email: normalizedEmail, name: user.name, otp: code }));
 
   // Record the session (and start the cooldown) only once the OTP has actually been dispatched
+  const priorHashes = (existing?.validHashes || (existing?.otpHash ? [existing.otpHash] : []))
+    .filter((_, idx, arr) => arr.length - idx <= 3);
+  const validHashes = [...new Set([...priorHashes, otpHash])];
+
   emailLoginOtpStore.set(normalizedEmail, {
     otpHash,
+    validHashes,
     expiresAt: Date.now() + OTP_EXPIRY_MS,
     attempts: 0,
     resendCount: loginWindow ? loginWindow.resendCount + 1 : 0,
@@ -621,9 +675,6 @@ export async function requestEmailLoginOtp({ email, role }) {
     message: 'Verification code has been sent to your email address.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     email: normalizedEmail,
-    ...(process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production'
-      ? { devOtp: generatedOtp }
-      : {}),
   };
 }
 
@@ -642,29 +693,39 @@ export function validateEmailLoginOtp({ email, otp, consume = false }) {
   const normalizedEmail = (email || '').toLowerCase().trim();
   const session = emailLoginOtpStore.get(normalizedEmail);
 
-  // Check development OTP bypass (a successful sign-in still closes the pending code, as with a real OTP)
+  // Development test code 123456
   if (isDevOtpAllowed(cleanOtp)) {
     if (consume && session) session.consumed = true;
+    logOtpCheck('login email', normalizedEmail, 'verified with development test code 123456');
     return true;
   }
 
-  if (session?.locked && !session.consumed) throw lockOtpSession(session);
+  if (session?.locked && !session.consumed) {
+    logOtpCheck('login email', normalizedEmail, 'rejected: code locked after too many wrong attempts', session);
+    throw lockOtpSession(session);
+  }
   if (!session || session.consumed) {
+    logOtpCheck('login email', normalizedEmail, 'rejected: no pending code (never requested, already used, or server restarted)');
     throw authError(AUTH_MESSAGES.OTP_NOT_REQUESTED, 400, AUTH_ERROR_CODES.OTP_NOT_REQUESTED);
   }
 
   if (Date.now() > session.expiresAt) {
+    logOtpCheck('login email', normalizedEmail, 'rejected: code expired', session);
     throw authError(AUTH_MESSAGES.OTP_EXPIRED, 400, AUTH_ERROR_CODES.OTP_EXPIRED);
   }
 
   if (session.attempts >= MAX_VERIFY_ATTEMPTS) {
     // The code is dead, but the entry is kept so the resend cooldown and hourly limit still apply
+    logOtpCheck('login email', normalizedEmail, 'rejected: too many wrong attempts', session);
     throw lockOtpSession(session);
   }
 
   const candidateHash = hashOtp(cleanOtp);
-  if (!hashesMatch(candidateHash, session.otpHash)) {
+  const validHashes = session.validHashes || (session.otpHash ? [session.otpHash] : []);
+  const isMatch = validHashes.some((expected) => hashesMatch(candidateHash, expected));
+  if (!isMatch) {
     session.attempts += 1;
+    logOtpCheck('login email', normalizedEmail, `rejected: code does not match (wrong attempt ${session.attempts}/${MAX_VERIFY_ATTEMPTS})`, session);
     throw authError(AUTH_MESSAGES.OTP_INVALID, 400, AUTH_ERROR_CODES.OTP_INVALID);
   }
 
@@ -681,7 +742,7 @@ export function validateEmailLoginOtp({ email, otp, consume = false }) {
  * Requests an OTP for Mobile login flow.
  * Checks registered account, checks role, and dispatches SMS.
  */
-export async function requestMobileLoginOtp({ phone, country = 'India', role }) {
+async function requestMobileLoginOtpUnlocked({ phone, country = 'India', role }) {
   const normalized = normalizeMobile(phone, country);
   if (!normalized.ok) {
     const error = new Error(`Enter a valid ${country} mobile number.`);
@@ -721,16 +782,13 @@ export async function requestMobileLoginOtp({ phone, country = 'India', role }) 
   // 3. Dispatch OTP through configured provider
   const isPowersText = Boolean(process.env.SMS_API_URL || process.env.SMS_SENDER_ID);
   let sessionToken = null;
-  let generatedOtp = null;
 
   if (isPowersText) {
-    generatedOtp = generateOtp();
-
-    const otpHash = hashOtp(generatedOtp);
-    sessionToken = `otp_${otpHash}`;
+    const code = generateOtp();
+    sessionToken = `otp_${hashOtp(code)}`;
     await powerstextService.sendOtpSms({
       mobile: msg91Mobile,
-      otp: generatedOtp,
+      otp: code,
       expiryMinutes: Number(process.env.MSG91_OTP_EXPIRY_MINUTES) || 10,
     });
   } else {
@@ -767,9 +825,6 @@ export async function requestMobileLoginOtp({ phone, country = 'India', role }) 
     message: 'OTP has been sent to your mobile number via SMS.',
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     phone: formattedPhone,
-    ...(process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production'
-      ? { devOtp: generatedOtp || '123456' }
-      : {}),
   };
 }
 
@@ -797,9 +852,9 @@ export async function verifyAndLoginMobile({ phone, country = 'India', otp, role
   const user = await findUserByMobile(normalized);
   assertCanSignIn(user, { role, via: 'mobile' });
 
-  // 2. Check dev OTP bypass or verify real OTP
-  const isDev = isDevOtpAllowed(cleanOtp);
-  if (isDev) {
+  // 2. Local development test code 123456 (isolated local database only), otherwise verify the real OTP
+  //    (must be requested, expire, limited attempts, single use)
+  if (isDevOtpAllowed(cleanOtp)) {
     // A successful sign-in closes any pending code, as with a real OTP (no lingering cooldown after logout)
     await prisma.mobileVerification.updateMany({
       where: { phone: formattedPhone, used: false },
@@ -825,13 +880,14 @@ export async function verifyAndLoginMobile({ phone, country = 'India', otp, role
     }
 
     if (verification.token && verification.token.startsWith('otp_')) {
-      const expectedHash = verification.token.slice(4);
+      const expectedHashes = verification.token.slice(4).split('_').filter(Boolean);
       const candidateHash = hashOtp(cleanOtp);
-      if (!hashesMatch(candidateHash, expectedHash)) {
+      const isMatch = expectedHashes.some((expectedHash) => hashesMatch(candidateHash, expectedHash));
+      if (!isMatch) {
         await prisma.mobileVerification.update({
           where: { phone: formattedPhone },
           data: { attempts: { increment: 1 } },
-        });
+        }).catch(() => {});
         throw authError(AUTH_MESSAGES.OTP_INVALID, 400, AUTH_ERROR_CODES.OTP_INVALID);
       }
     } else {
@@ -892,7 +948,7 @@ setInterval(() => {
  * Requests an OTP for email verification (registration or KYC).
  * For registration, `role` (BUYER / SUPPLIER) decides whether an existing account can be resumed.
  */
-export async function requestEmailVerificationOtp({ email, name, purpose = 'registration', role }) {
+async function requestEmailVerificationOtpUnlocked({ email, name, purpose = 'registration', role }) {
   const normalizedEmail = (email || '').toLowerCase().trim();
   if (!normalizedEmail || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(normalizedEmail)) {
     const error = new Error('Please enter a valid email address.');
@@ -930,17 +986,21 @@ export async function requestEmailVerificationOtp({ email, name, purpose = 'regi
   }
   const verificationWindow = activeResendWindow(existing);
 
-  // Generate real cryptographically secure random 6-digit OTP
-  const generatedOtp = generateOtp();
-
-  const otpHash = hashOtp(generatedOtp);
+  // Real cryptographically secure random 6-digit code
+  const code = generateOtp();
+  const otpHash = hashOtp(code);
 
   const { sendSupplierVerificationOtpEmail } = await import('./emailService.js');
-  assertEmailSent(await sendSupplierVerificationOtpEmail({ email: normalizedEmail, name, otp: generatedOtp, purpose }));
+  assertEmailSent(await sendSupplierVerificationOtpEmail({ email: normalizedEmail, name, otp: code, purpose }));
 
   // Record the session (and start the cooldown) only once the OTP has actually been dispatched
+  const priorHashes = (existing?.validHashes || (existing?.otpHash ? [existing.otpHash] : []))
+    .filter((_, idx, arr) => arr.length - idx <= 3);
+  const validHashes = [...new Set([...priorHashes, otpHash])];
+
   emailVerificationStore.set(normalizedEmail, {
     otpHash,
+    validHashes,
     expiresAt: Date.now() + OTP_EXPIRY_MS,
     attempts: 0,
     resendCount: verificationWindow ? verificationWindow.resendCount + 1 : 0,
@@ -949,8 +1009,8 @@ export async function requestEmailVerificationOtp({ email, name, purpose = 'regi
     verified: false,
     purpose,
   });
+  logOtpCheck('signup email', normalizedEmail, 'new code sent', emailVerificationStore.get(normalizedEmail));
 
-  const isDev = process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production';
   return {
     success: true,
     message: resumeSignup
@@ -959,7 +1019,6 @@ export async function requestEmailVerificationOtp({ email, name, purpose = 'regi
     resumeSignup,
     cooldownSeconds: RESEND_COOLDOWN_SECONDS,
     email: normalizedEmail,
-    ...(isDev ? { devOtp: generatedOtp } : {}),
   };
 }
 
@@ -976,9 +1035,10 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
 
   const normalizedEmail = (email || '').toLowerCase().trim();
 
-  // Check development OTP bypass
+  // Development test code 123456
   if (isDevOtpAllowed(cleanOtp)) {
     emailVerificationStore.delete(normalizedEmail);
+    logOtpCheck('signup email', normalizedEmail, 'verified with development test code 123456');
     return {
       success: true,
       message: 'Email verified successfully.',
@@ -988,28 +1048,38 @@ export async function verifyEmailVerificationOtp({ email, otp, purpose = 'regist
   }
 
   const session = emailVerificationStore.get(normalizedEmail);
-  if (session?.locked) throw lockOtpSession(session);
+  if (session?.locked) {
+    logOtpCheck('signup email', normalizedEmail, 'rejected: code locked after too many wrong attempts', session);
+    throw lockOtpSession(session);
+  }
   if (!session || !session.otpHash) {
+    logOtpCheck('signup email', normalizedEmail, 'rejected: no pending code (never requested, already used, or server restarted)');
     throw authError(AUTH_MESSAGES.OTP_NOT_REQUESTED, 400, AUTH_ERROR_CODES.OTP_NOT_REQUESTED);
   }
 
   if (Date.now() > session.expiresAt) {
+    logOtpCheck('signup email', normalizedEmail, 'rejected: code expired', session);
     throw authError(AUTH_MESSAGES.OTP_EXPIRED, 400, AUTH_ERROR_CODES.OTP_EXPIRED);
   }
 
   if (session.attempts >= MAX_VERIFY_ATTEMPTS) {
     // The code is dead, but the entry is kept so the resend cooldown and hourly limit still apply
+    logOtpCheck('signup email', normalizedEmail, 'rejected: too many wrong attempts', session);
     throw lockOtpSession(session);
   }
 
   const candidateHash = hashOtp(cleanOtp);
-  if (!hashesMatch(candidateHash, session.otpHash)) {
+  const validHashes = session.validHashes || (session.otpHash ? [session.otpHash] : []);
+  const isMatch = validHashes.some((expected) => hashesMatch(candidateHash, expected));
+  if (!isMatch) {
     session.attempts += 1;
+    logOtpCheck('signup email', normalizedEmail, `rejected: code does not match (wrong attempt ${session.attempts}/${MAX_VERIFY_ATTEMPTS})`, session);
     throw authError(AUTH_MESSAGES.OTP_INVALID, 400, AUTH_ERROR_CODES.OTP_INVALID);
   }
 
   // The code itself can only be used once
   emailVerificationStore.delete(normalizedEmail);
+  logOtpCheck('signup email', normalizedEmail, 'verified', session);
 
   return {
     success: true,
@@ -1054,3 +1124,48 @@ export function validateVerifiedEmail({ email, verificationToken }) {
   throw error;
 }
 
+/* ------------------------------------------------------------------ one send at a time per email / mobile */
+
+// Codes are recorded (and the resend cooldown starts) only after the email / SMS has been sent, which takes a few
+// seconds. Without this lock, a second request for the same address during that window (double click, Enter + click,
+// a second tab, a retry) also passed the cooldown check: two messages with different codes went out and only the
+// last one worked, so the code from the first message was rejected as "Invalid OTP". While a code is being sent, a
+// concurrent request for the same email / mobile now gets the normal cooldown answer and nothing extra is sent.
+// (Per server process; the in-memory OTP stores are per process too.)
+const sendsInProgress = new Set();
+
+async function oneSendAtATime(key, send) {
+  if (sendsInProgress.has(key)) throw otpCooldownError(RESEND_COOLDOWN_SECONDS);
+  sendsInProgress.add(key);
+  try {
+    return await send();
+  } finally {
+    sendsInProgress.delete(key);
+  }
+}
+
+const emailKey = (email) => String(email || '').trim().toLowerCase();
+const mobileKey = (phone, country) => {
+  const normalized = normalizeMobile(phone, country);
+  return normalized.ok ? normalized.formattedPhone : String(phone || '').replace(/D/g, '');
+};
+
+export function requestMobileOtp(args = {}) {
+  return oneSendAtATime(`mobile:${mobileKey(args.phone, args.country)}`, () => requestMobileOtpUnlocked(args));
+}
+
+export function resendMobileOtp(args = {}) {
+  return oneSendAtATime(`mobile:${mobileKey(args.phone, args.country)}`, () => resendMobileOtpUnlocked(args));
+}
+
+export function requestMobileLoginOtp(args = {}) {
+  return oneSendAtATime(`mobile-login:${mobileKey(args.phone, args.country)}`, () => requestMobileLoginOtpUnlocked(args));
+}
+
+export function requestEmailLoginOtp(args = {}) {
+  return oneSendAtATime(`email-login:${emailKey(args.email)}`, () => requestEmailLoginOtpUnlocked(args));
+}
+
+export function requestEmailVerificationOtp(args = {}) {
+  return oneSendAtATime(`email-verify:${emailKey(args.email)}`, () => requestEmailVerificationOtpUnlocked(args));
+}

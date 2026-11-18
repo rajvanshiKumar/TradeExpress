@@ -1,4 +1,9 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config();
 
 const jwtSecret = process.env.JWT_SECRET?.trim();
@@ -18,10 +23,15 @@ const configuredFrontendOrigins = (process.env.CORS_ORIGINS || process.env.FRONT
 export const ENV = {
   PORT: process.env.PORT || 5000,
   NODE_ENV: process.env.NODE_ENV || 'development',
+  DEV_OTP_ENABLED: process.env.DEV_OTP_ENABLED === 'true' || (process.env.NODE_ENV !== 'production' && process.env.DEV_OTP_ENABLED !== 'false'),
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+  // Optional public address of this backend (e.g. a devtunnels or Render URL) for links to uploaded files
+  PUBLIC_BACKEND_URL: String(process.env.PUBLIC_BACKEND_URL || '').trim().replace(/\/+$/, '').replace(/\/api$/i, ''),
   CORS_ORIGINS: configuredFrontendOrigins,
   DATABASE_URL: process.env.DATABASE_URL,
   JWT_SECRET: jwtSecret,
+  // 32-byte key for encrypting sensitive fields (2FA secrets, bank account numbers). Required in production.
+  DATA_ENCRYPTION_KEY: process.env.DATA_ENCRYPTION_KEY?.trim() || '',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   RAZORPAY_KEY_ID: (process.env.RAZORPAY_KEY_ID || '').trim(),
   RAZORPAY_KEY_SECRET: (process.env.RAZORPAY_KEY_SECRET || '').trim(),
@@ -33,7 +43,6 @@ export const ENV = {
   SMTP_USER: process.env.SMTP_USER || '',
   SMTP_PASS: process.env.SMTP_PASS || '',
   SMTP_FROM: process.env.SMTP_FROM || 'TradeSphere Marketplace <orders@tradesphere.com>',
-  DEV_OTP_ENABLED: process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'production',
   // Google Sign-In (OAuth 2.0 authorization-code flow). The secret must stay server-side.
   GOOGLE_CLIENT_ID: (process.env.GOOGLE_CLIENT_ID || '').trim(),
   GOOGLE_CLIENT_SECRET: (process.env.GOOGLE_CLIENT_SECRET || '').trim(),

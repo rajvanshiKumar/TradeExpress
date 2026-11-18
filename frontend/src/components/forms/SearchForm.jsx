@@ -213,7 +213,7 @@ export default function SearchForm({
           aria-expanded={dropdownOpen}
           aria-label={isHero ? 'Select Category' : 'Select Search Scope'}
           className={`group flex items-center gap-1.5 sm:gap-2 rounded-l-full border-r border-slate-200/80 bg-slate-50/80 px-3 sm:px-4 text-xs sm:text-sm font-bold text-slate-800 transition-all hover:bg-slate-100 focus:outline-none ${
-            isHero ? 'min-w-[130px] sm:min-w-[160px]' : 'min-w-[110px] sm:min-w-[130px]'
+            isHero ? 'sm:min-w-[160px]' : 'min-w-[110px] sm:min-w-[130px]' /* phones: the hero shows only the icon, leaving room to type */
           }`}
         >
           {isHero ? (
@@ -221,7 +221,7 @@ export default function SearchForm({
               <span className="flex size-6 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 shrink-0">
                 {currentCategory ? <Layers className="size-3.5" /> : <Boxes className="size-3.5" />}
               </span>
-              <span className="truncate max-w-[90px] sm:max-w-[120px] text-left">
+              <span className="hidden truncate text-left sm:inline sm:max-w-[120px]">
                 {currentCategory ? currentCategory.name : 'All Categories'}
               </span>
             </>
@@ -479,6 +479,7 @@ export default function SearchForm({
       {/* Submit Search Button */}
       <button
         type="submit"
+        aria-label={t('common.search', {}, 'Search')}
         className={`inline-flex shrink-0 items-center justify-center gap-1.5 sm:gap-2 rounded-full font-bold transition-all active:scale-95 ${
           isHero
             ? 'bg-emerald-700 px-4 text-white hover:bg-emerald-800 sm:px-6 shadow-2xs hover:shadow-xs'
@@ -486,7 +487,7 @@ export default function SearchForm({
         }`}
       >
         <Search className="size-4" aria-hidden="true" />
-        <span className={isHero ? 'inline' : 'hidden lg:inline'}>{t('common.search', {}, 'Search')}</span>
+        <span className={isHero ? 'hidden sm:inline' : 'hidden lg:inline'}>{t('common.search', {}, 'Search')}</span>
       </button>
 
       {showSuggestions ? (

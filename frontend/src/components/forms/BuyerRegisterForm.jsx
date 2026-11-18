@@ -19,6 +19,7 @@ import {
   Building2,
   Shield,
   FileCheck2,
+  Clock,
 } from 'lucide-react';
 
 import CustomSelect from '../common/CustomSelect';
@@ -30,25 +31,17 @@ import {
   COUNTRY_PHONE_RULES,
 } from '../../utils/constants';
 import { normalizeEmail, parseMobile, mobileExample } from '../../utils/validators';
+import { enterOtpDigits, isCompleteOtp, otpSlots } from '../../utils/otpDigits';
 import { GoogleSignInCancelled, isGoogleSignInConfigured, signInWithGoogle } from '../../services/googleAuth';
+import { apiUrl } from '../../config/api.js';
 
 const COUNTRY_DIAL_OPTIONS = COUNTRIES.map((c) => ({
   value: c,
   label: `+${COUNTRY_PHONE_RULES[c]?.dial || '91'}`.trim(),
 }));
 
-/** Helper to resolve API URLs consistently in dev and prod */
-const getApiUrl = (endpoint) => {
-  const base = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
-  const clean = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  if (!base) {
-    return clean.startsWith('/api') ? clean : `/api${clean}`;
-  }
-  if (base.endsWith('/api') && clean.startsWith('/api')) {
-    return `${base}${clean.slice(4)}`;
-  }
-  return `${base}${clean}`;
-};
+/** API URLs come from VITE_PUBLIC_API_BASE_URL (src/config/api.js) */
+const getApiUrl = (endpoint) => apiUrl(endpoint);
 
 const SERVER_UNREACHABLE = 'Unable to reach the TradeExpress server. Please check your connection and try again.';
 // OTP and registration calls wait for email/SMS delivery and password hashing on the server
@@ -112,6 +105,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const [maskedAadhaar, setMaskedAadhaar] = useState('');
   const [maskedPan, setMaskedPan] = useState('');
   const [linkError, setLinkError] = useState('');
+  const [allowManualKyc, setAllowManualKyc] = useState(false);
+  const [manualKycAccepted, setManualKycAccepted] = useState(false);
 
   // Compatibility aliases
   const aadhaarVerified = panAadhaarLinked;
@@ -186,10 +181,14 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       val = String(val || '').replace(/\D/g, '').slice(0, 12);
       setPanAadhaarLinked(false);
       setLinkError('');
+      setAllowManualKyc(false);
+      setManualKycAccepted(false);
     } else if (field === 'panNumber') {
       val = String(val || '').toUpperCase().slice(0, 10);
       setPanAadhaarLinked(false);
       setLinkError('');
+      setAllowManualKyc(false);
+      setManualKycAccepted(false);
     }
 
     setValues((prev) => ({ ...prev, [field]: val }));
@@ -282,7 +281,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const handleVerifyEmailOtp = async () => {
     if (emailVerifyLockRef.current) return;
     const cleanOtp = String(emailOtp || '').trim();
-    if (cleanOtp.length < 6) {
+    if (!isCompleteOtp(cleanOtp)) {
       setEmailOtpError('Enter the complete 6-digit verification code.');
       return;
     }
@@ -316,7 +315,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
         setEmailOtp('');
         setEmailOtpError(data.message || 'Too many incorrect verification attempts. Please request a new OTP.');
       } else {
-        setEmailOtpError(data.message || 'Invalid OTP. Please enter the correct verification code.');
+        setEmailOtpError(data.message || `Verification failed (error ${res.status}). Please try again.`);
       }
     } catch {
       setEmailOtpError(SERVER_UNREACHABLE);
@@ -335,7 +334,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       const result = await signInWithGoogle('buyer');
       if (result.status !== 'SIGNED_IN') throw new Error('Google sign-in could not be completed. Please try again.');
       await setAuthUser(result.user, result.token);
-      navigate('/buyer', { replace: true });
+      navigate('/', { replace: true }); // signed in: Home; the dashboard opens from the profile menu
     } catch (err) {
       if (!(err instanceof GoogleSignInCancelled)) setGoogleError(err?.message || 'Google sign-in failed. Please try again.');
     } finally {
@@ -380,6 +379,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
         body: JSON.stringify({
           phone: parsed.international || rawPhone,
           country: values.countryCode || 'India',
+          role: 'BUYER', // a number already used by a supplier account is refused before any OTP
         }),
         signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
       });
@@ -410,7 +410,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const handleVerifyPhoneOtp = async () => {
     if (phoneVerifyLockRef.current) return;
     const cleanOtp = String(phoneOtp || '').trim();
-    if (cleanOtp.length < 6) {
+    if (!isCompleteOtp(cleanOtp)) {
       setPhoneOtpError('Please enter all 6 digits of the verification code.');
       return;
     }
@@ -447,7 +447,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
         setPhoneOtp('');
         setPhoneOtpError(data.message || 'Too many incorrect verification attempts. Please request a new OTP.');
       } else {
-        setPhoneOtpError(data.message || 'Invalid OTP. Please enter the correct verification code.');
+        setPhoneOtpError(data.message || `Verification failed (error ${res.status}). Please try again.`);
       }
     } catch {
       setPhoneOtpError(SERVER_UNREACHABLE);
@@ -457,48 +457,22 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     }
   };
 
-  // Helper for 6-box OTP input management
+  // Helper for 6-box OTP input management (positions are kept when a box is cleared; see utils/otpDigits)
   const handleOtpBoxChange = (type, index, value) => {
     const currentVal = type === 'phone' ? phoneOtp : emailOtp;
     const setOtpVal = type === 'phone' ? setPhoneOtp : setEmailOtp;
     const inputsRef = type === 'phone' ? phoneOtpInputsRef : emailOtpInputsRef;
 
-    const cleaned = value.replace(/\D/g, '');
-    const digits = Array(6).fill('').map((_, i) => currentVal[i] || '');
-
-    if (!cleaned) {
-      digits[index] = '';
-      setOtpVal(digits.join(''));
-      return;
-    }
-
-    // Handle full pasted OTP (e.g. 6 digits pasted)
-    if (cleaned.length > 1) {
-      const pasted = cleaned.slice(0, 6).split('');
-      pasted.forEach((char, i) => {
-        if (index + i < 6) digits[index + i] = char;
-      });
-      const combined = digits.join('');
-      setOtpVal(combined);
-      const nextIndex = Math.min(5, index + pasted.length);
-      inputsRef.current[nextIndex]?.focus();
-      return;
-    }
-
-    digits[index] = cleaned[0];
-    const combined = digits.join('');
-    setOtpVal(combined);
-
-    if (index < 5 && cleaned[0]) {
-      inputsRef.current[index + 1]?.focus();
-    }
+    const { value: next, focusIndex } = enterOtpDigits(currentVal, index, value);
+    setOtpVal(next);
+    if (focusIndex !== null) inputsRef.current[focusIndex]?.focus();
   };
 
   const handleOtpBoxKeyDown = (type, index, e) => {
     const currentVal = type === 'phone' ? phoneOtp : emailOtp;
     const inputsRef = type === 'phone' ? phoneOtpInputsRef : emailOtpInputsRef;
 
-    if (e.key === 'Backspace' && !currentVal[index] && index > 0) {
+    if (e.key === 'Backspace' && !otpSlots(currentVal)[index] && index > 0) {
       inputsRef.current[index - 1]?.focus();
     } else if (e.key === 'ArrowLeft' && index > 0) {
       e.preventDefault();
@@ -555,33 +529,18 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     setLinkError('');
 
     try {
-      let res;
-      try {
-        res = await fetch(getApiUrl('/verification/pan-aadhaar/link-status'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({
-            aadhaarNumber: rawAadhaar,
-            pan: rawPan,
-            userConsent: true,
-            bypassCache: true,
-          }),
-          signal: AbortSignal.timeout(30000),
-        });
-      } catch {
-        // Fallback to relative proxy route
-        res = await fetch('/api/verification/pan-aadhaar/link-status', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({
-            aadhaarNumber: rawAadhaar,
-            pan: rawPan,
-            userConsent: true,
-            bypassCache: true,
-          }),
-          signal: AbortSignal.timeout(30000),
-        });
-      }
+      // Only the backend from VITE_PUBLIC_API_BASE_URL; a network failure is handled by the catch below
+      const res = await fetch(getApiUrl('/verification/pan-aadhaar/link-status'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          aadhaarNumber: rawAadhaar,
+          pan: rawPan,
+          userConsent: true,
+          bypassCache: true,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
 
       const data = await res.json().catch(() => ({}));
       const linkData = data.data || data;
@@ -592,6 +551,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
         setMaskedAadhaar(`•••• •••• ${rawAadhaar.slice(-4)}`);
         setMaskedPan(linkData.maskedPan || `${rawPan.slice(0, 2)}XXXXXX${rawPan.slice(-2)}`);
         setLinkError('');
+        setAllowManualKyc(false);
+        setManualKycAccepted(false);
         setErrors((prev) => {
           const next = { ...prev };
           delete next.panAadhaar;
@@ -607,6 +568,15 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           data.message ||
           'Aadhaar is not linked with the entered PAN in Income Tax statutory records.';
         setLinkError(errorMsg);
+        const isUnavailable =
+          /unavailable|unreachable|timeout|timed out|credit|support|could not be reached/i.test(errorMsg) ||
+          linkData?.reason === 'PROVIDER_ENDPOINT_NOT_FOUND' ||
+          linkData?.reason === 'PROVIDER_UNREACHABLE' ||
+          linkData?.reason === 'PROVIDER_TIMEOUT' ||
+          linkData?.reason === 'PROVIDER_NOT_CONFIGURED';
+        if (isUnavailable) {
+          setAllowManualKyc(true);
+        }
       }
     } catch (err) {
       setPanAadhaarLinked(false);
@@ -617,6 +587,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           ? 'Income Tax verification server timed out. Please verify your internet connection and try again.'
           : 'Unable to connect to Income Tax verification service. Please try again.'
       );
+      setAllowManualKyc(true);
     } finally {
       setPanAadhaarVerifying(false);
     }
@@ -656,7 +627,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
   const validateStep3 = () => {
     const stepErrors = {};
-    if (!panAadhaarLinked) {
+    if (!panAadhaarLinked && !manualKycAccepted) {
       stepErrors.panAadhaar = 'Please verify that your Aadhaar is linked with your PAN card to proceed.';
     }
     if (!values.agreeTerms) {
@@ -725,9 +696,9 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       aadhaarNumber: rawAadhaar,
       aadhaarConsent: true,
       aadhaarLast4: rawAadhaar.slice(-4),
-      panAadhaarStatus: panAadhaarLinked ? 'LINKED' : 'NOT_STARTED',
-      panAadhaarLinked,
-      panAadhaarToken,
+      panAadhaarStatus: panAadhaarLinked ? 'LINKED' : (manualKycAccepted ? 'PENDING' : 'NOT_STARTED'),
+      panAadhaarLinked: Boolean(panAadhaarLinked),
+      panAadhaarToken: panAadhaarLinked ? panAadhaarToken : null,
       verificationToken: phoneToken,
       emailVerificationToken: emailToken,
       agree: true,
@@ -929,7 +900,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
               {currentStep > 1 ? <Check className="h-4 w-4" /> : '1'}
             </div>
             <span
-              className={`text-xs font-semibold ${
+              className={`text-xs font-semibold ${currentStep === 1 ? '' : 'hidden sm:inline'} ${
                 currentStep >= 1 ? 'text-slate-900 font-bold' : 'text-slate-400'
               }`}
             >
@@ -938,7 +909,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           </button>
 
           <div
-            className={`flex-1 mx-3 h-0.5 rounded-full transition-all ${
+            className={`flex-1 mx-2 sm:mx-3 h-0.5 min-w-4 rounded-full transition-all ${
               currentStep > 1 ? 'bg-emerald-800' : 'bg-slate-200'
             }`}
           />
@@ -969,7 +940,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
               {currentStep > 2 ? <Check className="h-4 w-4" /> : '2'}
             </div>
             <span
-              className={`text-xs font-semibold ${
+              className={`text-xs font-semibold ${currentStep === 2 ? '' : 'hidden sm:inline'} ${
                 currentStep >= 2 ? 'text-slate-900 font-bold' : 'text-slate-400'
               }`}
             >
@@ -978,7 +949,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           </button>
 
           <div
-            className={`flex-1 mx-3 h-0.5 rounded-full transition-all ${
+            className={`flex-1 mx-2 sm:mx-3 h-0.5 min-w-4 rounded-full transition-all ${
               currentStep > 2 ? 'bg-emerald-800' : 'bg-slate-200'
             }`}
           />
@@ -1007,7 +978,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
               3
             </div>
             <span
-              className={`text-xs font-semibold ${
+              className={`text-xs font-semibold ${currentStep === 3 ? '' : 'hidden sm:inline'} ${
                 currentStep === 3 ? 'text-slate-900 font-bold' : 'text-slate-400'
               }`}
             >
@@ -1116,7 +1087,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       maxLength={1}
-                      value={emailOtp[index] || ''}
+                      value={otpSlots(emailOtp)[index]}
                       onChange={(e) => handleOtpBoxChange('email', index, e.target.value)}
                       onKeyDown={(e) => handleOtpBoxKeyDown('email', index, e)}
                       onPaste={(e) => handleOtpBoxPaste('email', e)}
@@ -1142,7 +1113,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                   <button
                     type="button"
                     onClick={handleVerifyEmailOtp}
-                    disabled={emailVerifying || emailOtpLocked || emailOtp.length < 6}
+                    disabled={emailVerifying || emailOtpLocked || !isCompleteOtp(emailOtp)}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-800 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-40 transition shadow-xs"
                   >
                     {emailVerifying ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
@@ -1231,16 +1202,16 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       {currentStep === 2 && (
         <div className="space-y-6">
           {/* COMBINED PHONE VERIFICATION BOX */}
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs space-y-5">
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-6 shadow-xs space-y-5">
             <div>
               <label htmlFor="buyer-signup-phone" className="block text-xs font-bold text-slate-800 mb-1.5">
                 Mobile Number <span className="text-red-500">*</span>
               </label>
 
-              {/* Combined Phone Input Row */}
-              <div className="flex items-center gap-2">
+              {/* Combined Phone Input Row: on phones the button drops below at full width */}
+              <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-2 sm:flex">
                 {/* Country Dial Selector */}
-                <div className="w-28 shrink-0">
+                <div className="sm:w-28 sm:shrink-0">
                   <CustomSelect
                     id="buyer-country-dial"
                     value={values.countryCode}
@@ -1251,7 +1222,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                 </div>
 
                 {/* Mobile Input */}
-                <div className="relative flex-1">
+                <div className="relative min-w-0 sm:flex-1">
                   <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                   <input
                     id="buyer-signup-phone"
@@ -1270,9 +1241,9 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                 </div>
 
                 {/* Get OTP Button or Verified Badge */}
-                <div className="shrink-0">
+                <div className="col-span-2 sm:col-span-1 sm:shrink-0">
                   {phoneVerified ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 text-emerald-800 px-3.5 py-2.5 text-xs font-bold">
+                    <span className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-100 text-emerald-800 px-3.5 py-2.5 text-xs font-bold sm:inline-flex sm:w-auto">
                       <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                       Verified
                     </span>
@@ -1281,7 +1252,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                       type="button"
                       onClick={handleSendPhoneOtp}
                       disabled={phoneOtpSending || values.phone.length < 10 || phoneCooldown > 0}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-800 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40 transition"
+                      className="flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-emerald-800 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40 transition sm:inline-flex sm:w-auto"
                     >
                       {phoneOtpSending ? (
                         <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -1303,7 +1274,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
             {/* OTP VERIFICATION SECTION: DISPLAYED DIRECTLY BELOW PHONE NUMBER, INSIDE SAME COMBINED BOX */}
             {phoneOtpSent && !phoneVerified && (
               <div className="pt-4 border-t border-slate-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
                   <span className="font-bold text-slate-800">Enter 6-digit verification code</span>
                   <span className="text-[11px] text-slate-500">
                     Dispatched to +91 {values.phone}
@@ -1320,7 +1291,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       maxLength={1}
-                      value={phoneOtp[index] || ''}
+                      value={otpSlots(phoneOtp)[index]}
                       onChange={(e) => handleOtpBoxChange('phone', index, e.target.value)}
                       onKeyDown={(e) => handleOtpBoxKeyDown('phone', index, e)}
                       onPaste={(e) => handleOtpBoxPaste('phone', e)}
@@ -1341,7 +1312,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                 <button
                   type="button"
                   onClick={handleVerifyPhoneOtp}
-                  disabled={phoneVerifying || phoneOtpLocked || phoneOtp.length < 6}
+                  disabled={phoneVerifying || phoneOtpLocked || !isCompleteOtp(phoneOtp)}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40 transition"
                 >
                   {phoneVerifying ? (
@@ -1549,6 +1520,12 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                   <span>Aadhaar ({maskedAadhaar}) and PAN ({maskedPan}) are officially linked in Income Tax statutory records.</span>
                 </div>
               )}
+              {manualKycAccepted && !panAadhaarLinked && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
+                  <Clock className="h-4 w-4 text-amber-700 shrink-0" />
+                  <span>Your Aadhaar and PAN documents will be submitted for manual verification by Admin upon registration.</span>
+                </div>
+              )}
             </div>
 
             {/* Error Message Alert */}
@@ -1556,6 +1533,42 @@ export default function BuyerRegisterForm({ onRoleChange }) {
               <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium animate-in fade-in">
                 <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
                 <span>{linkError}</span>
+              </div>
+            )}
+            {/* Fallback Option When Verification Service Is Unavailable */}
+            {allowManualKyc && !panAadhaarLinked && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 space-y-2.5 animate-in fade-in">
+                <div className="flex items-start gap-2.5">
+                  <Clock className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-900">
+                    <p className="font-bold">Verification Service Currently Unavailable</p>
+                    <p className="mt-0.5 text-amber-800 leading-relaxed">
+                      The government verification portal is temporarily down. You can proceed with registration; your identity details will be reviewed and verified by the TradeExpress Admin team.
+                    </p>
+                  </div>
+                </div>
+                {!manualKycAccepted ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualKycAccepted(true);
+                      setLinkError('');
+                      setErrors((prev) => {
+                        const next = { ...prev };
+                        delete next.panAadhaar;
+                        return next;
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white px-3.5 py-1.5 text-xs font-bold transition shadow-2xs"
+                  >
+                    <span>Proceed with Manual Admin Verification</span>
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Queued for Manual Admin Verification upon registration</span>
+                  </div>
+                )}
               </div>
             )}
             {errors.panAadhaar && (

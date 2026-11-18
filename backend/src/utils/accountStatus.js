@@ -39,6 +39,8 @@ export const AUTH_MESSAGES = {
     `This ${via === 'mobile' ? 'mobile number' : 'email'} is not registered as a ${ROLE_LABELS[role] || 'member'}. Please use the correct login option.`,
   registeredAsOtherRole: (accountRole) =>
     `An account with this email already exists as a ${ROLE_LABELS[accountRole] || 'TradeExpress member'}. Please log in with the correct account type or use a different email.`,
+  mobileRegisteredAsOtherRole: (accountRole) =>
+    `An account with this mobile number already exists as a ${ROLE_LABELS[accountRole] || 'TradeExpress member'}. Please log in with the correct account type or use a different mobile number.`,
 };
 
 export function authError(message, statusCode, errorCode, extra = {}) {

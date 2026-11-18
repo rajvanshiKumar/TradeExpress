@@ -1,8 +1,9 @@
 import { getAuthToken } from '../utils/authSession.js';
 // Account Settings API (signed-in user's own account only; the server takes the identity from the login token).
 import { ApiRequestError, authorizedRequest } from './authorizedApi';
+import { API_BASE_URL } from '../config/api.js';
 
-const BASE_URL = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').trim().replace(/\/+$/, '') || '/api';
+const BASE_URL = API_BASE_URL;
 
 export const getAccountSettings = () => authorizedRequest('GET', 'account/settings');
 
@@ -61,3 +62,8 @@ export const revokeOtherSessions = () => authorizedRequest('POST', 'account/sess
 export const getPreferences = () => authorizedRequest('GET', 'account/preferences');
 export const updatePreferences = (changes) => authorizedRequest('PATCH', 'account/preferences', changes);
 export const exportAccountData = () => authorizedRequest('GET', 'account/data-export', undefined, { timeoutMs: 30000 });
+
+// Supplier account closure request (reviewed by a Super Admin). Creating it needs an ACCOUNT_DELETE authorization.
+export const getDeletionRequest = () => authorizedRequest('GET', 'account/deletion-request');
+export const createDeletionRequest = ({ grant, confirmation, reason }) => authorizedRequest('POST', 'account/deletion-request', { grant, confirmation, reason });
+export const cancelDeletionRequest = () => authorizedRequest('POST', 'account/deletion-request/cancel');

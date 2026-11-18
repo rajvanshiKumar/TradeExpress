@@ -174,7 +174,7 @@ function Inquiries({ company }) {
   return (
     <div>
       <SectionHeading
-        title="Inquiries"
+        title="Buyer RFQs"
         description="Quote requests for your products. Reply with a quote or negotiate up to 3 rounds."
       />
       {error ? <div className="ts-card"><ErrorState text={error} onRetry={reload} /></div> : loading ? <div className="ts-card"><TableSkeleton /></div> : mine.length === 0 ? (
@@ -281,6 +281,6 @@ function Inquiries({ company }) {
 }
 
 export default function SupplierInquiries() {
-  useDocumentTitle('Supplier inquiries');
+  useDocumentTitle('Buyer RFQs');
   return <SupplierGuard>{(company) => <Inquiries company={company} />}</SupplierGuard>;
 }

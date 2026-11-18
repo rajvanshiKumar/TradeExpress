@@ -4,7 +4,7 @@ import AuthShell from './AuthShell';
 import LoginForm from '../components/forms/LoginForm';
 import useAuth from '../hooks/useAuth';
 import useDocumentTitle from '../hooks/useDocumentTitle';
-import { ROLE_HOME } from '../utils/constants';
+import { postAuthPath } from '../utils/postAuthRedirect';
 
 const ROLES = [
   { id: 'buyer', label: 'Buyer' },
@@ -21,10 +21,10 @@ export default function Login({ defaultRole = null }) {
     : 'buyer';
   const [role, setRole] = useState(initialRole);
   useDocumentTitle('Login');
-  // Already signed in as this role: go to its dashboard. A link for another role (e.g. /supplier/login) shows the
+  // Already signed in as this role: buyers and suppliers go Home (admins to their console). A link for another role (e.g. /supplier/login) shows the
   // form, so this window can sign in as that role without ending the current one.
   const explicitRole = defaultRole || searchParams.get('role');
-  if (user && (!explicitRole || role === user.role)) return <Navigate to={ROLE_HOME[user.role]} replace />;
+  if (user && (!explicitRole || role === user.role)) return <Navigate to={postAuthPath(user, location.state?.from)} replace />;
 
   const switcher = (
     <div className="mb-7 flex justify-center">

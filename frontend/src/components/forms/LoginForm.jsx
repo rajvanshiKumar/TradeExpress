@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, startTransition } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { slotForPath, slotForRole } from "../../utils/authSession";
+import { postAuthPath } from "../../utils/postAuthRedirect";
 import {
   Eye,
   EyeOff,
@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import Button from "../common/Button";
 import useAuth from "../../hooks/useAuth";
-import { ROLE_HOME, COUNTRIES, COUNTRY_PHONE_RULES } from "../../utils/constants";
+import { COUNTRIES, COUNTRY_PHONE_RULES } from "../../utils/constants";
 import {
   focusFirstError,
   hasErrors,
@@ -107,6 +107,9 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
 
   // Email OTP state
   const [emailOtpSent, setEmailOtpSent] = useState(false);
+  // The email / mobile a code was requested for in this visit: "Already received code?" is offered only for it
+  const [emailOtpRequestedFor, setEmailOtpRequestedFor] = useState("");
+  const [mobileOtpRequestedFor, setMobileOtpRequestedFor] = useState("");
   const [sendingEmailOtp, setSendingEmailOtp] = useState(false);
   const [emailCooldown, setEmailCooldown] = useState(0);
 
@@ -199,15 +202,60 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
    */
   const handleOtpRequestFailure = (method, res, fallbackMessage) => {
     const data = res.data || {};
-    if (data.code === "OTP_COOLDOWN" && data.cooldownRemaining > 0) {
+    if (data.code === "OTP_COOLDOWN" || data.cooldownRemaining > 0) {
       if (method === "email") {
         setEmailOtpSent(true);
-        setEmailCooldown(data.cooldownRemaining);
+        setEmailCooldown(data.cooldownRemaining || 30);
+        setTimeout(() => emailOtpRefs.current[0]?.focus(), 150);
       } else {
         setMobileOtpSent(true);
-        setMobileCooldown(data.cooldownRemaining);
+        setMobileCooldown(data.cooldownRemaining || 30);
+        setTimeout(() => mobileOtpRefs.current[0]?.focus(), 150);
       }
+      setFormError("");
+      return;
     }
+
+    // If server timed out or network glitched, the code may still have been dispatched to user's inbox/phone.
+    // Ensure the OTP boxes are displayed so the user who received the code can type it in!
+    const isNetworkOrTimeout =
+      !res.ok && (!res.status || res.status === 0 || /timeout|network|connect|fetch/i.test(res.error || data.message || ""));
+    if (isNetworkOrTimeout) {
+      if (method === "email") {
+        setEmailOtpSent(true);
+        setTimeout(() => emailOtpRefs.current[0]?.focus(), 150);
+      } else {
+        setMobileOtpSent(true);
+        setTimeout(() => mobileOtpRefs.current[0]?.focus(), 150);
+      }
+      setFormError(
+        method === "email"
+          ? "Verification code was dispatched. Please check your email and enter the 6-digit OTP below."
+          : "Verification code was dispatched. Please check your SMS and enter the 6-digit OTP below."
+      );
+      return;
+    }
+
+    // A reply that is not a clear rejection (server error, or no message at all) does not prove the code was not
+    // sent: keep the code boxes available so a code that did arrive can still be entered.
+    const unclearReply = !res.ok && (res.status >= 500 || !data.message);
+    if (typeof console !== "undefined") {
+      console.warn(`[OTP] ${method} code request was not confirmed`, { status: res.status, code: data.code || null, message: data.message || null });
+    }
+    if (unclearReply) {
+      if (method === "email") {
+        setEmailOtpSent(true);
+        setTimeout(() => emailOtpRefs.current[0]?.focus(), 150);
+      } else {
+        setMobileOtpSent(true);
+        setTimeout(() => mobileOtpRefs.current[0]?.focus(), 150);
+      }
+      setFormError(
+        `${data.message || fallbackMessage} If you received a code, enter it below; otherwise use Resend in a moment.`
+      );
+      return;
+    }
+
     setFormError(data.message || res.error || fallbackMessage);
   };
 
@@ -342,6 +390,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     }
 
     emailOtpRequestLockRef.current = true;
+    setEmailOtpRequestedFor(cleanEmail);
     setSendingEmailOtp(true);
     setFormError("");
     setErrors((prev) => ({ ...prev, email: "", emailOtp: "" }));
@@ -349,6 +398,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     try {
       const res = await authFetch("/auth/send-email-otp", {
         method: "POST",
+        timeoutMs: 30000,
         body: JSON.stringify({
           email: cleanEmail,
           role: role ? role.toUpperCase() : undefined,
@@ -389,6 +439,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     }
 
     mobileOtpRequestLockRef.current = true;
+    setMobileOtpRequestedFor(values.phone.trim());
     setSendingMobileOtp(true);
     setFormError("");
     setErrors((prev) => ({ ...prev, phone: "", mobileOtp: "" }));
@@ -396,6 +447,7 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     try {
       const res = await authFetch("/auth/send-mobile-login-otp", {
         method: "POST",
+        timeoutMs: 25000,
         body: JSON.stringify({
           phone: rawPhone,
           country: values.country,
@@ -419,23 +471,10 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
     }
   };
 
+  // Buyers and suppliers land on Home (or the page that asked them to sign in); see utils/postAuthRedirect
   const handlePostAuthNavigation = (authUser) => {
-    const from = location.state?.from;
-    const isLoginPath = from && (from.includes("/login") || from.includes("/sign-in"));
-    const allowed =
-      from &&
-      !isLoginPath &&
-      (authUser.role === "admin"
-        ? from.startsWith("/admin") || from === "/messages"
-        : authUser.role === "super_admin"
-        ? from.startsWith("/super-admin") || from.startsWith("/admin") || from === "/messages"
-        : !from.startsWith("/admin") && !from.startsWith("/super-admin")) &&
-      // Never return to another role's dashboard: that would switch this window to that role
-      (!slotForPath(from) || slotForPath(from) === slotForRole(authUser.role));
-
-    const targetHome = ROLE_HOME[authUser.role] || (authUser.role === "supplier" || authUser.role === "exporter" ? "/supplier" : "/buyer");
     startTransition(() => {
-      navigate(allowed ? from : targetHome, { replace: true });
+      navigate(postAuthPath(authUser, location.state?.from), { replace: true });
     });
   };
 
@@ -836,6 +875,21 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
                 {errors.email}
               </p>
             ) : null}
+            {!emailOtpSent && values.email.trim() && emailOtpRequestedFor === normalizeEmail(values.email) ? (
+              <div className="mt-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmailOtpSent(true);
+                    setFormError("");
+                    setTimeout(() => emailOtpRefs.current[0]?.focus(), 100);
+                  }}
+                  className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 hover:underline cursor-pointer"
+                >
+                  Already received code? Enter OTP
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {/* 6-DIGIT OTP INPUT SECTION (APPEARS SMOOTHLY BELOW EMAIL ONCE OTP SENT) */}
@@ -1034,6 +1088,21 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
                 <CircleAlert className="h-3.5 w-3.5 shrink-0" />
                 {errors.phone}
               </p>
+            ) : null}
+            {!mobileOtpSent && values.phone.trim() && mobileOtpRequestedFor === values.phone.trim() ? (
+              <div className="mt-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileOtpSent(true);
+                    setFormError("");
+                    setTimeout(() => mobileOtpRefs.current[0]?.focus(), 100);
+                  }}
+                  className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 hover:underline cursor-pointer"
+                >
+                  Already received code? Enter OTP
+                </button>
+              </div>
             ) : null}
           </div>
 

@@ -2,8 +2,9 @@
 // Uses the configured API base URL, or the Vite dev proxy at /api when none is set.
 
 import { getAuthToken, handleRejectedToken } from '../utils/authSession.js';
+import { API_BASE_URL } from '../config/api.js';
 
-const BASE_URL = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').trim().replace(/\/+$/, '') || '/api';
+const BASE_URL = API_BASE_URL;
 export const API_BASE = BASE_URL;
 
 export class ApiRequestError extends Error {

@@ -33,19 +33,20 @@ describe('authFetch — wrong email is not a connection failure', () => {
     assert.equal(calls.length, 1, 'a real API answer must not be retried on other servers');
   });
 
-  // In Node there is no window, so authFetch has two candidates (localhost:5000 and 127.0.0.1:5000)
-  for (const [label, skipped] of [
-    ['an HTML fallback page', () => html()],
+  // The backend comes only from VITE_PUBLIC_API_BASE_URL: a wrong reply is reported, never retried on localhost
+  for (const [label, reply] of [
+    ['an HTML page (e.g. a tunnel sign-in or warning page)', () => html()],
     ['the backend unmatched-route 404', () => json(404, { success: false, message: 'API Route not found: POST /api/auth/login' })],
   ]) {
-    it(`still skips a target that returns ${label} and uses the next one`, async () => {
-      const answers = [skipped, () => json(401, { success: false, message: 'Incorrect password.' })];
-      let i = 0;
-      globalThis.fetch = async () => answers[Math.min(i++, answers.length - 1)]();
+    it(`reports ${label} as a connection problem and never falls back to localhost`, async () => {
+      const calls = [];
+      globalThis.fetch = async (url) => { calls.push(String(url)); return reply(); };
       const res = await authFetch('/auth/login', { method: 'POST', body: '{}' });
-      assert.equal(res.status, 401);
-      assert.equal(res.data.message, 'Incorrect password.');
-      assert.equal(i, 2);
+      assert.equal(res.ok, false);
+      assert.equal(res.status, 0);
+      assert.match(res.data.message, /Unable to connect to the authentication server/);
+      assert.equal(calls.length, 1, 'only the configured backend is called');
+      assert.equal(calls.some((u) => /localhost|127\.0\.0\.1/.test(u)), false);
     });
   }
 

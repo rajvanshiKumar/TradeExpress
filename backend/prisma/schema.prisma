@@ -96,6 +96,7 @@ model User {
 
   addresses           Address[]
   loginSessions       UserSession[]
+  deletionRequests    SupplierDeletionRequest[] @relation("SupplierDeletionRequests")
   paymentMethods      PaymentMethod[]
   orders              Order[]              @relation("BuyerOrders")
   supplierOrders      Order[]              @relation("SupplierOrders")
@@ -1384,4 +1385,33 @@ model UserSession {
 
   @@index([userId, revokedAt])
   @@map("user_sessions")
+}
+
+/// Supplier account closure requests (approval workflow). Organisation closure only: personal-data rights of an
+/// individual are handled separately. activeKey = supplierId while the request is open, so the unique index
+/// allows only ONE active request per supplier; it is cleared when the request ends.
+model SupplierDeletionRequest {
+  id               String    @id @default(uuid())
+  supplierId       String
+  supplier         User      @relation("SupplierDeletionRequests", fields: [supplierId], references: [id], onDelete: Restrict)
+  requesterId      String
+  activeKey        String?   @unique
+  status           String    @default("PENDING") // PENDING, ON_HOLD, APPROVED, PROCESSING, FAILED, REJECTED, CANCELLED, COMPLETED
+  reason           String?   @db.Text
+  decisionNote     String?   @db.Text
+  decidedById      String?
+  decidedAt        DateTime?
+  graceEndsAt      DateTime?
+  hiddenProductIds Json?     // products taken off the marketplace at approval (restored if cancelled)
+  obligations      Json?     // eligibility snapshot from the latest check
+  attempts         Int       @default(0)
+  lastError        String?   @db.Text
+  completedAt      DateTime?
+  history          Json      // [{ at, status, actorId, actorRole, note }]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([supplierId])
+  @@map("supplier_deletion_requests")
 }

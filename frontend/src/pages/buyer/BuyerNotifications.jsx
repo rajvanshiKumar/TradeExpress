@@ -18,23 +18,25 @@ import EmptyState from '../../components/common/EmptyState';
 import useNotifications from '../../hooks/useNotifications';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { formatDate } from '../../utils/formatDate';
+import { categoryOf } from '../../utils/notificationView';
 
 export default function BuyerNotifications() {
-  const { notifications, unreadCount, markRead, markAllRead, clearNotifications } = useNotifications();
+  const { notifications, unreadCount, markRead, markAllRead, deleteNotification, clearNotifications } = useNotifications();
+  const [deleting, setDeleting] = useState(null);
   const [tab, setTab] = useState('ALL');
   useDocumentTitle('Notifications — Buyer Workspace');
 
   const filtered = useMemo(() => {
     return (notifications || []).filter((item) => {
       if (tab === 'UNREAD') return !item.read;
-      if (tab === 'ORDERS') return item.type === 'orders';
-      if (tab === 'QUOTES') return item.type === 'quotes';
+      if (tab === 'ORDERS') return categoryOf(item) === 'orders';
+      if (tab === 'QUOTES') return categoryOf(item) === 'rfqs';
       return true;
     });
   }, [notifications, tab]);
 
-  const getTypeIcon = (type) => {
-    switch (type) {
+  const getTypeIcon = (type, item) => {
+    switch ({ orders: 'orders', rfqs: 'quotes' }[categoryOf(item || { type })] || type) {
       case 'orders':
         return <Package className="size-4 text-emerald-700" />;
       case 'quotes':
@@ -68,7 +70,9 @@ export default function BuyerNotifications() {
                 variant="ghost"
                 size="sm"
                 icon={Trash2}
-                onClick={clearNotifications}
+                loading={deleting === 'all'}
+                disabled={Boolean(deleting)}
+                onClick={async () => { setDeleting('all'); await clearNotifications(); setDeleting(null); }}
                 className="text-slate-500 hover:text-rose-600"
               >
                 Clear all
@@ -134,7 +138,7 @@ export default function BuyerNotifications() {
               }`}
             >
               <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-                {getTypeIcon(item.type)}
+                {getTypeIcon(item.type, item)}
               </div>
 
               <div className="min-w-0 flex-1">
@@ -168,17 +172,29 @@ export default function BuyerNotifications() {
                 )}
               </div>
 
-              {!item.read && (
+              <div className="flex shrink-0 items-start gap-1">
+                {!item.read && (
+                  <button
+                    type="button"
+                    onClick={() => markRead(item.id)}
+                    aria-label="Mark as read"
+                    title="Mark as read"
+                    className="size-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                  >
+                    <Check className="size-4" />
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => markRead(item.id)}
-                  aria-label="Mark as read"
-                  title="Mark as read"
-                  className="size-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors shrink-0"
+                  disabled={Boolean(deleting)}
+                  onClick={async () => { setDeleting(item.id); await deleteNotification(item.id); setDeleting(null); }}
+                  aria-label={`Delete notification: ${item.title}`}
+                  title="Delete"
+                  className="size-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors disabled:opacity-50"
                 >
-                  <Check className="size-4" />
+                  <Trash2 className="size-4" />
                 </button>
-              )}
+              </div>
             </div>
           ))}
         </div>

@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { assertSupplierCanTrade } from './supplierDeletionService.js';
 import { createNotification } from './notificationService.js';
 import * as productService from './productService.js';
 
@@ -595,6 +596,8 @@ export async function submitQuote(rfqId, {
   notes = '',
   attachmentUrl = null,
 }) {
+  // No new quotes while an approved account deletion is in its grace period
+  await assertSupplierCanTrade(supplierId);
   const rfq = await prisma.rfq.findUnique({
     where: { id: rfqId },
     include: { quotations: true },

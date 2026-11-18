@@ -24,15 +24,50 @@ export function isMyMessage(message, user, side) {
 }
 
 /**
+ * Normalizes a supplier/company name to a standard slug for deduplication.
+ * Handles common phonetic/casing variations (e.g. 'Interprises' vs 'Enterprises').
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+export function normalizeSupplierName(name) {
+  if (!name || typeof name !== 'string') return '';
+  return name
+    .toLowerCase()
+    .replace(/^inquiry\s+(?:for|regarding|:)\s+/i, '')
+    .replace(/\binterprises\b/g, 'enterprises')
+    .replace(/\binterprise\b/g, 'enterprise')
+    .replace(/[^a-z0-9]/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Extracts target entity name from a subject like "Inquiry for Ramu Interprises".
+ *
+ * @param {string} subject
+ * @returns {string}
+ */
+export function extractSubjectTarget(subject) {
+  if (!subject || typeof subject !== 'string') return '';
+  const match = subject.match(/^inquiry\s+(?:for|regarding|:)\s+(.+)$/i);
+  if (!match) return '';
+  const target = match[1].trim();
+  if (target.toLowerCase() === 'supplier') return '';
+  return target;
+}
+
+/**
  * Resolves a unique key for the counterparty of a conversation.
  * Groups duplicate conversation threads for the same buyer-supplier pair into a single clean thread.
  *
  * @param {Object} conv - Conversation object
  * @param {'buyer'|'supplier'|'admin'} side - Current user perspective
  * @param {Function} [getCompany] - Optional company lookup helper
+ * @param {Object} [aliasMap] - Optional multi-pass alias map
  * @returns {string} Unique counterparty key
  */
-export function getCounterpartyKey(conv, side = 'buyer', getCompany = () => null) {
+export function getCounterpartyKey(conv, side = 'buyer', getCompany = () => null, aliasMap = null) {
   if (!conv) return 'unknown';
 
   if (side === 'supplier') {
@@ -42,17 +77,38 @@ export function getCounterpartyKey(conv, side = 'buyer', getCompany = () => null
 
   // Buyer or Admin perspective: group by supplier/company
   const company = conv.companyId && getCompany ? getCompany(conv.companyId) : null;
+  const directCompany = conv.supplier?.company || company?.name || conv.supplierCompanyName;
+  const subjectTarget = extractSubjectTarget(conv.subject);
+  const rawCompany = directCompany || subjectTarget || (conv.supplierName !== 'Supplier' ? conv.supplierName : '');
+  let normCompany = normalizeSupplierName(rawCompany);
+
+  // If aliasMap provided, resolve through known aliases
+  if ((!normCompany || normCompany === 'supplier') && aliasMap) {
+    const suppId = conv.supplierId || conv.supplier?.id || company?.supplierId;
+    if (suppId && aliasMap.idToCompany?.has(String(suppId))) {
+      normCompany = aliasMap.idToCompany.get(String(suppId));
+    } else if (conv.companyId && aliasMap.compIdToCompany?.has(String(conv.companyId))) {
+      normCompany = aliasMap.compIdToCompany.get(String(conv.companyId));
+    } else {
+      const contact = conv.supplier?.name || conv.supplierContactName;
+      if (contact && aliasMap.contactToCompany?.has(normalizeSupplierName(contact))) {
+        normCompany = aliasMap.contactToCompany.get(normalizeSupplierName(contact));
+      }
+    }
+  }
+
+  if (normCompany && normCompany !== 'supplier') {
+    return `company_${normCompany}`;
+  }
+
   const suppUserId = conv.supplierId || conv.supplier?.id || company?.supplierId;
   if (suppUserId) return `supp_${suppUserId}`;
 
   const compId = conv.companyId || company?.id;
   if (compId) return `comp_${compId}`;
 
-  const cName = (company?.name || conv.supplier?.company || conv.supplierCompanyName || conv.supplierName || '').trim().toLowerCase();
-  if (cName && cName !== 'supplier') return `name_${cName}`;
-
   const pName = (conv.supplier?.name || conv.supplierContactName || '').trim().toLowerCase();
-  if (pName && pName !== 'supplier') return `contact_${pName}`;
+  if (pName && pName !== 'supplier') return `contact_${normalizeSupplierName(pName)}`;
 
   return `conv_${conv.id}`;
 }
@@ -69,11 +125,38 @@ export function getCounterpartyKey(conv, side = 'buyer', getCompany = () => null
 export function consolidateConversations(conversations = [], side = 'buyer', getCompany = () => null) {
   if (!Array.isArray(conversations)) return [];
 
-  const partyMap = new Map();
+  // Pass 1: Build cross-reference alias map across all conversations for this perspective
+  const idToCompany = new Map();
+  const compIdToCompany = new Map();
+  const contactToCompany = new Map();
 
   for (const conv of conversations) {
     if (!conv) continue;
-    const partyKey = getCounterpartyKey(conv, side, getCompany);
+    const company = conv.companyId && getCompany ? getCompany(conv.companyId) : null;
+    const directCompany = conv.supplier?.company || company?.name || conv.supplierCompanyName;
+    const subjectTarget = extractSubjectTarget(conv.subject);
+    const rawCompany = directCompany || subjectTarget || (conv.supplierName !== 'Supplier' ? conv.supplierName : '');
+    const norm = normalizeSupplierName(rawCompany);
+
+    if (norm && norm !== 'supplier') {
+      const suppId = conv.supplierId || conv.supplier?.id || company?.supplierId;
+      if (suppId) idToCompany.set(String(suppId), norm);
+      const compId = conv.companyId || company?.id;
+      if (compId) compIdToCompany.set(String(compId), norm);
+      const contact = conv.supplier?.name || conv.supplierContactName;
+      if (contact && contact.toLowerCase() !== 'supplier') {
+        contactToCompany.set(normalizeSupplierName(contact), norm);
+      }
+    }
+  }
+
+  const aliasMap = { idToCompany, compIdToCompany, contactToCompany };
+  const partyMap = new Map();
+
+  // Pass 2: Group and merge conversations
+  for (const conv of conversations) {
+    if (!conv) continue;
+    const partyKey = getCounterpartyKey(conv, side, getCompany, aliasMap);
 
     const convMessages = Array.isArray(conv.messages) ? conv.messages : [];
     const convMsgCount = convMessages.length;
@@ -117,6 +200,12 @@ export function consolidateConversations(conversations = [], side = 'buyer', get
         bestSubject = secondary.subject;
       }
 
+      // Preserve rich supplier object if one has company/name and the other lacks it
+      const bestSupplier =
+        primary.supplier?.company || primary.supplier?.name
+          ? primary.supplier
+          : secondary.supplier || primary.supplier || null;
+
       partyMap.set(partyKey, {
         ...secondary,
         ...primary,
@@ -126,7 +215,8 @@ export function consolidateConversations(conversations = [], side = 'buyer', get
         messages: mergedMessages,
         companyId: primary.companyId || secondary.companyId || null,
         supplierId: primary.supplierId || secondary.supplierId || null,
-        supplier: primary.supplier || secondary.supplier || null,
+        supplier: bestSupplier,
+        supplierName: primary.supplierName || bestSupplier?.company || bestSupplier?.name || secondary.supplierName || 'Supplier',
         product: primary.product || secondary.product || null,
         productId: primary.productId || secondary.productId || null,
         lastMessageAt: new Date(
@@ -147,4 +237,3 @@ export function consolidateConversations(conversations = [], side = 'buyer', get
     (a, b) => new Date(b.lastMessageAt || b.createdAt || 0) - new Date(a.lastMessageAt || a.createdAt || 0)
   );
 }
-

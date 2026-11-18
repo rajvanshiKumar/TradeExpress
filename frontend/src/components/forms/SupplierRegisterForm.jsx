@@ -34,6 +34,7 @@ import {
 import CustomSelect from '../common/CustomSelect';
 import OtpModal from '../common/OtpModal';
 import SixDigitOtpRow from '../common/SixDigitOtpRow';
+import { isCompleteOtp } from '../../utils/otpDigits';
 import PasswordValidationIndicator from '../common/PasswordValidationIndicator';
 import useAuth from '../../hooks/useAuth';
 import useProducts from '../../hooks/useProducts';
@@ -52,6 +53,7 @@ import { readStorage } from '../../utils/storage';
 import { normalizeEmail, parseMobile, mobileExample, rules, validate, hasErrors } from '../../utils/validators';
 import { validatePassword } from '../../utils/passwordRules';
 import { certificateFormatHint, isValidCertificateFormat, normalizeCertificateNumber } from '../../utils/certificateFormats';
+import { API_BASE_URL } from '../../config/api.js';
 
 const LEGAL_STRUCTURES = ['Proprietorship', 'Partnership', 'Limited Liability Partnership (LLP)', 'Private Limited', 'Public Limited', 'One Person Company (OPC)', 'Other'];
 
@@ -115,6 +117,9 @@ export default function SupplierRegisterForm() {
   const googleSignup = useLocation().state?.googleSignup || null;
 
   const [currentStep, setCurrentStep] = useState(1);
+  // Steps that passed their checks through Next: only these show a tick. Any step can still be opened from the stepper.
+  const [completedSteps, setCompletedSteps] = useState(() => new Set());
+  const markStepDone = (step) => setCompletedSteps((prev) => (prev.has(step) ? prev : new Set(prev).add(step)));
   const [busy, setBusy] = useState(false);
   const [checkingBusinessPhone, setCheckingBusinessPhone] = useState(false);
   const [formError, setFormError] = useState('');
@@ -143,7 +148,7 @@ export default function SupplierRegisterForm() {
     companyDescription: '',
     logoUrl: '',
     businessImages: [],
-
+    
     // Step 3: Address
     country: preferences.country || 'India',
     state: 'Maharashtra',
@@ -306,7 +311,7 @@ export default function SupplierRegisterForm() {
   const checkOfficialPhoneAvailability = async (phoneDigits) => {
     const clean = String(phoneDigits || '').replace(/\D/g, '').slice(-10);
     if (!clean || clean.length !== 10) return { available: true };
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    const baseUrl = API_BASE_URL;
     try {
       const res = await fetch(`${baseUrl}/auth/check-phone`, {
         method: 'POST',
@@ -503,6 +508,10 @@ export default function SupplierRegisterForm() {
   const passwordStrength = calculatePasswordStrength(values.password);
 
   // Send Mobile OTP
+  // One code request at a time per channel (a quick double click must not send two different codes)
+  const mobileSendLockRef = useRef(false);
+  const emailSendLockRef = useRef(false);
+
   const handleSendMobileOtp = async () => {
     // 1. Before mobile verification highlight Full Name of Representative and Company Name if missing (only highlight box, no message)
     const nameMissing = !values.name || !values.name.trim();
@@ -535,19 +544,21 @@ export default function SupplierRegisterForm() {
       return;
     }
 
+    if (mobileSendLockRef.current) return;
+    mobileSendLockRef.current = true;
     setPhoneOtpSending(true);
     setErrors((prev) => ({ ...prev, phone: '' }));
     setPhoneOtpError('');
 
     try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const baseUrl = API_BASE_URL;
       const res = await fetch(`${baseUrl}/auth/send-mobile-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           phone: values.phone,
           country,
-          purpose: 'registration',
+          role: 'SUPPLIER', // a number already used by a buyer account is refused before any OTP
         }),
         signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
       });
@@ -567,19 +578,20 @@ export default function SupplierRegisterForm() {
       setPhoneOtpError(SERVER_UNREACHABLE);
     } finally {
       setPhoneOtpSending(false);
+      mobileSendLockRef.current = false;
     }
   };
 
   // Verify Mobile OTP via 6-digit box
   const handleVerifyMobileOtp = async () => {
-    if (!phoneOtp.trim() || phoneOtp.trim().length !== 6) {
+    if (!isCompleteOtp(phoneOtp)) {
       setPhoneOtpError('Please enter the 6-digit verification code.');
       return;
     }
 
     setPhoneVerifying(true);
     setPhoneOtpError('');
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    const baseUrl = API_BASE_URL;
     const country = values.countryCode || values.country || 'India';
 
     try {
@@ -595,7 +607,7 @@ export default function SupplierRegisterForm() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        setPhoneOtpError(data.message || 'Invalid OTP. Please enter the correct verification code.');
+        setPhoneOtpError(data.message || `Verification failed (error ${res.status}). Please try again.`);
         return;
       }
       setPhoneVerified(true);
@@ -617,12 +629,14 @@ export default function SupplierRegisterForm() {
       return;
     }
 
+    if (emailSendLockRef.current) return;
+    emailSendLockRef.current = true;
     setEmailOtpSending(true);
     setErrors((prev) => ({ ...prev, email: '' }));
     setEmailOtpError('');
 
     try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const baseUrl = API_BASE_URL;
       const res = await fetch(`${baseUrl}/auth/send-email-verification-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -652,19 +666,20 @@ export default function SupplierRegisterForm() {
       setEmailOtpError(SERVER_UNREACHABLE);
     } finally {
       setEmailOtpSending(false);
+      emailSendLockRef.current = false;
     }
   };
 
   // Verify Email OTP via 6-digit box
   const handleVerifyEmailOtp = async () => {
-    if (!emailOtp.trim() || emailOtp.trim().length !== 6) {
+    if (!isCompleteOtp(emailOtp)) {
       setEmailOtpError('Please enter the 6-digit verification code.');
       return;
     }
 
     setEmailVerifying(true);
     setEmailOtpError('');
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    const baseUrl = API_BASE_URL;
     const cleanEmail = normalizeEmail(values.email);
 
     try {
@@ -680,7 +695,7 @@ export default function SupplierRegisterForm() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        setEmailOtpError(data.message || 'Invalid OTP. Please enter the correct verification code.');
+        setEmailOtpError(data.message || `Verification failed (error ${res.status}). Please try again.`);
         return;
       }
       setEmailVerified(true);
@@ -698,7 +713,7 @@ export default function SupplierRegisterForm() {
   const handleVerifyOtpModal = async (code) => {
     setOtpModalVerifying(true);
     setOtpModalError('');
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    const baseUrl = API_BASE_URL;
 
     try {
       if (otpModalType === 'phone') {
@@ -757,7 +772,7 @@ export default function SupplierRegisterForm() {
     }
     setLogoUploading(true);
     try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const baseUrl = API_BASE_URL;
       const formData = new FormData();
       formData.append('file', file);
       const res = await fetch(`${baseUrl}/upload`, {
@@ -787,7 +802,7 @@ export default function SupplierRegisterForm() {
       return;
     }
     setMediaUploading(true);
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    const baseUrl = API_BASE_URL;
     try {
       for (const file of files) {
         const formData = new FormData();
@@ -901,7 +916,7 @@ export default function SupplierRegisterForm() {
     setValues((prev) => ({ ...prev, panAadhaarStatus: 'PENDING' }));
 
     try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const baseUrl = API_BASE_URL;
       const res = await fetch(`${baseUrl}/verification/pan-aadhaar/link-status`, {
         method: 'POST',
         headers: {
@@ -997,7 +1012,7 @@ export default function SupplierRegisterForm() {
     });
 
     try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const baseUrl = API_BASE_URL;
       const res = await fetch(`${baseUrl}/verification/gstin/verify`, {
         method: 'POST',
         headers: {
@@ -1071,11 +1086,15 @@ export default function SupplierRegisterForm() {
       } else {
         const parsed = parseMobile(values.phone, values.countryCode || 'India');
         if (!parsed.ok) stepErrors.phone = 'Enter a valid mobile number for the selected country.';
+        // Step 1 is complete only when the mobile number is verified with its OTP
+        else if (!phoneVerified) stepErrors.phone = 'Please verify your mobile number: tap Send OTP and enter the 6-digit code.';
       }
       if (!values.email.trim()) {
         stepErrors.email = 'Business email address is required.';
       } else if (!/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(values.email.trim())) {
         stepErrors.email = 'Enter a valid business email address.';
+      } else if (!emailVerified) {
+        stepErrors.email = 'Please verify your email address: tap Send OTP and enter the 6-digit code.';
       }
       if (!values.password) {
         stepErrors.password = 'Password is required.';
@@ -1227,7 +1246,47 @@ export default function SupplierRegisterForm() {
     return Object.keys(stepErrors).length === 0;
   };
 
+  /**
+   * Steps are filled strictly in order. Returns the first step before `target` that is not filled in correctly
+   * (its errors are then shown), or null when every earlier step is complete.
+   */
+  const firstIncompleteStepBefore = (target) => {
+    for (let s = 1; s < target; s += 1) {
+      if (!validateStep(s)) return s;
+      markStepDone(s);
+    }
+    return null;
+  };
+
+  /** Sends the supplier back to the first unfinished step, with a clear reason. */
+  const jumpToIncompleteStep = (step) => {
+    setCurrentStep(step);
+    setFormError(`Please complete Step ${step} (${STEPS[step - 1].label}) first. Steps must be filled in order.`);
+    window.scrollTo({ top: 120, behavior: 'smooth' });
+  };
+
+  /** Stepper click: earlier steps always open; a later step opens only when every step before it is complete. */
+  const goToStep = (target) => {
+    if (target === currentStep) return;
+    if (target > currentStep) {
+      const missing = firstIncompleteStepBefore(target);
+      if (missing) {
+        jumpToIncompleteStep(missing);
+        return;
+      }
+    }
+    setFormError('');
+    setCurrentStep(target);
+    window.scrollTo({ top: 120, behavior: 'smooth' });
+  };
+
   const handleNext = async () => {
+    // Guard: never move on from a step while an earlier one is unfinished
+    const missing = firstIncompleteStepBefore(currentStep);
+    if (missing) {
+      jumpToIncompleteStep(missing);
+      return;
+    }
     if (currentStep === 2) {
       if (!validateStep(2)) return;
       if (values.businessPhone && values.businessPhone.length === 10) {
@@ -1256,6 +1315,7 @@ export default function SupplierRegisterForm() {
         }
       }
       setFormError('');
+      markStepDone(2);
       setCurrentStep(3);
       window.scrollTo({ top: 120, behavior: 'smooth' });
       return;
@@ -1273,6 +1333,7 @@ export default function SupplierRegisterForm() {
             return;
           }
           setFormError('');
+          markStepDone(4);
           setCurrentStep(5);
           window.scrollTo({ top: 120, behavior: 'smooth' });
           return;
@@ -1281,6 +1342,7 @@ export default function SupplierRegisterForm() {
     }
     if (validateStep(currentStep)) {
       setFormError('');
+      markStepDone(currentStep);
       setCurrentStep((prev) => Math.min(prev + 1, 5));
       window.scrollTo({ top: 120, behavior: 'smooth' });
     }
@@ -1350,7 +1412,7 @@ export default function SupplierRegisterForm() {
     };
 
     try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const baseUrl = API_BASE_URL;
       const res = await fetch(`${baseUrl}/auth/register-supplier`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -1518,42 +1580,44 @@ export default function SupplierRegisterForm() {
     <div className="w-full">
       {/* Stepper Progress Bar */}
       <div className="mb-8">
-        <div className="flex items-center justify-between">
+        {/* items-start: steps whose label wraps to two lines must not push their circle out of line */}
+        <div className="flex items-start justify-between">
           {STEPS.map((step) => {
-            const isCompleted = step.id < currentStep;
             const isCurrent = step.id === currentStep;
+            const isCompleted = !isCurrent && completedSteps.has(step.id);
             return (
-              <div
+              <button
+                type="button"
                 key={step.id}
-                className="flex-1 text-center cursor-pointer group"
-                onClick={() => {
-                  if (step.id < currentStep) setCurrentStep(step.id);
-                }}
+                className="flex min-w-0 flex-1 flex-col items-center px-1 text-center cursor-pointer group rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+                aria-current={isCurrent ? 'step' : undefined}
+                aria-label={`Step ${step.id}: ${step.label}${isCompleted ? ' (completed)' : ''}`}
+                onClick={() => goToStep(step.id)}
               >
-                <div className="flex items-center justify-center">
-                  <div
+                <span className="flex items-center justify-center">
+                  <span
                     className={`flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full text-xs sm:text-sm font-semibold transition-all shadow-sm ${
                       isCompleted
-                        ? 'bg-emerald-700 text-white'
+                        ? 'bg-emerald-700 text-white group-hover:bg-emerald-800'
                         : isCurrent
                         ? 'border-2 border-emerald-600 bg-white text-emerald-800 ring-4 ring-emerald-500/15'
-                        : 'border border-slate-200 bg-slate-100 text-slate-400 group-hover:bg-slate-200'
+                        : 'border border-slate-200 bg-slate-100 text-slate-500 group-hover:border-emerald-300 group-hover:bg-emerald-50 group-hover:text-emerald-800'
                     }`}
                   >
                     {isCompleted ? <Check className="h-4 w-4 stroke-[3]" /> : step.id}
-                  </div>
-                </div>
-                <div className="mt-2 hidden sm:block">
-                  <p
-                    className={`text-xs font-semibold leading-tight ${
-                      isCurrent ? 'text-emerald-900' : isCompleted ? 'text-slate-700' : 'text-slate-400'
+                  </span>
+                </span>
+                <span className="mt-2 hidden sm:block">
+                  <span
+                    className={`block text-xs font-semibold leading-tight ${
+                      isCurrent ? 'text-emerald-900' : isCompleted ? 'text-slate-700' : 'text-slate-500 group-hover:text-emerald-800'
                     }`}
                   >
                     {step.label}
-                  </p>
-                  <p className="text-[11px] text-slate-400">{step.desc}</p>
-                </div>
-              </div>
+                  </span>
+                  <span className="block text-[11px] text-slate-400">{step.desc}</span>
+                </span>
+              </button>
             );
           })}
         </div>

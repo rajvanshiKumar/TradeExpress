@@ -16,6 +16,7 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { getVerification } from '../../utils/verification';
 import { formatDate } from '../../utils/formatDate';
 import { apiGet, apiPost } from '../../services/apiClient';
+import { backendFileUrl } from '../../config/api.js';
 
 const TABS = [
   { id: 'under-review', label: 'Pending review' },
@@ -176,7 +177,7 @@ export default function AdminVerification() {
                               </div>
                               {doc.fileUrl ? (
                                 <a
-                                  href={doc.fileUrl.startsWith('http') ? doc.fileUrl : `http://localhost:5000${doc.fileUrl}`}
+                                  href={backendFileUrl(doc.fileUrl)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700 bg-white px-2 py-1 rounded border shadow-xs"

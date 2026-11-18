@@ -9,8 +9,10 @@ export { WishlistContext };
 
 export function WishlistProvider({ children }) {
   const { user } = useAuth();
-  const [ids, setIds] = useLocalStorage(STORAGE_KEYS.wishlist, []);
-  const [supplierIds, setSupplierIds] = useLocalStorage(STORAGE_KEYS.savedSuppliers, []);
+  // Saved per account on this browser (never shared between accounts)
+  const owner = user?.id || 'signed-out';
+  const [ids, setIds] = useLocalStorage(`${STORAGE_KEYS.wishlist}:${owner}`, []);
+  const [supplierIds, setSupplierIds] = useLocalStorage(`${STORAGE_KEYS.savedSuppliers}:${owner}`, []);
   const { products, companies } = useContext(ProductContext);
 
   // Gated IDs: When user is not authenticated, wishlist is strictly empty

@@ -14,6 +14,7 @@ import {
   MAX_DOC_SIZE,
 } from '../middleware/uploadMiddleware.js';
 import { authenticateJWT, optionalAuth } from '../middleware/authMiddleware.js';
+import { publicBackendUrl } from '../utils/publicUrl.js';
 
 const router = Router();
 
@@ -62,8 +63,7 @@ router.post('/', optionalAuth, anonymousUploadLimiter, (req, res) => {
       }
     }
 
-    const host = req.get('host') || 'localhost:5000';
-    const protocol = req.protocol || 'http';
+    const backendUrl = publicBackendUrl(req); // PUBLIC_BACKEND_URL, or the address this request came in on
 
     // Validate size per specific media type
     for (const f of files) {
@@ -82,7 +82,7 @@ router.post('/', optionalAuth, anonymousUploadLimiter, (req, res) => {
 
     const results = files.map((f) => {
       const fileUrl = `/uploads/${f.filename}`;
-      const fullUrl = `${protocol}://${host}${fileUrl}`;
+      const fullUrl = `${backendUrl}${fileUrl}`;
       const ext = path.extname(f.originalname).toLowerCase();
       const isVideo = ALLOWED_VIDEO_EXTENSIONS.has(ext);
       const isImage = ALLOWED_IMAGE_EXTENSIONS.has(ext);

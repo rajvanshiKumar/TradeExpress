@@ -17,6 +17,7 @@ import {
 import Button from '../common/Button';
 import useNotifications from '../../hooks/useNotifications';
 import { apiPost, apiDelete } from '../../services/apiClient';
+import { BACKEND_ORIGIN } from '../../config/api.js';
 
 const MAX_IMAGES = 8;
 const MAX_VIDEOS = 1;
@@ -50,7 +51,7 @@ export default function ProductMediaUploader({
     if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
       return url;
     }
-    const base = (import.meta.env.VITE_PUBLIC_API_BASE_URL || '').replace(/\/api\/?$/, '');
+    const base = BACKEND_ORIGIN;
     return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
   };
 

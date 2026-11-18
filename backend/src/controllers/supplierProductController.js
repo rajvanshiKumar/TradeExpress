@@ -39,6 +39,14 @@ export async function deleteProduct(req, res, next) {
   }
 }
 
+export async function getProduct(req, res, next) {
+  try {
+    res.json({ success: true, data: await supplierProductService.getSupplierProduct(req.user, req.params.id) });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function listProducts(req, res, next) {
   try {
     const products = await supplierProductService.listSupplierProducts(req.user);

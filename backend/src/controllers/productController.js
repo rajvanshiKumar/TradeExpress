@@ -5,6 +5,7 @@ export async function getProducts(req, res, next) {
   try {
     const {
       category,
+      subcategory,
       search,
       minPrice,
       maxPrice,
@@ -20,6 +21,7 @@ export async function getProducts(req, res, next) {
     } = req.query;
     const result = await productService.listProducts({
       category,
+      subcategory,
       search,
       minPrice,
       maxPrice,

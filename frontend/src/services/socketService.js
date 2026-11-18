@@ -1,13 +1,13 @@
 import { io } from 'socket.io-client';
 import { getAuthToken } from '../utils/authSession.js';
+import { BACKEND_ORIGIN } from '../config/api.js';
 
 let socket = null;
 let socketToken = '';
 
+// Socket.IO runs on the backend named in VITE_PUBLIC_API_BASE_URL (or on this site when it is not set)
 function getSocketUrl() {
-  const apiBase = (import.meta.env.VITE_PUBLIC_API_BASE_URL || 'http://localhost:5000/api').trim();
-  // Strip trailing '/api' or '/api/' to get root server URL
-  return apiBase.replace(/\/api\/?$/, '') || 'http://localhost:5000';
+  return BACKEND_ORIGIN || window.location.origin;
 }
 
 /**

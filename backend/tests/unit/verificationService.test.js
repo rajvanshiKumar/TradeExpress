@@ -14,6 +14,7 @@ process.env.PAN_AADHAAR_API_ID = 'test_id';
 process.env.PAN_AADHAAR_API_KEY = 'test_key';
 process.env.PAN_AADHAAR_TOKEN_ID = 'test_token';
 delete process.env.PAN_AADHAAR_TEST_MODE; // a local .env must not change these results; test mode is enabled per test below
+delete process.env.PAN_AADHAAR_MOCK_FALLBACK;
 
 const VALID_AADHAAR = '234123412346'; // passes the Verhoeff checksum
 const PAN = 'ABCDE1234F';

@@ -11,5 +11,8 @@ router.get('/', notificationController.getNotifications);
 router.post('/', requireRole('ADMIN'), notificationController.createNotification);
 router.patch('/read-all', notificationController.markAllAsRead);
 router.patch('/:id/read', notificationController.markAsRead);
+router.patch('/:id/unread', notificationController.markAsUnread);
+router.delete('/', notificationController.deleteAllNotifications);
+router.delete('/:id', notificationController.deleteNotification);
 
 export default router;

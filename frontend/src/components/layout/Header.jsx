@@ -138,7 +138,7 @@ export default function Header() {
         </a>
 
         <div
-          className="w-full max-w-[102rem] mx-auto px-3 sm:px-4 lg:px-4 xl:px-6 flex items-center justify-between gap-3 lg:gap-4 xl:gap-6 h-14 sm:h-16 lg:h-[66px]"
+          className="w-full max-w-[102rem] mx-auto px-3 sm:px-4 lg:px-4 xl:px-6 flex items-center justify-between gap-2 sm:gap-3 lg:gap-4 xl:gap-6 h-14 sm:h-16 lg:h-[66px]"
         >
           {/* Left: Mobile menu button & Brand Logo */}
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -284,8 +284,8 @@ export default function Header() {
               size="sm"
               className="!size-8 sm:!size-8.5 shrink-0 max-lg:hidden"
             />
-            {/* Very narrow phones choose language from the menu ("Region, language & currency") so Sign up fits */}
-            <LocationSelector className="max-[389px]:hidden" />
+            {/* Phones under 500px choose region and language from the menu ("Region, language & currency") so Sign up fits */}
+            <LocationSelector className="max-[499px]:hidden" />
             {user && user.role !== "super_admin" && (
               <NotificationsMenu className="hidden sm:inline-flex" />
             )}
@@ -303,6 +303,8 @@ export default function Header() {
               icon={Heart}
               label="Wishlist"
               count={wishlistCount}
+              // The smallest phones (under 360px) open saved products from the menu, so Sign up always fits
+              className="inline-flex max-[359px]:hidden"
             />
             <IconLink
               to="/cart"

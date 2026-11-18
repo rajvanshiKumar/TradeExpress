@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { TERMINAL_STATUSES } from './transport/shipmentStateMachine.js';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import { consumeAccountGrant } from './accountSecurityService.js';
@@ -35,11 +36,12 @@ export async function getDeletionBlockers(userId, role, db = prisma) {
   const isSupplier = role === 'SUPPLIER';
   const orderOwner = isSupplier ? { supplierId: userId } : { userId };
 
-  const [activeOrders, heldEscrow, openDisputes, pendingPayouts] = await Promise.all([
+  const [activeOrders, heldEscrow, openDisputes, pendingPayouts, activeShipments] = await Promise.all([
     db.order.count({ where: { ...orderOwner, orderStatus: { notIn: FINISHED_ORDER_STATUSES } } }),
     db.escrowLedger.count({ where: { status: { in: HELD_ESCROW_STATUSES }, order: orderOwner } }),
     db.dispute.count({ where: { status: { in: OPEN_DISPUTE_STATUSES }, ...(isSupplier ? { order: { supplierId: userId } } : { buyerId: userId }) } }),
     isSupplier ? db.supplierPayout.count({ where: { supplierId: userId, status: 'PENDING' } }) : Promise.resolve(0),
+    isSupplier ? db.shipment.count({ where: { supplierId: userId, status: { notIn: TERMINAL_STATUSES } } }) : Promise.resolve(0),
   ]);
 
   const blockers = [];
@@ -47,6 +49,7 @@ export async function getDeletionBlockers(userId, role, db = prisma) {
   if (heldEscrow) blockers.push({ type: 'ESCROW_HELD', count: heldEscrow, message: `${heldEscrow} payment${heldEscrow === 1 ? ' is' : 's are'} still held in escrow.` });
   if (openDisputes) blockers.push({ type: 'OPEN_DISPUTES', count: openDisputes, message: `${openDisputes} trade dispute${openDisputes === 1 ? ' is' : 's are'} still open.` });
   if (pendingPayouts) blockers.push({ type: 'PENDING_PAYOUTS', count: pendingPayouts, message: `${pendingPayouts} supplier payout${pendingPayouts === 1 ? ' is' : 's are'} still pending.` });
+  if (activeShipments) blockers.push({ type: 'ACTIVE_SHIPMENTS', count: activeShipments, message: `${activeShipments} shipment${activeShipments === 1 ? ' is' : 's are'} still in progress.` });
   return blockers;
 }
 
@@ -113,11 +116,27 @@ async function closeAccount({ userId, role, statusReason, authorize }) {
   return { anonymousEmail };
 }
 
+/** Final step of an approved supplier deletion request (used by the deletion worker). */
+export async function closeSupplierAccount(userId, statusReason) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true, role: true, status: true } });
+  if (!user || user.role !== 'SUPPLIER') throw fail('Supplier account not found.', 404, 'NOT_FOUND');
+  if (user.status === 'DEACTIVATED') return { alreadyClosed: true }; // idempotent: a retried run does nothing more
+  await closeAccount({ userId, role: 'SUPPLIER', statusReason });
+  sendAccountSecurityEmail({
+    email: user.email,
+    name: user.name,
+    subject: 'Your TradeExpress supplier account has been closed',
+    message: `As you requested, your TradeExpress supplier account has been closed and you have been signed out everywhere. ${'Records that we must keep by law, such as past orders and tax invoices, are retained.'}`,
+  });
+  return { closed: true };
+}
+
 const RETENTION_NOTE = 'Records that we must keep by law, such as past orders and tax invoices, are retained.';
 
 /** Deletes (deactivates and anonymises) the signed-in account after email verification and confirmation. */
 export async function deleteOwnAccount(userId, role, { grant, confirmation }) {
   if (!['BUYER', 'SUPPLIER'].includes(role)) throw fail('This account type cannot be deleted from Account Settings.', 403, 'ROLE_NOT_ALLOWED');
+  if (role === 'SUPPLIER') throw fail('Supplier accounts are closed through a deletion request that TradeExpress reviews. Use Request Account Deletion.', 403, 'USE_DELETION_REQUEST');
   if (String(confirmation || '').trim() !== 'DELETE') throw fail('Type DELETE to confirm that you want to delete your account.', 400, 'CONFIRMATION_REQUIRED');
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true, role: true } });

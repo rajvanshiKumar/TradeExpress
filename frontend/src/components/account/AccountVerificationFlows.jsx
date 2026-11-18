@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, Eye, EyeOff, MailCheck, ShieldCheck } from 'lu
 import Button from '../common/Button';
 import Input from '../common/Input';
 import SixDigitOtpRow from '../common/SixDigitOtpRow';
+import { isCompleteOtp } from '../../utils/otpDigits';
 import PasswordValidationIndicator from '../common/PasswordValidationIndicator';
 import { AccountCard, DetailRow } from './AccountUi';
 import { validatePassword } from '../../utils/passwordRules';
@@ -86,7 +87,7 @@ export function CodeStep({ title, description, send, verify, onBack }) {
 
   const doVerify = async () => {
     if (busy) return;
-    if (otp.length !== 6) {
+    if (!isCompleteOtp(otp)) {
       setError('Enter the 6-digit code from the email.');
       return;
     }

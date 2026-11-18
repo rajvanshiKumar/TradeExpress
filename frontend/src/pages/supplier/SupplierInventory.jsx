@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
+  Ban,
   Boxes,
-  Check,
-  CheckCircle2,
+  ChartColumn,
+  ChevronLeft,
+  Download,
   ChevronRight,
-  Hourglass,
-  Lock,
   Package,
+  Pencil,
   Plus,
+  Radio,
   RefreshCw,
   Scale,
   Search,
@@ -26,6 +29,8 @@ import InventoryDetailDrawer from '../../components/inventory/InventoryDetailDra
 import useAuth from '../../hooks/useAuth';
 import useNotifications from '../../hooks/useNotifications';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { quantityLabel } from '../../utils/units';
+import { inventoryCsv, pageWindow, updatedLabel } from '../../utils/inventoryView';
 import { connectSocket } from '../../services/socketService';
 import {
   fetchSupplierInventory,
@@ -63,28 +68,109 @@ function stockStatusOf(available, threshold) {
   return 'IN_STOCK';
 }
 
-function MetricCard({ label, value, hint, icon: Icon, tone }) {
+const SUMMARY_TONES = {
+  green: { card: 'border-emerald-100 bg-gradient-to-br from-[#ECFDF5] to-white', icon: 'bg-emerald-100/80 text-[#047857]', ring: 'ring-emerald-600/40' },
+  blue: { card: 'border-blue-100 bg-gradient-to-br from-blue-50 to-white', icon: 'bg-blue-100/80 text-blue-700', ring: 'ring-blue-600/40' },
+  amber: { card: 'border-amber-100 bg-gradient-to-br from-amber-50 to-white', icon: 'bg-amber-100/80 text-amber-700', ring: 'ring-amber-500/50' },
+  red: { card: 'border-rose-100 bg-gradient-to-br from-rose-50 to-white', icon: 'bg-rose-100/80 text-rose-600', ring: 'ring-rose-500/40' },
+};
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'All Stock Status' },
+  { value: 'in_stock', label: 'In Stock' },
+  { value: 'low_stock', label: 'Low Stock' },
+  { value: 'out_of_stock', label: 'Out of Stock' },
+];
+
+const SORT_OPTIONS = [
+  { value: 'updatedAt', label: 'Sort: Recently Updated' },
+  { value: 'availableStock', label: 'Sort: Available' },
+  { value: 'stock', label: 'Sort: On Hand' },
+  { value: 'reservedStock', label: 'Sort: Reserved' },
+  { value: 'committedStock', label: 'Sort: Committed' },
+  { value: 'name', label: 'Sort: Product Name' },
+  { value: 'sku', label: 'Sort: SKU Code' },
+];
+
+const photoUrl = (photo) => (photo.startsWith('http') || photo.startsWith('/') ? photo : `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=96&q=80`);
+
+function ProductThumb({ item, small = false }) {
+  const size = small ? 'size-10' : 'size-12';
+  return item.photo ? (
+    <img src={photoUrl(item.photo)} alt="" loading="lazy" className={`${size} shrink-0 rounded-xl border border-[#E2E8E5] bg-white object-cover`} />
+  ) : (
+    <span className={`${size} inline-flex shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-[#ECFDF5] text-[#047857]`}>
+      <Package className="size-5" aria-hidden="true" />
+    </span>
+  );
+}
+
+/** On-hand units, plus what buyers can still order when open orders hold some. */
+function StockCell({ item }) {
+  const held = (item.reservedStock || 0) + (item.committedStock || 0);
   return (
-    <div className={`rounded-2xl border p-3.5 shadow-2xs ${tone.card}`}>
-      <div className={`flex items-center justify-between text-xs font-semibold ${tone.label}`}>
-        <span>{label}</span>
-        <Icon className={`size-4 ${tone.icon}`} />
-      </div>
-      <p className={`mt-2 font-display text-2xl font-black ${tone.value}`}>{value}</p>
-      <p className={`mt-0.5 text-[10px] ${tone.hint}`}>{hint}</p>
+    <span className="block whitespace-nowrap">
+      <span className="font-bold text-[#142D24]">{quantityLabel(item.stock, item.unit || 'unit')}</span>
+      {held > 0 ? <span className="block text-xs text-[#64748B]">{num(item.availableStock)} available · {num(held)} held</span> : null}
+    </span>
+  );
+}
+
+function StatusPill({ item }) {
+  const map = {
+    OUT_OF_STOCK: ['bg-rose-50 text-rose-700 ring-rose-600/15', 'bg-rose-500', 'Out of Stock'],
+    LOW_STOCK: ['bg-amber-50 text-amber-800 ring-amber-600/20', 'bg-amber-400', 'Low Stock'],
+    IN_STOCK: ['bg-emerald-50 text-emerald-800 ring-emerald-600/15', 'bg-emerald-500', 'In Stock'],
+  };
+  const [cls, dot, label] = map[item.stockStatus] || map.IN_STOCK;
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${cls}`}
+      title={item.stockStatus === 'LOW_STOCK' ? `At or below the alert level of ${item.lowStockThreshold}` : undefined}>
+      <span className={`size-2 rounded-full ${dot}`} aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+function RowActions({ item, onAdjust, onDetails, onSettings }) {
+  const btn = 'inline-flex size-9 items-center justify-center rounded-lg border border-[#E2E8E5] bg-white text-[#142D24] transition-colors hover:border-[#047857]/50 hover:bg-[#ECFDF5] hover:text-[#047857]';
+  return (
+    <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+      <button type="button" className={btn} onClick={() => onAdjust(item)} aria-label={`Update stock for ${item.sku}`} title="Update stock"><Pencil className="size-4" aria-hidden="true" /></button>
+      <button type="button" className={btn} onClick={() => onDetails(item)} aria-label={`Stock details and movement history for ${item.sku}`} title="Details & movement history"><ChartColumn className="size-4" aria-hidden="true" /></button>
+      <button type="button" className={btn} onClick={() => onSettings(item)} aria-label={`Alert level and location for ${item.sku}`} title="Low-stock alert level & location"><SlidersHorizontal className="size-4" aria-hidden="true" /></button>
     </div>
   );
 }
 
-const TONES = {
-  neutral: { card: 'border-slate-200/90 bg-white', label: 'text-slate-500', icon: 'text-slate-400', value: 'text-slate-900', hint: 'text-slate-400' },
-  onHand: { card: 'border-slate-200/90 bg-white', label: 'text-slate-500', icon: 'text-emerald-700', value: 'text-emerald-900', hint: 'text-slate-400' },
-  reserved: { card: 'border-sky-200/90 bg-sky-50/40', label: 'text-sky-900', icon: 'text-sky-600', value: 'text-sky-900', hint: 'text-sky-700/80' },
-  committed: { card: 'border-violet-200/90 bg-violet-50/40', label: 'text-violet-900', icon: 'text-violet-600', value: 'text-violet-900', hint: 'text-violet-700/80' },
-  available: { card: 'border-emerald-200/90 bg-emerald-50/40', label: 'text-emerald-900', icon: 'text-emerald-700', value: 'text-emerald-950', hint: 'text-emerald-700/80' },
-  low: { card: 'border-amber-200/90 bg-amber-50/40', label: 'text-amber-900', icon: 'text-amber-600', value: 'text-amber-900', hint: 'text-amber-700/80' },
-  out: { card: 'border-rose-200/90 bg-rose-50/40', label: 'text-rose-900', icon: 'text-rose-600', value: 'text-rose-900', hint: 'text-rose-700/80' },
-};
+function PageButton({ children, label, active = false, disabled = false, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      aria-current={active ? 'page' : undefined}
+      className={`inline-flex size-10 items-center justify-center rounded-xl text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+        active ? 'bg-[#064E3B] text-white shadow-[0_6px_14px_-8px_rgba(6,78,59,0.8)]' : 'border border-[#E2E8E5] bg-white text-[#142D24] hover:bg-[#ECFDF5]'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function downloadCsv(filename, rows, withSupplier) {
+  const blob = new Blob([`﻿${inventoryCsv(rows, withSupplier)}`], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 /**
  * Real-time inventory for a supplier's own catalogue. Super Admins get the same screen across all suppliers,
@@ -96,12 +182,18 @@ export default function SupplierInventory() {
   const isAdmin = user?.role === 'super_admin' || user?.role === 'admin';
   useDocumentTitle(isAdmin ? 'Platform Inventory — Super Admin' : 'Inventory Management — Supplier Portal');
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // first load only (skeleton)
+  const [refreshing, setRefreshing] = useState(false); // later loads keep the current rows on screen
+  const hasLoadedRef = useRef(false);
+  const requestIdRef = useRef(0);
   const [data, setData] = useState({ metrics: EMPTY_METRICS, products: [], pagination: { total: 0, page: 1, limit: 20, totalPages: 1 } });
 
   // Filters & sorting
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(''); // applied search (sent to the server)
+  const [searchInput, setSearchInput] = useState(''); // what is typed; applied after a short pause
   const [stockStatus, setStockStatus] = useState('all');
+  const [category, setCategory] = useState('');
+  const [lastRefreshed, setLastRefreshed] = useState(null);
   const [sortBy, setSortBy] = useState('updatedAt');
   const [sortOrder, setSortOrder] = useState('desc');
   const [page, setPage] = useState(1);
@@ -129,11 +221,18 @@ export default function SupplierInventory() {
   const [reconciliation, setReconciliation] = useState(null);
 
   const loadInventory = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    const requestId = ++requestIdRef.current;
+    if (!silent) (hasLoadedRef.current ? setRefreshing : setLoading)(true);
     try {
-      const result = await fetchSupplierInventory({ search, stockStatus, sortBy, sortOrder, page, limit: 20 });
-      if (result) setData({ ...result, metrics: { ...EMPTY_METRICS, ...result.metrics } });
+      const result = await fetchSupplierInventory({ search, category, stockStatus, sortBy, sortOrder, page, limit: 20 });
+      if (requestId !== requestIdRef.current) return; // a newer search/filter request replaced this one
+      if (result) {
+        hasLoadedRef.current = true;
+        setData({ ...result, metrics: { ...EMPTY_METRICS, ...result.metrics } });
+        setLastRefreshed(new Date());
+      }
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       if (!silent) {
         // 401/403 mean the stored sign-in is not this supplier's (expired, or another account signed in elsewhere)
         const accountProblem = err.status === 401 || (err.status === 403 && err.data?.code === 'ROLE_NOT_ALLOWED');
@@ -145,13 +244,24 @@ export default function SupplierInventory() {
         );
       }
     } finally {
-      if (!silent) setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [search, stockStatus, sortBy, sortOrder, page, showToast]);
+  }, [search, category, stockStatus, sortBy, sortOrder, page, showToast]);
 
   useEffect(() => {
     loadInventory();
   }, [loadInventory]);
+
+  // Search runs once typing pauses (not on every keystroke)
+  useEffect(() => {
+    const next = searchInput.trim();
+    if (next === search) return undefined;
+    const timer = setTimeout(() => { setSearch(next); setPage(1); }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput, search]);
 
   const loadReconciliation = useCallback(async () => {
     if (!isAdmin) return;
@@ -304,40 +414,116 @@ export default function SupplierInventory() {
 
   const { metrics } = data;
   const healthyCount = Math.max(0, metrics.totalProducts - metrics.lowStockCount - metrics.outOfStockCount);
+  const { page: curPage, limit: perPage, total: totalRows, totalPages } = data.pagination;
+  const rangeStart = totalRows ? (curPage - 1) * perPage + 1 : 0;
+  const rangeEnd = Math.min(curPage * perPage, totalRows);
+
+  // "Update Stock": pick one of this supplier's products, then the existing adjustment form opens
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerResults, setPickerResults] = useState([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  useEffect(() => {
+    if (!pickerOpen) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setPickerLoading(true);
+      try {
+        const result = await fetchSupplierInventory({ search: pickerSearch.trim(), sortBy: 'name', sortOrder: 'asc', page: 1, limit: 8 });
+        if (!cancelled) setPickerResults(result?.products || []);
+      } catch (err) {
+        if (!cancelled) { setPickerResults([]); showToast(err.message || 'Could not load products.', 'error'); }
+      } finally {
+        if (!cancelled) setPickerLoading(false);
+      }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [pickerOpen, pickerSearch, showToast]);
+
+  // Export: every product matching the current filters, read page by page from the same authorised API
+  const [exporting, setExporting] = useState(false);
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const rows = [];
+      for (let p = 1, pages = 1; p <= pages && p <= 50; p += 1) {
+        const result = await fetchSupplierInventory({ search, category, stockStatus, sortBy, sortOrder, page: p, limit: 100 });
+        rows.push(...(result?.products || []));
+        pages = result?.pagination?.totalPages || 1;
+      }
+      if (!rows.length) { showToast('There are no products to export for these filters.', 'error'); return; }
+      downloadCsv(`tradeexpress-inventory-${new Date().toISOString().slice(0, 10)}.csv`, rows, isAdmin);
+      showToast(`Exported ${rows.length} product${rows.length === 1 ? '' : 's'}.`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Export failed. Please try again.', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const filterSelectClass = 'w-full';
+  const categoryOptions = [{ value: '', label: 'All Categories' }, ...(data.categories || []).map((c) => ({ value: c.slug, label: c.name }))];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col justify-between gap-4 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-center">
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
-              {isAdmin ? 'Platform Inventory' : 'Inventory Management'}
-            </h1>
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
-                socketConnected ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-amber-300 bg-amber-50 text-amber-900'
-              }`}
-              title={lastLiveUpdate ? `Last live change ${lastLiveUpdate.toLocaleTimeString()}` : undefined}
-            >
-              <span className={`size-2 rounded-full ${socketConnected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-              {socketConnected ? 'Live updates on' : 'Connecting live updates…'}
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-slate-500 sm:text-sm">
-            {isAdmin
-              ? 'Stock across every supplier: on hand, reserved for unpaid orders, committed to paid orders, and available to buyers.'
-              : 'On hand, reserved for unpaid orders, committed to paid orders, and what buyers can order right now.'}
-          </p>
-        </div>
+      {/* Breadcrumb + header */}
+      <div className="space-y-3">
+        <nav aria-label="Breadcrumb" className="text-[0.8125rem]">
+          <ol className="flex flex-wrap items-center gap-1.5 text-[#64748B]">
+            <li><Link to={isAdmin ? '/admin' : '/supplier'} className="font-medium text-[#047857] hover:underline">{isAdmin ? 'Admin Console' : 'Supplier Dashboard'}</Link></li>
+            <li aria-hidden="true"><ChevronRight className="size-3.5" /></li>
+            <li aria-current="page" className="font-semibold text-[#142D24]">{isAdmin ? 'Platform Inventory' : 'Real-Time Inventory'}</li>
+          </ol>
+        </nav>
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" icon={RefreshCw} onClick={() => { loadInventory(); loadReconciliation(); }} disabled={loading}>
-            Refresh
-          </Button>
-          {!isAdmin ? (
-            <Button to="/supplier/products/new" variant="primary" size="sm" icon={Plus}>Add New Product</Button>
-          ) : null}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="mt-1 inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#ECFDF5] text-[#047857] ring-1 ring-emerald-600/10">
+              <Radio className="size-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <h1 className="font-display text-[1.75rem] font-extrabold leading-tight tracking-[-0.03em] text-[#142D24] sm:text-[2rem]">
+                {isAdmin ? 'Platform Inventory' : 'Real-Time Inventory'}
+              </h1>
+              <p className="mt-0.5 text-sm text-[#64748B]">
+                {isAdmin ? 'Live stock status across every supplier' : 'Live stock status across all your products'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Live updates arrive over the existing socket (no polling); shows the real connection state */}
+            <span
+              className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full border border-[#E2E8E5] bg-white px-4 text-[0.8125rem] text-[#142D24] shadow-[0_4px_14px_-10px_rgba(20,45,36,0.35)]"
+              title={lastRefreshed ? `Last refreshed ${lastRefreshed.toLocaleTimeString()}` : undefined}
+              role="status"
+            >
+              <span className={`size-2.5 rounded-full ${socketConnected ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />
+              Live Updates: <strong className={socketConnected ? 'text-[#047857]' : 'text-amber-700'}>{socketConnected ? 'On' : 'Connecting…'}</strong>
+              {lastRefreshed ? <span className="hidden text-[#64748B] sm:inline">· {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> : null}
+            </span>
+            <button
+              type="button"
+              onClick={() => { loadInventory(); loadReconciliation(); }}
+              disabled={loading || refreshing}
+              className="inline-flex size-10 items-center justify-center rounded-full border border-[#E2E8E5] bg-white text-[#142D24] transition-colors hover:border-[#047857]/50 hover:text-[#047857] disabled:opacity-50"
+              aria-label="Refresh inventory"
+              title="Refresh inventory"
+            >
+              <RefreshCw className={`size-4 ${loading || refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+            </button>
+            {!isAdmin ? (
+              <button
+                type="button"
+                onClick={() => { setPickerSearch(''); setPickerOpen(true); }}
+                className="inline-flex h-11 items-center gap-2 whitespace-nowrap rounded-full bg-gradient-to-b from-[#047857] to-[#064E3B] px-5 text-sm font-semibold text-white shadow-[0_8px_18px_-8px_rgba(6,78,59,0.75)] transition-colors hover:from-[#065F46]"
+              >
+                <Plus className="size-[1.125rem]" aria-hidden="true" />
+                Update Stock
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -362,196 +548,234 @@ export default function SupplierInventory() {
         )
       ) : null}
 
-      {/* Figures: on hand = reserved + committed + available */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-7">
-        <MetricCard label={isAdmin ? 'Products' : 'Total Listed'} value={num(metrics.totalProducts)} hint="In catalogue" icon={Boxes} tone={TONES.neutral} />
-        <MetricCard label="On Hand" value={num(metrics.totalPhysicalStock)} hint="Units in warehouses" icon={Warehouse} tone={TONES.onHand} />
-        <MetricCard label="Reserved" value={num(metrics.totalReservedStock)} hint="Held for unpaid orders" icon={Hourglass} tone={TONES.reserved} />
-        <MetricCard label="Committed" value={num(metrics.totalCommittedStock)} hint="Paid, not yet shipped" icon={Lock} tone={TONES.committed} />
-        <MetricCard label="Available" value={num(metrics.totalAvailableStock)} hint="Buyers can order" icon={CheckCircle2} tone={TONES.available} />
-        <MetricCard label="Low Stock" value={num(metrics.lowStockCount)} hint="At or below alert level" icon={AlertTriangle} tone={TONES.low} />
-        <MetricCard label="Out of Stock" value={num(metrics.outOfStockCount)} hint="Nothing left to sell" icon={Package} tone={TONES.out} />
+      {/* Summary cards (click to filter by status) */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        {[
+          { id: 'all', label: 'Total Products', value: metrics.totalProducts, icon: Package, tone: SUMMARY_TONES.green },
+          { id: 'in_stock', label: 'In Stock', value: healthyCount, icon: Boxes, tone: SUMMARY_TONES.blue },
+          { id: 'low_stock', label: 'Low Stock', value: metrics.lowStockCount, icon: AlertTriangle, tone: SUMMARY_TONES.amber },
+          { id: 'out_of_stock', label: 'Out of Stock', value: metrics.outOfStockCount, icon: Ban, tone: SUMMARY_TONES.red },
+        ].map((card) => (
+          <button
+            key={card.id}
+            type="button"
+            aria-pressed={stockStatus === card.id}
+            onClick={() => { setStockStatus(card.id); setPage(1); }}
+            className={`flex items-center gap-3 rounded-[1.25rem] border p-4 text-left shadow-[0_1px_2px_rgba(20,45,36,0.04),0_10px_24px_-18px_rgba(6,78,59,0.25)] transition-[box-shadow,border-color] sm:gap-4 sm:p-5 ${card.tone.card} ${stockStatus === card.id ? `ring-2 ${card.tone.ring}` : ''}`}
+          >
+            <span className={`inline-flex size-11 shrink-0 items-center justify-center rounded-2xl sm:size-12 ${card.tone.icon}`}>
+              <card.icon className="size-6" aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[0.8125rem] font-semibold text-[#142D24] sm:text-sm">{card.label}</span>
+              <span className="block font-display text-[1.6rem] font-extrabold leading-tight tracking-[-0.02em] text-[#142D24] sm:text-[1.75rem]">{num(card.value)}</span>
+            </span>
+          </button>
+        ))}
       </div>
 
-      {/* Filters */}
-      <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
-        <div className="ts-slim-scrollbar flex items-center gap-2 overflow-x-auto border-b border-slate-100 pb-3">
-          {[
-            { id: 'all', label: 'All Inventory', count: metrics.totalProducts },
-            { id: 'in_stock', label: 'Healthy Stock', count: healthyCount },
-            { id: 'low_stock', label: 'Low Stock Alerts', count: metrics.lowStockCount, alert: true },
-            { id: 'out_of_stock', label: 'Out of Stock', count: metrics.outOfStockCount, danger: true },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => { setStockStatus(tab.id); setPage(1); }}
-              className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold transition-colors ${
-                stockStatus === tab.id ? 'bg-emerald-800 text-white shadow-2xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <span>{tab.label}</span>
-              <span className={`rounded-full px-1.5 text-[10px] font-black ${
-                stockStatus === tab.id ? 'bg-white/20 text-white' : tab.danger ? 'bg-rose-100 text-rose-800' : tab.alert ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'
-              }`}>
-                {tab.count}
-              </span>
-            </button>
-          ))}
-        </div>
+      {/* Unit totals across the same products (existing reservation rules: on hand = reserved + committed + available) */}
+      <p className="-mt-2 flex flex-wrap gap-x-4 gap-y-1 px-1 text-xs text-[#64748B]">
+        <span>On hand <strong className="text-[#142D24]">{num(metrics.totalPhysicalStock)}</strong></span>
+        <span>Reserved (unpaid orders) <strong className="text-sky-700">{num(metrics.totalReservedStock)}</strong></span>
+        <span>Committed (paid, not shipped) <strong className="text-violet-700">{num(metrics.totalCommittedStock)}</strong></span>
+        <span>Available to buyers <strong className="text-[#047857]">{num(metrics.totalAvailableStock)}</strong></span>
+      </p>
 
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-          <div className="relative max-w-md flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by SKU or product name…"
-              aria-label="Search inventory"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2 pl-9 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
-            <SlidersHorizontal className="size-3.5 text-slate-400" />
-            <span>Sort:</span>
-            <div className="w-44">
-              <CustomSelect
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                options={[
-                  { value: 'updatedAt', label: 'Recently Updated' },
-                  { value: 'availableStock', label: 'Available' },
-                  { value: 'stock', label: 'On Hand' },
-                  { value: 'reservedStock', label: 'Reserved' },
-                  { value: 'committedStock', label: 'Committed' },
-                  { value: 'name', label: 'Product Name' },
-                  { value: 'sku', label: 'SKU Code' },
-                ]}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
-              title={`Sort ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
-            >
-              {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
-            </button>
-          </div>
+      {/* Search, filters, sort, export */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))_auto]">
+        <div className="relative sm:col-span-2 lg:col-span-1">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+          <input
+            type="search"
+            placeholder="Search by product name, SKU or ID…"
+            aria-label="Search inventory by product name, SKU or product ID"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="h-11 w-full rounded-xl border border-[#E2E8E5] bg-white pl-10 pr-3 text-sm text-[#142D24] placeholder:text-slate-400 focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+          />
         </div>
+        <div className={filterSelectClass}>
+          <CustomSelect value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} options={categoryOptions} />
+        </div>
+        <div className={filterSelectClass}>
+          <CustomSelect value={stockStatus} onChange={(e) => { setStockStatus(e.target.value); setPage(1); }} searchable={false} options={STATUS_OPTIONS} />
+        </div>
+        <div className="flex gap-2">
+          <div className="min-w-0 flex-1">
+            <CustomSelect value={sortBy} onChange={(e) => setSortBy(e.target.value)} searchable={false} options={SORT_OPTIONS} />
+          </div>
+          <button
+            type="button"
+            onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+            className="inline-flex h-11 shrink-0 items-center rounded-xl border border-[#E2E8E5] bg-white px-3 text-xs font-bold text-[#142D24] hover:bg-slate-50"
+            aria-label={`Sort ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}
+            title={`Sort ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}
+          >
+            {sortOrder === 'asc' ? '↑' : '↓'}
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={exportCsv}
+          disabled={exporting || loading}
+          className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[#047857]/40 bg-white px-4 text-sm font-semibold text-[#064E3B] transition-colors hover:bg-[#ECFDF5] disabled:opacity-60"
+        >
+          <Download className="size-4" aria-hidden="true" />
+          {exporting ? 'Exporting…' : 'Export'}
+        </button>
       </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-card">
+      {/* Inventory list */}
+      <div
+        aria-busy={refreshing || undefined}
+        className={`relative overflow-hidden rounded-[1.25rem] border border-[#E2E8E5] bg-white shadow-[0_1px_2px_rgba(20,45,36,0.04),0_10px_28px_-18px_rgba(6,78,59,0.22)] transition-opacity ${refreshing ? 'opacity-60' : ''}`}
+      >
+        {refreshing ? <span className="absolute inset-x-0 top-0 h-0.5 animate-pulse bg-[#047857]" role="status" aria-label="Updating results" /> : null}
         {loading ? (
           <TableSkeleton rows={6} />
         ) : data.products.length === 0 ? (
           <EmptyState
             icon={Warehouse}
             title="No inventory records found"
-            text={search ? `No products matching "${search}". Try another search term or status filter.` : isAdmin ? 'No products are listed on the platform yet.' : 'No inventory items listed under this supplier account yet.'}
-            action={!isAdmin && !search ? <Button to="/supplier/products/new" variant="primary" size="sm" icon={Plus}>List Your First Product</Button> : null}
+            text={search || category || stockStatus !== 'all' ? 'No products match these filters. Try another search, category or stock status.' : isAdmin ? 'No products are listed on the platform yet.' : 'No inventory items listed under this supplier account yet.'}
+            action={!isAdmin && !search && !category ? <Button to="/supplier/products/new" variant="primary" size="sm" icon={Plus}>List Your First Product</Button> : null}
           />
         ) : (
-          <div className="ts-slim-scrollbar overflow-x-auto">
-            <table className="ts-table [&_td]:px-3 [&_th]:px-3">
-              <thead>
-                <tr>
-                  <th scope="col">Product & SKU</th>
-                  <th scope="col" className="text-right">On Hand</th>
-                  <th scope="col" className="text-right">Reserved</th>
-                  <th scope="col" className="text-right">Committed</th>
-                  <th scope="col" className="text-right">Available</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.products.map((item) => {
-                  const isLow = item.stockStatus === 'LOW_STOCK';
-                  const isOut = item.stockStatus === 'OUT_OF_STOCK';
-                  return (
-                    <tr key={item.id} className="cursor-pointer transition-colors hover:bg-slate-50/70" onClick={() => setDetailProduct(item)}>
-                      <td>
-                        <div className="flex max-w-[18rem] items-center gap-3 xl:max-w-sm">
-                          {item.photo ? (
-                            <img
-                              src={item.photo.startsWith('http') ? item.photo : `https://images.unsplash.com/${item.photo}?auto=format&fit=crop&w=80&q=80`}
-                              alt=""
-                              className="size-10 shrink-0 rounded-lg border border-slate-100 object-cover"
-                            />
-                          ) : (
-                            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50 text-emerald-800">
-                              <Package className="size-5" />
-                            </div>
-                          )}
+          <>
+            {/* Desktop / tablet table */}
+            <div className="ts-slim-scrollbar hidden overflow-x-auto md:block">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-[#F8FAF8] text-[0.8125rem] font-semibold text-[#142D24]">
+                  <tr>
+                    <th scope="col" className="px-5 py-3.5">Product</th>
+                    <th scope="col" className="px-4 py-3.5 whitespace-nowrap">SKU / Product ID</th>
+                    <th scope="col" className="px-4 py-3.5">{isAdmin ? 'Category / Supplier' : 'Category'}</th>
+                    <th scope="col" className="px-4 py-3.5 whitespace-nowrap">Current Stock</th>
+                    <th scope="col" className="px-4 py-3.5 whitespace-nowrap">Stock Status</th>
+                    <th scope="col" className="px-4 py-3.5 whitespace-nowrap">Last Updated</th>
+                    <th scope="col" className="px-5 py-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E2E8E5]">
+                  {data.products.map((item) => (
+                    <tr key={item.id} className="cursor-pointer transition-colors hover:bg-[#F8FAF8]" onClick={() => setDetailProduct(item)}>
+                      <td className="px-5 py-3">
+                        <div className="flex min-w-[14rem] items-center gap-3">
+                          <ProductThumb item={item} />
                           <div className="min-w-0">
-                            <button type="button" className="block max-w-full truncate text-left text-xs font-bold text-slate-900 hover:text-emerald-800" onClick={(e) => { e.stopPropagation(); setDetailProduct(item); }}>
+                            <button type="button" className="text-left font-semibold leading-snug text-[#142D24] hover:text-[#047857]" onClick={(e) => { e.stopPropagation(); setDetailProduct(item); }}>
                               {item.name}
                             </button>
-                            <span className="block truncate text-[11px] text-slate-400">
-                              <span className="font-mono font-semibold">{item.sku}</span>
-                              <span aria-hidden="true"> · </span>
-                              {isAdmin ? item.supplierName || 'Unassigned supplier' : item.categoryName}
-                            </span>
+                            {item.warehouseLocation ? <span className="block text-xs text-[#64748B]">{item.warehouseLocation}</span> : null}
                           </div>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap text-right font-mono text-xs font-bold text-slate-900">
-                        {num(item.stock)} <span className="text-[10px] font-normal text-slate-400">{item.unit}</span>
+                      <td className="px-4 py-3">
+                        <span className="block whitespace-nowrap font-mono text-[0.8125rem] font-semibold text-[#142D24]">{item.sku}</span>
                       </td>
-                      <td className="text-right font-mono text-xs font-semibold text-sky-700">{num(item.reservedStock)}</td>
-                      <td className="text-right font-mono text-xs font-semibold text-violet-700">{num(item.committedStock)}</td>
-                      <td className="text-right">
-                        <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 font-mono text-xs font-black ${
-                          isOut ? 'border-rose-200 bg-rose-100 text-rose-800' : isLow ? 'border-amber-200 bg-amber-100 text-amber-800' : 'border-emerald-200 bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {num(item.availableStock)}
-                        </span>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex whitespace-nowrap rounded-full bg-[#ECFDF5] px-2.5 py-1 text-xs font-semibold text-[#047857]">{item.categoryName}</span>
+                        {isAdmin ? <span className="mt-1 block text-xs text-[#64748B]">{item.supplierName || 'Unassigned supplier'}</span> : null}
                       </td>
-                      <td>
-                        {isOut ? (
-                          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-rose-700">Out of Stock</span>
-                        ) : isLow ? (
-                          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-amber-800">
-                            <AlertTriangle className="size-2.5" /> Low (≤{item.lowStockThreshold})
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-emerald-800">
-                            <Check className="size-2.5" /> In Stock
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <div className="flex flex-nowrap items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <Button variant="primary" size="sm" onClick={() => openAdjustModal(item)} className="!px-2.5 !py-1 whitespace-nowrap text-xs">
-                            Adjust
-                          </Button>
-                          <Button variant="outline" size="sm" icon={ChevronRight} onClick={() => setDetailProduct(item)} className="!px-2 !py-1" title="Details & movement history" aria-label={`Details for ${item.sku}`} />
-                        </div>
+                      <td className="px-4 py-3"><StockCell item={item} /></td>
+                      <td className="px-4 py-3"><StatusPill item={item} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-[0.8125rem] text-[#142D24]">{updatedLabel(item.updatedAt)}</td>
+                      <td className="px-5 py-3">
+                        <RowActions item={item} onAdjust={openAdjustModal} onDetails={setDetailProduct} onSettings={openSettingsModal} />
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <ul className="divide-y divide-[#E2E8E5] md:hidden">
+              {data.products.map((item) => (
+                <li key={item.id} className="space-y-3 p-4">
+                  <button type="button" onClick={() => setDetailProduct(item)} className="flex w-full items-start gap-3 text-left">
+                    <ProductThumb item={item} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold leading-snug text-[#142D24]">{item.name}</span>
+                      <span className="mt-0.5 block font-mono text-xs text-[#64748B]">{item.sku}</span>
+                    </span>
+                    <StatusPill item={item} />
+                  </button>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748B]">
+                      <span className="rounded-full bg-[#ECFDF5] px-2.5 py-1 font-semibold text-[#047857]">{item.categoryName}</span>
+                      <span>{updatedLabel(item.updatedAt)}</span>
+                    </div>
+                    <StockCell item={item} />
+                  </div>
+                  <RowActions item={item} onAdjust={openAdjustModal} onDetails={setDetailProduct} onSettings={openSettingsModal} />
+                </li>
+              ))}
+            </ul>
+          </>
         )}
 
-        {data.pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/50 px-4 py-3">
-            <span className="text-xs text-slate-500">
-              Page {data.pagination.page} of {data.pagination.totalPages} ({data.pagination.total} items)
-            </span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={data.pagination.page <= 1} onClick={() => setPage((prev) => Math.max(1, prev - 1))}>Previous</Button>
-              <Button variant="outline" size="sm" disabled={data.pagination.page >= data.pagination.totalPages} onClick={() => setPage((prev) => prev + 1)}>Next</Button>
-            </div>
+        {/* Pagination */}
+        {!loading && totalRows > 0 ? (
+          <div className="flex flex-col gap-3 border-t border-[#E2E8E5] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-[0.8125rem] text-[#64748B]">Showing {rangeStart}–{rangeEnd} of {num(totalRows)} product{totalRows === 1 ? '' : 's'}</span>
+            {totalPages > 1 ? (
+              <nav aria-label="Inventory pages" className="flex flex-wrap items-center gap-1.5">
+                <PageButton label="Previous page" disabled={curPage <= 1} onClick={() => setPage(Math.max(1, curPage - 1))}><ChevronLeft className="size-4" /></PageButton>
+                {pageWindow(curPage, totalPages).map((p, i) => (p === '…'
+                  ? <span key={`gap-${i}`} className="px-1 text-sm text-[#64748B]">…</span>
+                  : <PageButton key={p} label={`Page ${p}`} active={p === curPage} onClick={() => setPage(p)}>{p}</PageButton>))}
+                <PageButton label="Next page" disabled={curPage >= totalPages} onClick={() => setPage(Math.min(totalPages, curPage + 1))}><ChevronRight className="size-4" /></PageButton>
+              </nav>
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
+
+      {/* Update Stock: choose a product, then the existing adjustment form opens */}
+      {pickerOpen ? (
+        <Modal open onClose={() => setPickerOpen(false)} title="Update stock" description="Choose one of your products to adjust its stock." size="md">
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+              <input
+                type="search"
+                autoFocus
+                value={pickerSearch}
+                onChange={(e) => setPickerSearch(e.target.value)}
+                placeholder="Search by product name, SKU or ID…"
+                aria-label="Find a product"
+                className="h-11 w-full rounded-xl border border-[#E2E8E5] bg-white pl-9 pr-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+              />
+            </div>
+            {pickerLoading ? (
+              <p className="py-6 text-center text-sm text-[#64748B]" role="status">Loading products…</p>
+            ) : pickerResults.length === 0 ? (
+              <p className="py-6 text-center text-sm text-[#64748B]">No products found.</p>
+            ) : (
+              <ul className="max-h-80 divide-y divide-[#E2E8E5] overflow-y-auto rounded-xl border border-[#E2E8E5]">
+                {pickerResults.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => { setPickerOpen(false); openAdjustModal(item); }}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-[#F8FAF8]"
+                    >
+                      <ProductThumb item={item} small />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-[#142D24]">{item.name}</span>
+                        <span className="block font-mono text-xs text-[#64748B]">{item.sku}</span>
+                      </span>
+                      <StatusPill item={item} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Modal>
+      ) : null}
 
       <InventoryDetailDrawer
         product={detailProduct}

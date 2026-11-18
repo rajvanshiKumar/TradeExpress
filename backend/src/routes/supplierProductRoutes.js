@@ -13,6 +13,7 @@ router.use(authenticateJWT, requireRole('SUPPLIER', 'ADMIN'));
 router.get('/', supplierProductController.listProducts);
 router.get('/bulk/template', supplierProductController.downloadBulkTemplate);
 router.post('/bulk/upload', uploadMemory.single('file'), supplierProductController.handleBulkUpload);
+router.get('/:id', supplierProductController.getProduct);
 
 router.post(
   '/',

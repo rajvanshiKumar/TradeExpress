@@ -5,8 +5,8 @@ import * as addressService from '../services/addressService.js';
 
 export async function sendMobileOtp(req, res, next) {
   try {
-    const { phone, country, purpose } = req.body;
-    const result = await otpService.requestMobileOtp({ phone, country, purpose });
+    const { phone, country, purpose, role } = req.body; // role: BUYER / SUPPLIER signup form
+    const result = await otpService.requestMobileOtp({ phone, country, purpose, role });
     res.json(result);
   } catch (error) {
     next(error);
@@ -25,8 +25,8 @@ export async function verifyMobileOtp(req, res, next) {
 
 export async function resendMobileOtp(req, res, next) {
   try {
-    const { phone, country } = req.body;
-    const result = await otpService.resendMobileOtp({ phone, country });
+    const { phone, country, role } = req.body;
+    const result = await otpService.resendMobileOtp({ phone, country, role });
     res.json(result);
   } catch (error) {
     next(error);

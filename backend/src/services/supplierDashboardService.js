@@ -1,4 +1,6 @@
 import prisma from '../config/db.js';
+import { ownedOrdersWhere } from './supplierOrderService.js';
+import { ownedProductsWhere } from './supplierProductService.js';
 import { createNotification } from './notificationService.js';
 import { availabilitySnapshot, publishInventoryChanges, transitionOrderInventory } from './inventoryLifecycleService.js';
 
@@ -9,41 +11,73 @@ const SUPPLIER_SETTABLE_STATUSES = ['ORDER_CONFIRMED', 'PROCESSING', 'PACKED'];
 /**
  * Builds where clause scoping to the authenticated supplier
  */
+/** Products of the signed-in supplier: the same rule as Product Catalogue and Real-Time Inventory. */
 function getSupplierScopeWhere(supplierUser) {
-  const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
-  return {
-    OR: [
-      { supplierId: supplierUser.id },
-      ...(companyId ? [{ companyId: String(companyId) }] : []),
-    ],
-  };
+  return ownedProductsWhere(supplierUser);
 }
 
+/** Orders of the signed-in supplier: the same rule as the Purchase Orders list and order actions. */
 function getSupplierOrderScopeWhere(supplierUser) {
-  const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
-  return {
-    OR: [
-      { supplierId: supplierUser.id },
-      ...(companyId ? [{ supplierCompanyId: String(companyId) }] : []),
-      {
-        items: {
-          some: {
-            product: {
-              OR: [
-                { supplierId: supplierUser.id },
-                ...(companyId ? [{ companyId: String(companyId) }] : []),
-              ],
-            },
-          },
-        },
-      },
-    ],
-  };
+  return ownedOrdersWhere(supplierUser);
 }
 
 /**
  * 1. Supplier Dashboard Overview Statistics
  */
+const TREND_DAYS = 90;
+const IST_OFFSET_MS = 330 * 60 * 1000;
+const istDay = (date) => new Date(new Date(date).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+const isConfirmedSale = (o) => o.orderStatus === 'DELIVERED' || o.paymentStatus === 'PAID';
+
+/**
+ * Daily figures for the last 90 days (India time), oldest first, every day present:
+ * orders = non-cancelled/refunded orders placed that day; sales = confirmed sales (delivered or paid), as in grossSales.
+ */
+export function buildSalesTrend(validOrders, now = new Date()) {
+  const days = new Map();
+  for (let i = TREND_DAYS - 1; i >= 0; i -= 1) days.set(istDay(now.getTime() - i * 86400000), { date: '', sales: 0, orders: 0 });
+  for (const [date, row] of days) row.date = date;
+  for (const o of validOrders) {
+    const row = days.get(istDay(o.createdAt));
+    if (!row) continue;
+    row.orders += 1;
+    if (isConfirmedSale(o)) row.sales += Number(o.total || 0);
+  }
+  return [...days.values()].map((r) => ({ ...r, sales: Math.round(r.sales * 100) / 100 }));
+}
+
+/** Best-selling products of this supplier from real order lines (top 5 by confirmed sales, then orders). */
+export function buildTopProducts(validOrders, supplierProducts, limit = 5) {
+  const mine = new Map(supplierProducts.map((p) => [p.id, p]));
+  const stats = new Map();
+  for (const o of validOrders) {
+    for (const item of o.items || []) {
+      if (!item.productId || !mine.has(item.productId)) continue;
+      const row = stats.get(item.productId) || { productId: item.productId, orderIds: new Set(), units: 0, sales: 0, item };
+      row.orderIds.add(o.id);
+      row.units += Number(item.quantity || 0);
+      if (isConfirmedSale(o)) row.sales += Number(item.lineTotal || 0);
+      stats.set(item.productId, row);
+    }
+  }
+  return [...stats.values()]
+    .map((r) => {
+      const p = mine.get(r.productId);
+      return {
+        productId: r.productId,
+        name: p?.name || r.item.productName,
+        sku: r.item.productSku || null,
+        photo: p?.photo || r.item.productPhoto || null,
+        unit: p?.unit || 'piece',
+        orders: r.orderIds.size,
+        units: r.units,
+        sales: Math.round(r.sales * 100) / 100,
+      };
+    })
+    .sort((a, b) => b.sales - a.sales || b.orders - a.orders)
+    .slice(0, limit);
+}
+
 export async function getSupplierOverview(supplierUser) {
   const productScope = getSupplierScopeWhere(supplierUser);
   const orderScope = getSupplierOrderScopeWhere(supplierUser);
@@ -85,7 +119,10 @@ export async function getSupplierOverview(supplierUser) {
         items: {
           select: {
             id: true,
+            productId: true,
             productName: true,
+            productSku: true,
+            productPhoto: true,
             quantity: true,
             unitPrice: true,
             lineTotal: true,
@@ -217,7 +254,13 @@ export async function getSupplierOverview(supplierUser) {
     return time >= now && time <= threeDaysFromNow;
   });
 
+  // --- Trends & top products (same counting rules as the metrics above) ---
+  const salesTrend = buildSalesTrend(validOrders);
+  const topProducts = buildTopProducts(validOrders, allProducts);
+
   return {
+    salesTrend,
+    topProducts,
     metrics: {
       totalProducts,
       activeProducts,
@@ -229,6 +272,8 @@ export async function getSupplierOverview(supplierUser) {
       completedOrders: completedOrders.length,
       inTransitOrders: inTransitOrders.length,
       cancelledOrders: allOrders.filter((o) => o.orderStatus === 'CANCELLED').length,
+      refundedOrders: allOrders.filter((o) => o.orderStatus === 'REFUNDED').length,
+      activeOrders: allOrders.filter((o) => !['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.orderStatus)).length,
       grossSales: Math.round(grossSales * 100) / 100,
       pendingPayouts: Math.round(pendingPayouts * 100) / 100,
       releasedPayouts: Math.round(releasedPayouts * 100) / 100,

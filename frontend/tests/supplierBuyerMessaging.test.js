@@ -249,5 +249,57 @@ describe('Frontend Supplier-to-Buyer Messaging Integration Suite', () => {
       assert.equal(ramu.messages[0].content, 'Hello I need this product is low');
       assert.deepEqual(ramu.mergedIds, ['conv-ramu-1', 'conv-ramu-2', 'conv-ramu-3']);
     });
+
+    it('consolidates heterogeneous representations of Ramu Interprises (null IDs, phonetic variations, contact names)', () => {
+      const heterogeneousConversations = [
+        {
+          id: 'conv-real',
+          supplierId: 'supp-uuid-111',
+          companyId: 'comp-ramu',
+          supplier: { id: 'supp-uuid-111', name: 'dinbandhu', company: 'Ramu Interprises', city: 'surat' },
+          subject: 'Inquiry for Ramu Interprises',
+          messages: [
+            { id: 'm-1', content: 'Hello I need this product is low', createdAt: '2026-11-13T15:27:00Z' },
+          ],
+          lastMessageAt: '2026-11-13T15:27:00Z',
+        },
+        {
+          id: 'conv-empty-1',
+          supplierId: null,
+          companyId: null,
+          supplier: { name: 'dinbandhu' },
+          subject: 'Inquiry for Supplier',
+          messages: [],
+          lastMessageAt: null,
+        },
+        {
+          id: 'conv-empty-2',
+          supplierId: 'supp-uuid-222',
+          companyId: null,
+          supplier: { company: 'Ramu Enterprises' }, // phonetic variation
+          subject: 'Inquiry for Supplier',
+          messages: [],
+          lastMessageAt: null,
+        },
+        {
+          id: 'conv-nova',
+          supplierId: 'supp-nova',
+          supplier: { company: 'Shenzhen NovaTech Electronics', name: 'Li Wei' },
+          subject: 'Inquiry for Supplier',
+          messages: [],
+          lastMessageAt: null,
+        },
+      ];
+
+      const consolidated = consolidateConversations(heterogeneousConversations, 'buyer');
+      assert.equal(consolidated.length, 2, 'Must contain exactly 2 unique suppliers (Ramu and NovaTech)');
+
+      const ramu = consolidated.find((c) => (c.supplier?.company || '').toLowerCase().includes('ramu'));
+      assert.ok(ramu, 'Consolidated Ramu conversation must exist');
+      assert.equal(ramu.id, 'conv-real', 'Must retain rich conversation with messages');
+      assert.equal(ramu.messages.length, 1);
+      assert.equal(ramu.messages[0].content, 'Hello I need this product is low');
+      assert.deepEqual(ramu.mergedIds, ['conv-real', 'conv-empty-1', 'conv-empty-2']);
+    });
   });
 });

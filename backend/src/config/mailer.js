@@ -3,6 +3,14 @@ import { ENV } from './env.js';
 
 let transporter = null;
 
+/** SMTP wait limit in ms (SMTP_TIMEOUT_MS, default 8000, kept between 3000 and 30000). */
+export function smtpTimeoutMs(value = process.env.SMTP_TIMEOUT_MS) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return 8000;
+  return Math.min(30000, Math.max(3000, parsed));
+}
+const SMTP_TIMEOUT_MS = smtpTimeoutMs();
+
 export async function getTransporter() {
   if (transporter) return transporter;
 
@@ -19,6 +27,12 @@ export async function getTransporter() {
       // Reuse open SMTP connections: a new connection + TLS + login costs ~1.5 s on every OTP email otherwise
       pool: true,
       maxConnections: 3,
+      // Fail fast when the mail server cannot be reached (nodemailer waits 2 minutes by default). The default 8 s
+      // stays below the sign-in page's 12 s request limit, so the user gets the real "could not send the
+      // verification email" message instead of "unable to connect". Configurable with SMTP_TIMEOUT_MS.
+      connectionTimeout: SMTP_TIMEOUT_MS,
+      greetingTimeout: SMTP_TIMEOUT_MS,
+      socketTimeout: SMTP_TIMEOUT_MS,
       auth: {
         user: ENV.SMTP_USER,
         pass: ENV.SMTP_PASS,

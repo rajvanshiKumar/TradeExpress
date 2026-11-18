@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import * as deletionController from '../controllers/supplierDeletionController.js';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import * as accountController from '../controllers/accountController.js';
@@ -58,6 +59,11 @@ router.get('/data-export', sensitiveLimiter, accountController.exportData);
 router.get('/sessions', accountController.listSessions);
 router.post('/sessions/revoke-others', sensitiveLimiter, accountController.revokeOtherSessions);
 router.post('/sessions/:id/revoke', accountWriteLimiter, accountController.revokeSession);
+
+// Supplier account closure: request -> Super Admin approval -> grace period -> final deletion
+router.get('/deletion-request', deletionController.getMyRequest);
+router.post('/deletion-request', sensitiveLimiter, deletionController.createMyRequest);
+router.post('/deletion-request/cancel', accountWriteLimiter, deletionController.cancelMyRequest);
 
 router.get('/delete/status', accountController.getDeletionStatus);
 router.post('/delete', sensitiveLimiter, requireRole('BUYER', 'SUPPLIER'), accountController.deleteAccount);

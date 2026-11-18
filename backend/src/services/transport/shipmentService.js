@@ -3,7 +3,6 @@ import prisma from '../../config/db.js';
 import { ENV } from '../../config/env.js';
 import { createNotification } from '../notificationService.js';
 import { sendDeliveryCodeEmail } from '../emailService.js';
-import { isDevOtpAllowed } from '../otpService.js';
 import { auditTransport } from './transportAudit.js';
 import { getIO } from '../socketService.js';
 import { publishInventoryChanges, restockReturnedShipment, shipShipmentItems } from '../inventoryLifecycleService.js';
@@ -1116,7 +1115,7 @@ export async function confirmDelivery(user, shipmentId, input) {
   if (!shipment.deliveryOtpHash || !shipment.deliveryOtpExpiresAt) throw fail('No delivery code is active. Request a new code.', 400, { errorCode: 'OTP_MISSING' });
   if (new Date(shipment.deliveryOtpExpiresAt) < new Date()) throw fail('The delivery code has expired. Request a new code.', 400, { errorCode: 'OTP_EXPIRED' });
   if (shipment.deliveryOtpAttempts >= OTP_MAX_ATTEMPTS) throw fail('Too many incorrect codes. Request a new code.', 429, { errorCode: 'OTP_LOCKED' });
-  const codeOk = otpMatches(shipment, input.otp) || isDevOtpAllowed(input.otp);
+  const codeOk = otpMatches(shipment, input.otp);
   if (!codeOk) {
     const updated = await prisma.shipment.update({ where: { id: shipment.id }, data: { deliveryOtpAttempts: { increment: 1 } }, select: { deliveryOtpAttempts: true } });
     const left = Math.max(0, OTP_MAX_ATTEMPTS - updated.deliveryOtpAttempts);

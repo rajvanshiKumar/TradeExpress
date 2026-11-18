@@ -9,8 +9,10 @@ import OtpModal from '../common/OtpModal';
 import useAuth from '../../hooks/useAuth';
 import useProducts from '../../hooks/useProducts';
 import useNotifications from '../../hooks/useNotifications';
-import { BUSINESS_TYPES, COUNTRIES, COUNTRY_FLAGS, COUNTRY_PHONE_RULES, ROLE_HOME } from '../../utils/constants';
+import { BUSINESS_TYPES, COUNTRIES, COUNTRY_FLAGS, COUNTRY_PHONE_RULES } from '../../utils/constants';
+import { postAuthPath } from '../../utils/postAuthRedirect';
 import { focusFirstError, hasErrors, mobileExample, normalizeEmail, parseMobile, rules, validate } from '../../utils/validators';
+import { API_BASE_URL } from '../../config/api.js';
 
 // Public registration offers Buyer and Supplier only. There is no way to choose Admin here.
 const ROLE_OPTIONS = [
@@ -199,13 +201,14 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
     setOtpModalError('');
 
     try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const baseUrl = API_BASE_URL;
       const res = await fetch(`${baseUrl}/auth/send-mobile-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           phone: values.phone,
           country: values.country,
+          role: values.role === 'supplier' ? 'SUPPLIER' : 'BUYER',
         }),
       });
       const data = await res.json();
@@ -244,7 +247,7 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
     setOtpModalError('');
 
     try {
-      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+      const baseUrl = API_BASE_URL;
       const res = await fetch(`${baseUrl}/auth/send-email-verification-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -280,7 +283,7 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
     setOtpModalVerifying(true);
     setOtpModalError('');
 
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+    const baseUrl = API_BASE_URL;
 
     try {
       if (otpModalType === 'phone') {
@@ -400,7 +403,7 @@ export default function RegisterForm({ role: propRole, onRoleChange }) {
     }
     showToast(`Welcome to TradeExpress, ${result.user.name}.`);
     startTransition(() => {
-      navigate(ROLE_HOME[values.role], { replace: true });
+      navigate(postAuthPath({ role: values.role }), { replace: true });
     });
     return;
   };

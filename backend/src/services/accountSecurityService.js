@@ -5,7 +5,7 @@ import { ENV } from '../config/env.js';
 import { reissueCurrentToken, invalidateSessionCache } from './sessionService.js';
 import { getRequestContext } from '../utils/requestContext.js';
 import { validatePassword } from '../utils/passwordValidator.js';
-import { isDevOtpAllowed, normalizeMobile, validateVerifiedMobile } from './otpService.js';
+import { isDevOtpAllowed, isTestOtpEnvironment, normalizeMobile, validateVerifiedMobile } from './otpService.js';
 import { maskEmail, maskPhone } from './accountService.js';
 import { sendAccountCodeEmail, sendAccountSecurityEmail } from './emailService.js';
 
@@ -93,7 +93,9 @@ async function issueCode(user, purpose, target, relatedId = null) {
   });
 
   const sent = await sendAccountCodeEmail({ email: target, name: user.name, otp, purpose });
-  if (!sent.success) {
+  if (!sent.success && isTestOtpEnvironment()) {
+    console.warn(`[TEST CODE] Email for ${purpose} could not be sent; local testing accepts the test code.`);
+  } else if (!sent.success) {
     await prisma.accountVerification.delete({ where: { id } }).catch(() => {});
     throw fail('We could not send the verification email right now. Please try again in a moment.', 502, 'EMAIL_NOT_SENT');
   }
@@ -116,8 +118,8 @@ async function checkCode(userId, purpose, otp, extraWhere = {}) {
     throw fail('Too many incorrect attempts. Please request a new code.', 429, 'OTP_ATTEMPTS_EXCEEDED');
   }
 
-  // Testing bypass (123456) works only outside production, exactly like the sign-in codes
-  if (!isDevOtpAllowed(cleanOtp) && !safeEqual(record.otpHash, codeHash(record.id, cleanOtp))) {
+  // Real emailed code, or (LOCAL TESTING ONLY, never on Render/production) the test code 123456
+  if (!safeEqual(record.otpHash, codeHash(record.id, cleanOtp)) && !isDevOtpAllowed(cleanOtp)) {
     const attempts = record.attempts + 1;
     await prisma.accountVerification.update({
       where: { id: record.id },

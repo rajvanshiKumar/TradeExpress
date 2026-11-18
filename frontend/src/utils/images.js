@@ -1,3 +1,4 @@
+import { BACKEND_ORIGIN } from '../config/api.js';
 // Image helpers.
 //
 // Real HD photos from Unsplash for all categories and products.
@@ -41,18 +42,10 @@ export const REAL_HD_IMAGES = {
   'cover-default': 'photo-1586528116311-ad8dd3c8310d',
 };
 
+// Uploaded files live on the backend named in VITE_PUBLIC_API_BASE_URL (or on this site when it is not set)
 function getBackendOrigin() {
-  const rawApi = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PUBLIC_API_BASE_URL) || '';
-  if (rawApi) {
-    return rawApi.replace(/\/api\/?$/, '');
-  }
-  if (typeof window !== 'undefined' && window.location) {
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://localhost:5000';
-    }
-    return window.location.origin;
-  }
-  return 'http://localhost:5000';
+  if (BACKEND_ORIGIN) return BACKEND_ORIGIN;
+  return typeof window !== 'undefined' && window.location ? window.location.origin : '';
 }
 
 export function photoUrl(photoId, width = 800, height = 800, crop = '') {

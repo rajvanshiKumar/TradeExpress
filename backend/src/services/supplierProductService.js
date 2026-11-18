@@ -1,7 +1,44 @@
 import prisma from '../config/db.js';
+import { assertSupplierCanTrade } from './supplierDeletionService.js';
 import * as XLSX from 'xlsx';
+import { assertHierarchy, buildProductSpecifications, requireCategory, splitSpecifications } from './productSpecService.js';
+import { resolveAttributeSchema } from '../data/categoryAttributes.js';
+
+/** Previously saved values that still exist in the schema of the (possibly changed) category. */
+function keepCompatibleValues(category, subcategory, productType, values = {}) {
+  const override = category.attributes && typeof category.attributes === 'object' ? category.attributes.specSchema : null;
+  const keys = new Set(resolveAttributeSchema(category.slug, subcategory, productType, override).attributes.map((a) => a.key));
+  return Object.fromEntries(Object.entries(values || {}).filter(([key]) => keys.has(key)));
+}
+
+/** The free-form part of a stored display map (labels not produced by the structured values). */
+function customOnly(display = {}, spec = null) {
+  if (!spec) return display;
+  const { ['Product Type']: _type, ...rest } = display; // eslint-disable-line no-unused-vars
+  return rest;
+}
+
+/** A deleted product keeps its row (order history stays intact) but is gone from every supplier and buyer view. */
+export const DELETED_STATUS = 'Deleted';
+
+/**
+ * The one ownership rule for supplier products: the product's supplierId is the signed-in supplier.
+ * (Company names are not unique, so they are never used to decide ownership.)
+ */
+export const ownedProductsWhere = (supplierUser) => ({ supplierId: supplierUser.id, status: { not: DELETED_STATUS } });
+
+function assertOwner(supplierUser, existing, verb) {
+  if (supplierUser.role === 'ADMIN' || supplierUser.role === 'SUPER_ADMIN') return;
+  if (!existing || existing.supplierId !== supplierUser.id || existing.status === DELETED_STATUS) {
+    const error = new Error(existing && existing.supplierId !== supplierUser.id ? `You do not have permission to ${verb} this product.` : 'Product not found.');
+    error.statusCode = existing && existing.supplierId !== supplierUser.id ? 403 : 404;
+    throw error;
+  }
+}
 
 export async function createSupplierProduct(supplierUser, data) {
+  // No new listings while an approved account deletion is in its grace period
+  await assertSupplierCanTrade(supplierUser.id);
   const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
   const sku = data.sku || `TS-P-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 900 + 100)}`;
   const slug = (data.name || 'product')
@@ -19,18 +56,17 @@ export async function createSupplierProduct(supplierUser, data) {
   const primaryPhoto = data.photo || rawImages[0] || null;
   const videoUrl = data.videoUrl || data.video || null;
 
-  const categorySlug = data.categorySlug || data.category;
-
-  let category = await prisma.category.findUnique({
-    where: { slug: categorySlug },
+  // The category must exist: a product is never filed under a different category (400 instead)
+  const category = await requireCategory(data.categorySlug || data.category);
+  const subcategory = data.subcategory ? String(data.subcategory).trim() : null;
+  const productType = data.productType ? String(data.productType).trim() : null;
+  assertHierarchy(category, subcategory, productType);
+  // Category-specific specifications validated against the category schema (400 with field errors)
+  const specifications = buildProductSpecifications({
+    category, subcategory, productType, specValues: data.specValues, customSpecifications: data.specifications,
   });
 
-  if (!category) {
-    // If not found by exact slug, find first available category to avoid foreign key failure
-    category = await prisma.category.findFirst();
-  }
-
-  const finalCategorySlug = category ? category.slug : categorySlug;
+  const finalCategorySlug = category.slug;
 
   const product = await prisma.product.create({
     data: {
@@ -40,7 +76,7 @@ export async function createSupplierProduct(supplierUser, data) {
       companyId: String(companyId),
       supplierId: supplierUser.id,
       categorySlug: finalCategorySlug,
-      subcategory: data.subcategory || null,
+      subcategory,
       summary: data.summary || data.name,
       description: data.description || data.summary || data.name,
       photo: primaryPhoto,
@@ -59,7 +95,7 @@ export async function createSupplierProduct(supplierUser, data) {
       status: data.status || 'Active',
       moderationStatus: 'APPROVED', // Ready for immediate listing
       variants: data.variants || null,
-      specifications: data.specifications || {},
+      specifications,
       packaging: data.packaging || {},
       priceTiers: data.priceTiers || [],
       images: rawImages.length > 0
@@ -78,10 +114,12 @@ export async function createSupplierProduct(supplierUser, data) {
     },
   });
 
-  return product;
+  return { ...product, ...splitSpecifications(product.specifications) };
 }
 
 export async function updateSupplierProduct(supplierUser, productId, data) {
+  // Products hidden for an approved account deletion cannot be put back on sale during the grace period
+  if (data?.status === 'Active') await assertSupplierCanTrade(supplierUser.id);
   const existing = await prisma.product.findUnique({ where: { id: productId } });
   if (!existing) {
     const error = new Error('Product not found.');
@@ -89,14 +127,7 @@ export async function updateSupplierProduct(supplierUser, productId, data) {
     throw error;
   }
 
-  if (supplierUser.role !== 'ADMIN') {
-    const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
-    if (existing.supplierId && existing.supplierId !== supplierUser.id && existing.companyId !== companyId) {
-      const error = new Error('You do not have permission to edit this product.');
-      error.statusCode = 403;
-      throw error;
-    }
-  }
+  assertOwner(supplierUser, existing, 'edit');
 
   if (Array.isArray(data.images) && data.images.length > 8) {
     const error = new Error('Maximum 8 product images allowed.');
@@ -104,30 +135,47 @@ export async function updateSupplierProduct(supplierUser, productId, data) {
     throw error;
   }
 
+  // Category, hierarchy and specifications are validated BEFORE anything is changed
+  const hierarchyChanged = data.categorySlug !== undefined || data.subcategory !== undefined || data.productType !== undefined;
+  const specsSubmitted = data.specValues !== undefined || data.specifications !== undefined;
+  let nextSpecifications;
+  let nextCategorySlug;
+  let nextSubcategory;
+  if (hierarchyChanged || specsSubmitted) {
+    const { specData: previousSpec, specifications: previousDisplay } = splitSpecifications(existing.specifications);
+    const category = await requireCategory(data.categorySlug !== undefined ? data.categorySlug : existing.categorySlug);
+    nextCategorySlug = category.slug;
+    nextSubcategory = data.subcategory !== undefined ? (data.subcategory ? String(data.subcategory).trim() : null) : existing.subcategory;
+    // A product type belongs to its subcategory: it is kept only while category and subcategory stay the same
+    const moved = nextCategorySlug !== existing.categorySlug || (nextSubcategory || '') !== (existing.subcategory || '');
+    const productType = data.productType !== undefined
+      ? (data.productType ? String(data.productType).trim() : null)
+      : (moved ? null : (previousSpec?.productType || null));
+    assertHierarchy(category, nextSubcategory, productType);
+    // Without new values, previously saved values are re-checked against the (possibly new) category schema
+    const specValues = data.specValues !== undefined ? data.specValues : (previousSpec ? keepCompatibleValues(category, nextSubcategory, productType, previousSpec.values) : undefined);
+    nextSpecifications = buildProductSpecifications({
+      category,
+      subcategory: nextSubcategory,
+      productType,
+      specValues,
+      customSpecifications: data.specifications !== undefined ? data.specifications : (previousSpec ? customOnly(previousDisplay, previousSpec) : previousDisplay),
+    });
+  }
+
   const updateData = {};
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
   else if (data.video !== undefined) updateData.videoUrl = data.video;
 
-  if (data.images !== undefined) {
-    const validImages = Array.isArray(data.images) ? data.images.filter(Boolean).slice(0, 8) : [];
-    await prisma.productImage.deleteMany({ where: { productId } });
-    if (validImages.length > 0) {
-      await prisma.productImage.createMany({
-        data: validImages.map((url, index) => ({
-          productId,
-          url,
-          isPrimary: index === 0,
-          sortOrder: index,
-        })),
-      });
-      updateData.photo = validImages[0];
-    } else if (data.photo !== undefined) {
-      updateData.photo = data.photo;
-    }
+  // New image list (applied in the same transaction as the product update below)
+  const validImages = data.images !== undefined ? (Array.isArray(data.images) ? data.images.filter(Boolean).slice(0, 8) : []) : null;
+  if (validImages) {
+    if (validImages.length > 0) updateData.photo = validImages[0];
+    else if (data.photo !== undefined) updateData.photo = data.photo;
   }
   if (data.name) updateData.name = data.name.trim();
-  if (data.categorySlug) updateData.categorySlug = data.categorySlug;
-  if (data.subcategory !== undefined) updateData.subcategory = data.subcategory;
+  if (nextCategorySlug !== undefined) updateData.categorySlug = nextCategorySlug;
+  if (nextSubcategory !== undefined) updateData.subcategory = nextSubcategory;
   if (data.summary !== undefined) updateData.summary = data.summary;
   if (data.description !== undefined) updateData.description = data.description;
   if (data.photo !== undefined) updateData.photo = data.photo;
@@ -141,19 +189,38 @@ export async function updateSupplierProduct(supplierUser, productId, data) {
   if (data.sampleAvailable !== undefined) updateData.sampleAvailable = Boolean(data.sampleAvailable);
   if (data.samplePrice !== undefined) updateData.samplePrice = data.samplePrice ? Number(data.samplePrice) : null;
   if (data.weightKg !== undefined) updateData.weightKg = Number(data.weightKg);
-  if (data.status !== undefined) updateData.status = data.status;
+  if (data.status !== undefined) {
+    // Suppliers can only show or hide a listing; deleting has its own action (keeps order history)
+    if (data.status !== existing.status && !['Active', 'Hidden'].includes(data.status)) {
+      const error = new Error('Status must be Active or Hidden.');
+      error.statusCode = 400;
+      throw error;
+    }
+    updateData.status = data.status;
+  }
   if (data.variants !== undefined) updateData.variants = data.variants;
-  if (data.specifications !== undefined) updateData.specifications = data.specifications;
+  if (nextSpecifications !== undefined) updateData.specifications = nextSpecifications;
   if (data.packaging !== undefined) updateData.packaging = data.packaging;
   if (data.priceTiers !== undefined) updateData.priceTiers = data.priceTiers;
 
-  const updated = await prisma.product.update({
-    where: { id: productId },
-    data: updateData,
-    include: { category: true, images: true },
+  // Images and product fields change together, or not at all
+  const updated = await prisma.$transaction(async (tx) => {
+    if (validImages) {
+      await tx.productImage.deleteMany({ where: { productId } });
+      if (validImages.length > 0) {
+        await tx.productImage.createMany({
+          data: validImages.map((url, index) => ({ productId, url, isPrimary: index === 0, sortOrder: index })),
+        });
+      }
+    }
+    return tx.product.update({
+      where: { id: productId },
+      data: updateData,
+      include: { category: true, images: true },
+    });
   });
 
-  return updated;
+  return { ...updated, ...splitSpecifications(updated.specifications) };
 }
 
 export async function deleteSupplierProduct(supplierUser, productId) {
@@ -164,32 +231,39 @@ export async function deleteSupplierProduct(supplierUser, productId) {
     throw error;
   }
 
-  if (supplierUser.role !== 'ADMIN') {
-    const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
-    if (existing.supplierId && existing.supplierId !== supplierUser.id && existing.companyId !== companyId) {
-      const error = new Error('You do not have permission to delete this product.');
-      error.statusCode = 403;
-      throw error;
-    }
-  }
+  assertOwner(supplierUser, existing, 'delete');
 
-  // Deactivate status instead of hard deleting to preserve order history integrity
+  // Marked Deleted instead of removing the row, so order history stays intact
   const updated = await prisma.product.update({
     where: { id: productId },
-    data: { status: 'Hidden' },
+    data: { status: DELETED_STATUS },
   });
 
   return updated;
 }
 
+const toSupplierProduct = (p) => ({
+  ...p,
+  ...splitSpecifications(p.specifications),
+  price: Number(p.price),
+  gstRate: Number(p.gstRate),
+  weightKg: Number(p.weightKg),
+  samplePrice: p.samplePrice ? Number(p.samplePrice) : null,
+});
+
+/** One of the signed-in supplier's own products (deleted or someone else's: not found). */
+export async function getSupplierProduct(supplierUser, productId) {
+  const product = await prisma.product.findFirst({ where: { id: String(productId), ...ownedProductsWhere(supplierUser) }, include: { category: true, images: true } });
+  if (!product) {
+    const error = new Error('Product not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+  return toSupplierProduct(product);
+}
+
 export async function listSupplierProducts(supplierUser) {
-  const companyId = supplierUser.companyId || supplierUser.company || supplierUser.id;
-  const where = {
-    OR: [
-      { supplierId: supplierUser.id },
-      ...(companyId ? [{ companyId: String(companyId) }] : []),
-    ],
-  };
+  const where = ownedProductsWhere(supplierUser);
 
   const products = await prisma.product.findMany({
     where,
@@ -199,6 +273,7 @@ export async function listSupplierProducts(supplierUser) {
 
   return products.map((p) => ({
     ...p,
+    ...splitSpecifications(p.specifications),
     price: Number(p.price),
     gstRate: Number(p.gstRate),
     weightKg: Number(p.weightKg),

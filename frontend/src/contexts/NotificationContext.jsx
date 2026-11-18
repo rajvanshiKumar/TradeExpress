@@ -5,7 +5,7 @@ import seedNotifications from '../data/notifications';
 import { STORAGE_KEYS } from '../utils/constants';
 import makeId from '../utils/ids';
 import { AuthContext } from './AuthContext';
-import { apiGet, apiPatch, isApiConfigured } from '../services/apiClient';
+import { apiDelete, apiGet, apiPatch, isApiConfigured } from '../services/apiClient';
 
 // Two things live here: short-lived toasts, and the saved notification list shown in the header.
 export { NotificationContext };
@@ -23,8 +23,12 @@ const MIN_VISIBILITY_REFRESH_MS = 30000;
 
 export function NotificationProvider({ children }) {
   const { user } = useContext(AuthContext);
-  const [all, setAll] = useLocalStorage(STORAGE_KEYS.notifications, seedNotifications);
+  const [all, setAll] = useLocalStorage(STORAGE_KEYS.notifications, isApiConfigured ? [] : seedNotifications);
+  // Whose notifications are on screen: answers for a previous account are ignored
+  const ownerRef = useRef(user?.id || null);
+  ownerRef.current = user?.id || null;
   const [backendItems, setBackendItems] = useState([]);
+  const [backendTotal, setBackendTotal] = useState(0); // all of this user's notifications on the server
   const [toasts, setToasts] = useState([]);
   const timers = useRef(new Map());
   const inFlightRef = useRef(false);
@@ -43,9 +47,11 @@ export function NotificationProvider({ children }) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    const owner = user.id;
     try {
       // Use authenticated session token identity; do not pass untrusted userId parameters
-      const res = await apiGet('notifications?limit=50', { signal: controller.signal });
+      const res = await apiGet('notifications?limit=100', { signal: controller.signal });
+      if (owner !== ownerRef.current) return; // signed out or switched account meanwhile
       lastFetchTimeRef.current = Date.now();
       const list = res?.data?.notifications || (Array.isArray(res?.data) ? res.data : []);
       if (res && res.success && Array.isArray(list)) {
@@ -65,6 +71,7 @@ export function NotificationProvider({ children }) {
           isBackend: true,
         }));
         setBackendItems(mapped);
+        setBackendTotal(Number(res.data?.totalCount) || mapped.length);
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
@@ -77,8 +84,9 @@ export function NotificationProvider({ children }) {
 
   // Centralized polling with tab visibility guard and automatic cleanup
   useEffect(() => {
+    setBackendItems([]);
+    setBackendTotal(0);
     if (!user?.id || !isApiConfigured) {
-      setBackendItems([]);
       abortControllerRef.current?.abort();
       return;
     }
@@ -134,6 +142,7 @@ export function NotificationProvider({ children }) {
   }, [setAll, user]);
 
   const notifications = useMemo(() => {
+    if (isApiConfigured) return [...backendItems].sort((a, b) => new Date(b.at) - new Date(a.at));
     const localUserNotifications = all.filter((item) => matchesUser(item, user));
     // Merge backend and local items by unique id/title, sorted newest first
     const seen = new Set();
@@ -150,30 +159,69 @@ export function NotificationProvider({ children }) {
 
   const markRead = useCallback((id) => {
     setAll((previous) => previous.map((item) => (item.id === id ? { ...item, read: true } : item)));
-    setBackendItems((previous) => previous.map((item) => (item.id === id ? { ...item, read: true } : item)));
+    setBackendItems((previous) => previous.map((item) => (item.id === id ? { ...item, read: true, isRead: true } : item)));
 
     if (isApiConfigured && id) {
-      apiPatch(`notifications/${encodeURIComponent(id)}/read`, {}).catch(() => { });
+      apiPatch(`notifications/${encodeURIComponent(id)}/read`, {}).catch(() => fetchBackendNotifications(true));
     }
-  }, [setAll]);
+  }, [setAll, fetchBackendNotifications]);
+
+  const markUnread = useCallback((id) => {
+    setAll((previous) => previous.map((item) => (item.id === id ? { ...item, read: false } : item)));
+    setBackendItems((previous) => previous.map((item) => (item.id === id ? { ...item, read: false, isRead: false } : item)));
+
+    if (isApiConfigured && id && backendItems.some((item) => item.id === id)) {
+      apiPatch(`notifications/${encodeURIComponent(id)}/unread`, {}).catch(() => fetchBackendNotifications(true));
+    }
+  }, [setAll, backendItems, fetchBackendNotifications]);
 
   const markAllRead = useCallback(() => {
     setAll((previous) => previous.map((item) => (matchesUser(item, user) ? { ...item, read: true } : item)));
-    setBackendItems((previous) => previous.map((item) => ({ ...item, read: true })));
+    setBackendItems((previous) => previous.map((item) => ({ ...item, read: true, isRead: true })));
 
     if (isApiConfigured && user?.id) {
-      apiPatch('notifications/read-all', {}).catch(() => { });
+      apiPatch('notifications/read-all', {}).catch(() => fetchBackendNotifications(true));
     }
-  }, [setAll, user]);
+  }, [setAll, user, fetchBackendNotifications]);
 
-  const clearNotifications = useCallback(() => {
+  const deleteNotification = useCallback(async (id) => {
+    if (isApiConfigured && user?.id) {
+      try {
+        await apiDelete(`notifications/${encodeURIComponent(id)}`);
+      } catch (err) {
+        showToast(err?.message || 'The notification could not be deleted.', 'error');
+        return false;
+      }
+      setBackendItems((previous) => previous.filter((item) => item.id !== id));
+      setBackendTotal((n) => Math.max(0, n - 1));
+      return true;
+    }
+    setAll((previous) => previous.filter((item) => item.id !== id));
+    return true;
+  }, [setAll, user, showToast]);
+
+  const clearNotifications = useCallback(async () => {
+    if (isApiConfigured && user?.id) {
+      try {
+        await apiDelete('notifications');
+      } catch (err) {
+        showToast(err?.message || 'Your notifications could not be cleared.', 'error');
+        return false;
+      }
+      setBackendItems([]);
+      setBackendTotal(0);
+      return true;
+    }
     setAll((previous) => previous.filter((item) => !matchesUser(item, user)));
-    setBackendItems([]);
-  }, [setAll, user]);
+    return true;
+  }, [setAll, user, showToast]);
+
+  // True when the server holds older notifications than the newest 100 loaded here
+  const hasOlderNotifications = backendTotal > backendItems.length;
 
   const value = useMemo(() => ({
-    toasts, showToast, dismissToast, notifications, unreadCount, addNotification, markRead, markAllRead, clearNotifications, refreshNotifications: fetchBackendNotifications,
-  }), [toasts, showToast, dismissToast, notifications, unreadCount, addNotification, markRead, markAllRead, clearNotifications, fetchBackendNotifications]);
+    toasts, showToast, dismissToast, notifications, unreadCount, addNotification, markRead, markUnread, markAllRead, deleteNotification, clearNotifications, refreshNotifications: fetchBackendNotifications, hasOlderNotifications, backendTotal,
+  }), [toasts, showToast, dismissToast, notifications, unreadCount, addNotification, markRead, markUnread, markAllRead, deleteNotification, clearNotifications, fetchBackendNotifications, hasOlderNotifications, backendTotal]);
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 }

@@ -1,4 +1,6 @@
 import prisma from '../config/db.js';
+import { getCommandCenter } from './adminDashboardService.js';
+import { readEncryptedField } from '../utils/dataCrypto.js';
 import { syncAfterVerification } from './supplierDocumentService.js';
 import {
   getActiveCommissionPolicy,
@@ -18,168 +20,9 @@ const USER_ROLES = Object.values(Role);
 // ==========================================
 // 1. DASHBOARD & ANALYTICS
 // ==========================================
-export async function getDashboardStats({ range = '30d' } = {}) {
-  const days = range === '7d' ? 7 : range === '90d' ? 90 : 30;
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
-
-  const [
-    totalUsers,
-    totalBuyers,
-    totalSuppliers,
-    verifiedSuppliers,
-    pendingSuppliers,
-    totalProducts,
-    activeProducts,
-    pendingProducts,
-    totalCategories,
-    totalRfqs,
-    openRfqs,
-    totalQuotes,
-    totalOrders,
-    completedOrders,
-    pendingOrders,
-    revenueAgg,
-    escrowHeldAgg,
-    commissionAgg,
-    openDisputes,
-    openTickets,
-    pendingTruckApprovals,
-    recentOrders,
-    recentAuditLogs,
-    topCategories,
-  ] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { role: 'BUYER' } }),
-    prisma.user.count({ where: { role: 'SUPPLIER' } }),
-    prisma.user.count({ where: { role: 'SUPPLIER', isVerified: true } }),
-    prisma.user.count({ where: { role: 'SUPPLIER', kycStatus: 'PENDING' } }),
-    prisma.product.count(),
-    prisma.product.count({ where: { status: 'Active', moderationStatus: 'APPROVED' } }),
-    prisma.product.count({ where: { moderationStatus: 'PENDING' } }),
-    prisma.category.count(),
-    prisma.rfq.count(),
-    prisma.rfq.count({ where: { status: 'OPEN' } }),
-    prisma.quotation.count(),
-    prisma.order.count(),
-    prisma.order.count({ where: { orderStatus: 'DELIVERED' } }),
-    prisma.order.count({ where: { orderStatus: { in: ['ORDER_PLACED', 'ORDER_CONFIRMED', 'PROCESSING'] } } }),
-    prisma.order.aggregate({
-      _sum: { total: true },
-      where: { paymentStatus: 'PAID' },
-    }),
-    prisma.escrowLedger.aggregate({
-      _sum: { amountHeld: true },
-      where: { status: 'HELD' },
-    }),
-    prisma.escrowLedger.aggregate({
-      _sum: { commissionFee: true },
-    }),
-    prisma.dispute.count({ where: { status: { in: ['OPEN', 'UNDER_REVIEW'] } } }),
-    prisma.supportTicket.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
-    prisma.shipment.count({ where: { status: 'DOCUMENTS_PENDING' } }),
-    prisma.order.findMany({
-      take: 6,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        orderNumber: true,
-        buyerName: true,
-        buyerCompany: true,
-        total: true,
-        currency: true,
-        orderStatus: true,
-        paymentStatus: true,
-        createdAt: true,
-      },
-    }),
-    prisma.auditLog.findMany({
-      take: 8,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        actorEmail: true,
-        actorRole: true,
-        action: true,
-        resource: true,
-        targetId: true,
-        details: true,
-        result: true,
-        createdAt: true,
-      },
-    }),
-    prisma.category.findMany({
-      take: 5,
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        _count: { select: { products: true } },
-      },
-      orderBy: { products: { _count: 'desc' } },
-    }),
-  ]);
-
-  // Aggregate daily order counts for chart
-  const recentOrdersForChart = await prisma.order.findMany({
-    where: { createdAt: { gte: cutoff } },
-    select: { createdAt: true, total: true, paymentStatus: true },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  const chartDataMap = {};
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const key = d.toISOString().split('T')[0];
-    chartDataMap[key] = { date: key, orders: 0, revenue: 0 };
-  }
-
-  recentOrdersForChart.forEach((o) => {
-    const key = o.createdAt.toISOString().split('T')[0];
-    if (chartDataMap[key]) {
-      chartDataMap[key].orders += 1;
-      if (o.paymentStatus === 'PAID') {
-        chartDataMap[key].revenue += Number(o.total || 0);
-      }
-    }
-  });
-
-  const chartTrends = Object.values(chartDataMap);
-
-  return {
-    kpis: {
-      totalUsers,
-      totalBuyers,
-      totalSuppliers,
-      verifiedSuppliers,
-      pendingSuppliers,
-      totalProducts,
-      activeProducts,
-      pendingProducts,
-      totalCategories,
-      totalRfqs,
-      openRfqs,
-      totalQuotes,
-      totalOrders,
-      completedOrders,
-      pendingOrders,
-      totalRevenue: Number(revenueAgg._sum.total || 0),
-      totalEscrowHeld: Number(escrowHeldAgg._sum.amountHeld || 0),
-      totalCommissionEarned: Number(commissionAgg._sum.commissionFee || 0),
-      openDisputes,
-      openTickets,
-      pendingTruckApprovals,
-    },
-    chartTrends,
-    recentOrders,
-    recentAuditLogs,
-    topCategories: topCategories.map((c) => ({
-      name: c.name,
-      slug: c.slug,
-      productCount: c._count.products,
-    })),
-  };
+/** Super Admin Command Center figures (see adminDashboardService for every definition). */
+export async function getDashboardStats(query = {}) {
+  return getCommandCenter(query);
 }
 
 // ==========================================
@@ -353,7 +196,7 @@ export async function getUserDetails(userId) {
     }),
   ]);
 
-  return { user, recentOrders, auditTrail };
+  return { user: { ...user, bankAccountNumber: readEncryptedField(user.bankAccountNumber) }, recentOrders, auditTrail };
 }
 
 export async function updateUserStatus({ userId, status, isActive, reason, req }) {
@@ -531,7 +374,7 @@ export async function getSuppliersKyc({ page = 1, limit = 20, status = 'ALL', se
   ]);
 
   return {
-    suppliers,
+    suppliers: suppliers.map((s) => ({ ...s, bankAccountNumber: readEncryptedField(s.bankAccountNumber) })),
     pagination: {
       page: parseInt(page, 10),
       limit: take,

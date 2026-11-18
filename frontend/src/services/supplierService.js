@@ -5,9 +5,10 @@ import { readStorage } from '../utils/storage';
 import { slugify } from '../utils/validators';
 import { normalizeCountryName } from '../utils/countryData';
 import makeId from '../utils/ids';
+import { API_BASE_URL } from '../config/api.js';
 
 const companies = createCollection(STORAGE_KEYS.companies, seedCompanies);
-const BASE_URL = (import.meta.env.VITE_PUBLIC_API_BASE_URL ?? '').trim().replace(/\/+$/, '') || '/api';
+const BASE_URL = API_BASE_URL;
 
 /**
  * Combines base seeded/cached companies, locally registered accounts, and remote database suppliers.

@@ -69,6 +69,35 @@ export async function markAsRead(req, res, next) {
   }
 }
 
+export async function markAsUnread(req, res, next) {
+  try {
+    const updated = await notificationService.markNotificationAsUnread(req.params.id, req.user.id);
+    res.json({
+      success: true,
+      message: 'Notification marked as unread.',
+      data: updated,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteNotification(req, res, next) {
+  try {
+    res.json({ success: true, message: 'Notification deleted.', data: await notificationService.deleteNotification(req.params.id, req.user.id) });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteAllNotifications(req, res, next) {
+  try {
+    res.json({ success: true, message: 'Notifications deleted.', data: await notificationService.deleteAllNotifications(req.user.id) });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function markAllAsRead(req, res, next) {
   try {
     const userId = req.user.id;

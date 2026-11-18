@@ -50,11 +50,9 @@ const SupplierProductForm = lazy(() => import('../pages/supplier/SupplierProduct
 const SupplierOrders = lazy(() => import('../pages/supplier/SupplierOrders'));
 const SupplierInquiries = lazy(() => import('../pages/supplier/SupplierInquiries'));
 const SupplierAnalytics = lazy(() => import('../pages/supplier/SupplierAnalytics'));
-const SupplierSettings = lazy(() => import('../pages/supplier/SupplierSettings'));
 const SupplierVerification = lazy(() => import('../pages/supplier/SupplierVerification'));
 const SupplierDocuments = lazy(() => import('../pages/supplier/SupplierDocuments'));
 const PublicSupplierProfile = lazy(() => import('../pages/PublicSupplierProfile'));
-const SupplierQuotations = lazy(() => import('../pages/supplier/SupplierQuotations'));
 const SupplierTransport = lazy(() => import('../pages/supplier/SupplierTransport'));
 const SupplierPayments = lazy(() => import('../pages/supplier/SupplierPayments'));
 const SupplierProfile = lazy(() => import('../pages/supplier/SupplierProfile'));
@@ -73,14 +71,12 @@ const SuperAdminDashboard = lazy(() => import('../pages/superadmin/SuperAdminDas
 const SuperAdminUsers = lazy(() => import('../pages/superadmin/SuperAdminUsers'));
 const SuperAdminSuppliers = lazy(() => import('../pages/superadmin/SuperAdminSuppliers'));
 const SuperAdminSupplierDocuments = lazy(() => import('../pages/superadmin/SuperAdminSupplierDocuments'));
+const SuperAdminDeletionRequests = lazy(() => import('../pages/superadmin/SuperAdminDeletionRequests'));
 const SuperAdminProducts = lazy(() => import('../pages/superadmin/SuperAdminProducts'));
 const SuperAdminCategories = lazy(() => import('../pages/superadmin/SuperAdminCategories'));
 const SuperAdminRfqs = lazy(() => import('../pages/superadmin/SuperAdminRfqs'));
 const SuperAdminOrders = lazy(() => import('../pages/superadmin/SuperAdminOrders'));
 const SuperAdminPayments = lazy(() => import('../pages/superadmin/SuperAdminPayments'));
-const SuperAdminDisputes = lazy(() => import('../pages/superadmin/SuperAdminDisputes'));
-const SuperAdminTickets = lazy(() => import('../pages/superadmin/SuperAdminTickets'));
-const SuperAdminAdmins = lazy(() => import('../pages/superadmin/SuperAdminAdmins'));
 const SuperAdminSettings = lazy(() => import('../pages/superadmin/SuperAdminSettings'));
 const SuperAdminReports = lazy(() => import('../pages/superadmin/SuperAdminReports'));
 const SuperAdminAuditLogs = lazy(() => import('../pages/superadmin/SuperAdminAuditLogs'));
@@ -185,11 +181,12 @@ export default function AppRoutes() {
             <Route path="/supplier/orders" element={<SupplierOrders />} />
             <Route path="/supplier/inquiries" element={<SupplierInquiries />} />
             <Route path="/supplier/analytics" element={<SupplierAnalytics />} />
-            <Route path="/supplier/settings" element={<SupplierSettings />} />
+            <Route path="/supplier/settings" element={<Navigate to="/supplier/account-settings" replace />} />
             <Route path="/supplier/account-settings" element={<AccountSettingsPage />} />
             <Route path="/supplier/account-settings/:section" element={<AccountSettingsPage />} />
             <Route path="/supplier/dashboard" element={<SupplierDashboard />} />
-            <Route path="/supplier/quotations" element={<SupplierQuotations />} />
+            {/* Standalone Quotations page removed: quotes are handled inside Buyer RFQs */}
+            <Route path="/supplier/quotations" element={<Navigate to="/supplier/inquiries" replace />} />
             <Route path="/supplier/transport" element={<SupplierTransport />} />
             <Route path="/supplier/shipping" element={<Navigate to="/supplier/transport" replace />} />
             <Route path="/supplier/logistics" element={<Navigate to="/supplier/transport" replace />} />
@@ -209,9 +206,10 @@ export default function AppRoutes() {
             <Route path="/exporter/orders" element={<SupplierOrders />} />
             <Route path="/exporter/inquiries" element={<SupplierInquiries />} />
             <Route path="/exporter/analytics" element={<SupplierAnalytics />} />
-            <Route path="/exporter/settings" element={<SupplierSettings />} />
+            <Route path="/exporter/settings" element={<Navigate to="/exporter/account-settings" replace />} />
             <Route path="/exporter/account-settings" element={<AccountSettingsPage />} />
-            <Route path="/exporter/quotations" element={<SupplierQuotations />} />
+            <Route path="/exporter/account-settings/:section" element={<AccountSettingsPage />} />
+            <Route path="/exporter/quotations" element={<Navigate to="/exporter/inquiries" replace />} />
             <Route path="/exporter/transport" element={<SupplierTransport />} />
             <Route path="/exporter/payments" element={<SupplierPayments />} />
             <Route path="/exporter/profile" element={<SupplierProfile />} />
@@ -237,15 +235,19 @@ export default function AppRoutes() {
             <Route path="/super-admin/users" element={<SuperAdminUsers />} />
             <Route path="/super-admin/suppliers" element={<SuperAdminSuppliers />} />
             <Route path="/super-admin/supplier-documents" element={<SuperAdminSupplierDocuments />} />
+            <Route path="/super-admin/deletion-requests" element={<SuperAdminDeletionRequests />} />
             <Route path="/super-admin/products" element={<SuperAdminProducts />} />
             <Route path="/super-admin/categories" element={<SuperAdminCategories />} />
             <Route path="/super-admin/rfqs" element={<SuperAdminRfqs />} />
             <Route path="/super-admin/orders" element={<SuperAdminOrders />} />
             <Route path="/super-admin/inventory" element={<SupplierInventory />} />
             <Route path="/super-admin/payments" element={<SuperAdminPayments />} />
-            <Route path="/super-admin/disputes" element={<SuperAdminDisputes />} />
-            <Route path="/super-admin/tickets" element={<SuperAdminTickets />} />
-            <Route path="/super-admin/admins" element={<SuperAdminAdmins />} />
+            {/* Dispute Console removed for now; old links go to the dashboard */}
+            <Route path="/super-admin/disputes" element={<Navigate to="/super-admin" replace />} />
+            {/* Support Desk removed for now; old links go to the dashboard */}
+            <Route path="/super-admin/tickets" element={<Navigate to="/super-admin" replace />} />
+            {/* Admin Staff & Roles removed for now; old links go to the dashboard */}
+            <Route path="/super-admin/admins" element={<Navigate to="/super-admin" replace />} />
             <Route path="/super-admin/settings" element={<SuperAdminSettings />} />
             <Route path="/super-admin/account-settings" element={<AccountSettingsPage />} />
             <Route path="/super-admin/account-settings/:section" element={<AccountSettingsPage />} />

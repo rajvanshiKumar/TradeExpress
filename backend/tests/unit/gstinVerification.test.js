@@ -15,6 +15,7 @@ process.env.GST_API_ID = 'test_id';
 process.env.GST_API_KEY = 'test_key';
 process.env.GST_TOKEN_ID = 'test_token';
 delete process.env.GST_TEST_MODE; // a local .env must not change these results
+delete process.env.GST_MOCK_FALLBACK;
 
 const GSTIN = '24ABCDE1234F1Z5';
 

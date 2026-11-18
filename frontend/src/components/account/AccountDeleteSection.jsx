@@ -9,6 +9,7 @@ import { CodeStep, Notice, Steps } from './AccountVerificationFlows';
 import useAuth from '../../hooks/useAuth';
 import useNotifications from '../../hooks/useNotifications';
 import { deleteAccount, getDeletionStatus, sendAccountCode, verifyAccountCode } from '../../services/accountApi';
+import SupplierDeletionRequestSection from './SupplierDeletionRequestSection';
 
 const CONSEQUENCES = [
   'You will be signed out on every device and will not be able to sign in to this account again.',
@@ -26,8 +27,13 @@ const BLOCKER_LINKS = {
   supplier: { ACTIVE_ORDERS: '/supplier/orders', ESCROW_HELD: '/supplier/payments', OPEN_DISPUTES: '/supplier/orders', PENDING_PAYOUTS: '/supplier/payments' },
 };
 
-/** Delete Account: review consequences and blockers, verify by email, confirm, then a final "are you sure" dialog. */
-export default function AccountDeleteSection({ settings, role }) {
+/** Suppliers send a deletion request for TradeExpress review; buyers delete their own account directly. */
+export default function AccountDeleteSection(props) {
+  return props.role === 'supplier' ? <SupplierDeletionRequestSection {...props} /> : <DirectAccountDelete {...props} />;
+}
+
+/** Delete Account (buyers): review consequences and blockers, verify by email, confirm, then a final "are you sure" dialog. */
+function DirectAccountDelete({ settings, role }) {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { showToast } = useNotifications();

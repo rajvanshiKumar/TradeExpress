@@ -1,24 +1,18 @@
+import { API_BASE_URL } from '../config/api.js';
+
 /**
- * Resilient Authentication API Client
- * Provides automatic multi-target fallback between:
- * 1. Direct backend (http://localhost:5000/api, http://127.0.0.1:5000/api)
- * 2. Configured public API (VITE_PUBLIC_API_BASE_URL)
- * 3. Vite reverse proxy (/api/auth)
+ * Authentication API client (login, OTP, registration).
  *
- * Ensures all login, OTP, and registration calls are completely immune to:
- * - CORS preflight issues (fully supported by backend)
- * - Missing proxy routes
- * - HTML fallback pages
- * - Host resolution / IPv6 vs IPv4 differences
+ * Every call goes to the backend named in VITE_PUBLIC_API_BASE_URL (frontend/.env), through src/config/api.js.
+ * There is no hidden fallback: if that backend cannot be reached, or answers with a web page instead of the
+ * API (for example a tunnel's sign-in or warning page), the caller gets a clear error. It never silently
+ * switches to localhost or another server.
  */
 
-let verifiedWorkingBase = null;
-
 /**
- * A 404 means "this target does not serve the auth API, try the next one" only when the reply is not
- * an API answer: an HTML page, a non-JSON body, or the backend's unmatched-route handler.
- * A JSON 404 from a real auth route (e.g. "No account found with this email", code ACCOUNT_NOT_FOUND)
- * is a genuine answer and must reach the caller instead of being reported as a connection failure.
+ * True when a reply is not an answer from the auth API: an HTML page, a non-JSON 404, or the backend's
+ * unmatched-route handler. A JSON 404 from a real auth route (e.g. "No account found with this email",
+ * code ACCOUNT_NOT_FOUND) is a genuine answer and must reach the caller.
  */
 export function isMissingRouteResponse(status, contentType, data) {
   if (String(contentType || '').includes('text/html')) return true;
@@ -36,41 +30,17 @@ const parseBody = (text) => {
   }
 };
 
-export function getAuthBaseCandidates() {
-  const envBase = (import.meta.env?.VITE_PUBLIC_API_BASE_URL || '').trim().replace(/\/+$/, '');
-  const candidates = [];
-
-  // Prioritize previously verified working target
-  if (verifiedWorkingBase) {
-    candidates.push(verifiedWorkingBase);
-  }
-
-  // 1. Explicit env configuration or direct backend loopbacks
-  if (envBase) {
-    candidates.push(envBase);
-  }
-  // Local backend fallbacks only for development, or when the site itself is opened on this computer.
-  // A deployed page must never probe the visitor's own machine.
-  const isDevBuild = import.meta.env?.DEV !== false;
-  const onLocalhost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location?.hostname || '');
-  if (isDevBuild || onLocalhost) {
-    candidates.push('http://localhost:5000/api');
-    candidates.push('http://127.0.0.1:5000/api');
-  }
-
-  // 2. Relative reverse proxy
-  if (typeof window !== 'undefined' && window.location) {
-    candidates.push('/api');
-  }
-
-  // Deduplicate preserving order
-  return candidates.filter((item, index, self) => item && self.indexOf(item) === index);
-}
+const failure = (status, message) => ({
+  ok: false,
+  status,
+  data: { success: false, message },
+  error: message,
+});
 
 /**
- * Resiliently executes an authentication HTTP request with candidate failover.
+ * Executes an authentication HTTP request against the configured backend.
  * @param {string} endpoint - Path such as '/auth/login', '/auth/login-mobile', '/auth/send-mobile-login-otp'
- * @param {RequestInit} [options] - Standard fetch options
+ * @param {RequestInit & { timeoutMs?: number }} [options] - Standard fetch options
  * @returns {Promise<{ ok: boolean, status: number, data: any, response?: Response, error?: string }>}
  */
 export async function authFetch(endpoint, options = {}) {
@@ -79,61 +49,35 @@ export async function authFetch(endpoint, options = {}) {
     cleanEndpoint = cleanEndpoint.slice(4);
   }
   const fullEndpoint = cleanEndpoint.startsWith('/auth') ? cleanEndpoint : `/auth${cleanEndpoint}`;
+  const { timeoutMs = 30000, ...fetchOptions } = options;
 
-  const candidates = getAuthBaseCandidates();
-  let lastNetworkError = null;
-  const requestSignal = options.signal || AbortSignal.timeout(12000);
-
-  for (const candidate of candidates) {
-    const url = `${candidate}${fullEndpoint}`;
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: requestSignal,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          ...(options.headers || {}),
-        },
-      });
-
-      const contentType = response.headers.get('content-type') || '';
-      // HTML (e.g. Vite SPA index.html fallback) or an unmatched-route 404 means this candidate did not
-      // reach the auth API. Skip to next candidate.
-      if (contentType.includes('text/html')) {
-        continue;
-      }
-      const data = parseBody(await response.text());
-      if (isMissingRouteResponse(response.status, contentType, data)) {
-        continue;
-      }
-
-      // Valid API response received (success or 4xx/5xx from Express, including JSON 404 answers)
-      verifiedWorkingBase = candidate;
-
-      return {
-        ok: response.ok,
-        status: response.status,
-        data: data || {},
-        response,
-      };
-    } catch (err) {
-      lastNetworkError = err;
-      if (verifiedWorkingBase === candidate) {
-        verifiedWorkingBase = null;
-      }
-      // Try next candidate
-    }
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${fullEndpoint}`, {
+      ...fetchOptions,
+      signal: fetchOptions.signal || AbortSignal.timeout(timeoutMs),
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(fetchOptions.headers || {}),
+      },
+    });
+  } catch (err) {
+    console.error('The authentication server could not be reached.', err?.name || 'NetworkError');
+    return failure(0, 'Unable to connect to the authentication server. Please ensure the backend is running and reachable.');
   }
 
-  console.error('All authentication server endpoints failed to connect.', lastNetworkError?.name || 'NetworkError');
+  const contentType = response.headers.get('content-type') || '';
+  const data = parseBody(await response.text());
+  if (isMissingRouteResponse(response.status, contentType, data)) {
+    console.error(`The backend address in VITE_PUBLIC_API_BASE_URL did not answer as the TradeExpress API (${API_BASE_URL}).`);
+    return failure(0, 'Unable to connect to the authentication server. The configured backend address did not answer as the TradeExpress API.');
+  }
+
   return {
-    ok: false,
-    status: 0,
-    data: {
-      success: false,
-      message: 'Unable to connect to the authentication server. Please ensure the backend is running.',
-    },
-    error: 'Unable to connect to the authentication server. Please check your connection.',
+    ok: response.ok,
+    status: response.status,
+    data: data || {},
+    response,
   };
 }

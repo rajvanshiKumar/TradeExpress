@@ -79,6 +79,18 @@ const conversationInclude = {
   },
 };
 
+function normalizeEntitySlug(text) {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .toLowerCase()
+    .replace(/^inquiry\s+(?:for|regarding|:)\s+/i, '')
+    .replace(/\binterprises\b/g, 'enterprises')
+    .replace(/\binterprise\b/g, 'enterprise')
+    .replace(/[^a-z0-9]/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
 /**
  * Normalizes message object for consistent frontend consumption.
  */
@@ -382,13 +394,31 @@ export async function createOrGetConversation({
 
     // 2. If no exact context match, reuse ANY existing conversation between this buyer and supplier
     if (!existing) {
+      const companyName = (supplier.company || '').trim();
+      const contactName = (supplier.name || '').trim();
+      const altCompany = companyName.includes('Interprises')
+        ? companyName.replace(/Interprises/g, 'Enterprises')
+        : companyName.replace(/Enterprises/g, 'Interprises');
+
       existing = await tx.conversation.findFirst({
         where: {
           buyerId: resolvedBuyerId,
           OR: [
             { supplierId: supplier.id },
             ...(companyId ? [{ companyId }] : []),
-            ...(supplier.company ? [{ companyId: supplier.company }] : []),
+            ...(companyName ? [
+              { companyId: companyName },
+              { supplier: { company: { equals: companyName } } },
+              { subject: { contains: companyName } },
+            ] : []),
+            ...(altCompany && altCompany !== companyName ? [
+              { companyId: altCompany },
+              { supplier: { company: { equals: altCompany } } },
+              { subject: { contains: altCompany } },
+            ] : []),
+            ...(contactName ? [
+              { supplier: { name: { equals: contactName } } },
+            ] : []),
           ],
         },
         include: conversationInclude,
@@ -508,20 +538,45 @@ export async function listConversations(userId, role, search = '') {
     orderBy: { lastMessageAt: 'desc' },
   });
 
-  // Consolidate conversations between the same buyer and supplier so only one clean thread appears
-  const partyMap = new Map();
+  // Pass 1: Build cross-reference alias maps for robust supplier identity resolution
+  const idToCompany = new Map();
+  const compIdToCompany = new Map();
+  const contactToCompany = new Map();
+
   for (const conv of rawConversations) {
-    const normSupplier = (
-      conv.supplier?.company ||
-      conv.supplier?.name ||
-      conv.companyId ||
-      conv.supplierId ||
-      ''
-    ).toString().trim().toLowerCase();
-    const pairKey = `${conv.buyerId}_${conv.supplierId || normSupplier || 'supplier'}`;
+    const rawCompany = conv.supplier?.company || conv.companyId || '';
+    const norm = normalizeEntitySlug(rawCompany);
+    if (norm && norm !== 'supplier') {
+      if (conv.supplierId) idToCompany.set(String(conv.supplierId), norm);
+      if (conv.companyId) compIdToCompany.set(String(conv.companyId), norm);
+      if (conv.supplier?.name) contactToCompany.set(normalizeEntitySlug(conv.supplier.name), norm);
+    }
+  }
+
+  // Pass 2: Consolidate conversations between the same buyer and supplier so only one clean thread appears
+  const partyMap = new Map();
+  const duplicateEmptyIds = [];
+  const duplicateWithMessages = [];
+
+  for (const conv of rawConversations) {
+    let normSupplier = normalizeEntitySlug(conv.supplier?.company || '');
+    if (!normSupplier || normSupplier === 'supplier') {
+      if (conv.supplierId && idToCompany.has(String(conv.supplierId))) {
+        normSupplier = idToCompany.get(String(conv.supplierId));
+      } else if (conv.companyId && compIdToCompany.has(String(conv.companyId))) {
+        normSupplier = compIdToCompany.get(String(conv.companyId));
+      } else if (conv.supplier?.name && contactToCompany.has(normalizeEntitySlug(conv.supplier.name))) {
+        normSupplier = contactToCompany.get(normalizeEntitySlug(conv.supplier.name));
+      } else {
+        normSupplier = normalizeEntitySlug(conv.subject || '');
+      }
+    }
+
+    const pairKey = `${conv.buyerId}_${normSupplier || conv.supplierId || 'supplier'}`;
     if (!partyMap.has(pairKey)) {
       partyMap.set(pairKey, {
         ...conv,
+        mergedIds: [conv.id],
         messages: Array.isArray(conv.messages) ? conv.messages : [],
       });
     } else {
@@ -546,6 +601,12 @@ export async function listConversations(userId, role, search = '') {
       const primary = preferConv ? conv : existing;
       const secondary = preferConv ? existing : conv;
 
+      if ((secondary.messages || []).length === 0) {
+        duplicateEmptyIds.push(secondary.id);
+      } else {
+        duplicateWithMessages.push({ fromId: secondary.id, toId: primary.id });
+      }
+
       let bestSubject = primary.subject;
       if (
         (!bestSubject || bestSubject.toLowerCase() === 'inquiry for supplier') &&
@@ -559,6 +620,7 @@ export async function listConversations(userId, role, search = '') {
         ...secondary,
         ...primary,
         id: primary.id,
+        mergedIds: [...new Set([...(existing.mergedIds || []), conv.id])],
         subject: bestSubject || primary.subject || 'Inquiry',
         messages: mergedMessages,
         lastMessageAt: new Date(
@@ -570,6 +632,19 @@ export async function listConversations(userId, role, search = '') {
         unreadBuyer: (primary.unreadBuyer || 0) + (secondary.unreadBuyer || 0),
         unreadSupplier: (primary.unreadSupplier || 0) + (secondary.unreadSupplier || 0),
       });
+    }
+  }
+
+  // Silently heal database by removing duplicate ghost rows
+  if (duplicateEmptyIds.length > 0) {
+    prisma.conversation.deleteMany({ where: { id: { in: duplicateEmptyIds } } }).catch(() => {});
+  }
+  if (duplicateWithMessages.length > 0) {
+    for (const { fromId, toId } of duplicateWithMessages) {
+      prisma.message
+        .updateMany({ where: { conversationId: fromId }, data: { conversationId: toId } })
+        .then(() => prisma.conversation.delete({ where: { id: fromId } }))
+        .catch(() => {});
     }
   }
 
@@ -623,12 +698,18 @@ export async function getConversationById(conversationId, user) {
   }
 
   // If this conversation has 0 messages, check if another conversation between the same parties has messages
-  if ((!conv.messages || conv.messages.length === 0) && conv.buyerId && conv.supplierId) {
+  if ((!conv.messages || conv.messages.length === 0) && conv.buyerId) {
+    const rawCompany = conv.supplier?.company || '';
+    const norm = normalizeEntitySlug(rawCompany);
     const companion = await prisma.conversation.findFirst({
       where: {
         buyerId: conv.buyerId,
-        supplierId: conv.supplierId,
         id: { not: conv.id },
+        OR: [
+          ...(conv.supplierId ? [{ supplierId: conv.supplierId }] : []),
+          ...(rawCompany ? [{ supplier: { company: { equals: rawCompany } } }] : []),
+          ...(norm ? [{ subject: { contains: norm } }] : []),
+        ],
         messages: { some: {} },
       },
       include: conversationInclude,
@@ -638,6 +719,9 @@ export async function getConversationById(conversationId, user) {
       conv.messages = companion.messages;
       if (companion.subject && (!conv.subject || conv.subject.toLowerCase() === 'inquiry for supplier')) {
         conv.subject = companion.subject;
+      }
+      if (!conv.supplier && companion.supplier) {
+        conv.supplier = companion.supplier;
       }
     }
   }
