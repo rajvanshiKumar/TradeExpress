@@ -7,6 +7,7 @@ import prisma from '../../src/config/db.js';
 import { loginUser, registerBuyer } from '../../src/services/authService.js';
 import { issueVerifiedEmailToken, resendMobileOtp, verifyMobileOtp } from '../../src/services/otpService.js';
 import { sendOtp } from '../../src/services/msg91Service.js';
+import { identityQuery, verifiedIdentity, TEST_PAN } from '../helpers/verifiedIdentity.js';
 
 let prismaStub;
 prisma.$use(async (params, next) => (prismaStub ? prismaStub(params) : null));
@@ -43,7 +44,11 @@ describe('Buyer registration validation', () => {
       if (previousMode === undefined) delete process.env.NODE_ENV;
       else process.env.NODE_ENV = previousMode;
     });
+    let linkedVerification = null;
     stubQueries(t, async (query) => {
+      if (query.model === 'AadhaarVerification' && query.action === 'updateMany') linkedVerification = query.args;
+      const identity = identityQuery(query);
+      if (identity !== undefined) return identity;
       if (query.model === 'User' && query.action === 'findUnique') return null;
       if (query.model === 'User' && query.action === 'findFirst') return null;
       if (query.model === 'UserSession' && query.action === 'create') return { id: 'session-signup', ...query.args.data };
@@ -52,7 +57,9 @@ describe('Buyer registration validation', () => {
       }
       return null;
     });
-    const result = await registerBuyer(registration());
+    const result = await registerBuyer(registration(verifiedIdentity()));
+    assert.equal(result.user.panAadhaarStatus, 'LINKED');
+    assert.equal(linkedVerification?.data?.userId, 'buyer-test', 'the Aadhaar verification is linked to the new account');
     // Buyers start with PENDING KYC until approved by Admin as required by TradeExpress verification policy
     assert.equal(result.user.isVerified, false);
     assert.equal(result.user.kycStatus, 'PENDING');
@@ -88,6 +95,64 @@ describe('Buyer registration validation', () => {
       throw new Error('Duplicate mobile should stop the flow.');
     });
     await assert.rejects(registerBuyer(registration()), (error) => error.statusCode === 409);
+  });
+});
+
+describe('Buyer signup identity rules (enforced on the server)', () => {
+  const allowSignup = (t, overrides = {}) => {
+    const created = [];
+    stubQueries(t, async (query) => {
+      if (overrides[query.model]?.[query.action]) return overrides[query.model][query.action](query);
+      const identity = identityQuery(query);
+      if (identity !== undefined) return identity;
+      if (query.model === 'User' && (query.action === 'findUnique' || query.action === 'findFirst')) return null;
+      if (query.model === 'UserSession' && query.action === 'create') return { id: 'session-signup', ...query.args.data };
+      if (query.model === 'User' && query.action === 'create') { created.push(query.args.data); return { id: 'buyer-id', ...query.args.data }; }
+      return null;
+    });
+    return created;
+  };
+
+  it('an Indian buyer cannot sign up without a verified Aadhaar', async (t) => {
+    const created = allowSignup(t);
+    // Nothing about Aadhaar or its PAN link is sent (e.g. a direct API call that skips the form)
+    await assert.rejects(registerBuyer(registration({ pan: TEST_PAN })), (e) => e.statusCode === 400 && e.errorCode === 'AADHAAR_NOT_VERIFIED');
+    assert.equal(created.length, 0);
+  });
+
+  it('an Indian buyer cannot sign up without a PAN verified as linked', async (t) => {
+    const created = allowSignup(t);
+    const { panAadhaarToken, panAadhaarStatus, panAadhaarLinked, ...rest } = verifiedIdentity();
+    await assert.rejects(registerBuyer(registration(rest)), (e) => e.statusCode === 400 && e.errorCode === 'PAN_AADHAAR_NOT_VERIFIED');
+    assert.equal(created.length, 0);
+  });
+
+  it('a forged or mismatched Aadhaar token is refused with a code the browser can act on', async (t) => {
+    allowSignup(t);
+    await assert.rejects(registerBuyer(registration({ ...verifiedIdentity(), aadhaarVerificationToken: 'forged' })), (e) => e.errorCode === 'AADHAAR_VERIFICATION_EXPIRED');
+    // Another Aadhaar number than the verified one: refused by whichever proof is checked first
+    await assert.rejects(registerBuyer(registration({ ...verifiedIdentity(), aadhaarNumber: '999912341234' })), (e) => ['AADHAAR_MISMATCH', 'PAN_AADHAAR_MISMATCH'].includes(e.errorCode));
+  });
+
+  it('a PAN already on another account is refused', async (t) => {
+    const created = allowSignup(t, { User: { findFirst: (q) => (q.args.where?.pan === TEST_PAN ? { id: 'someone-else' } : null) } });
+    await assert.rejects(registerBuyer(registration(verifiedIdentity())), (e) => e.statusCode === 409 && e.errorCode === 'PAN_ALREADY_REGISTERED');
+    assert.equal(created.length, 0);
+  });
+
+  it('an Aadhaar already used by another account is refused', async (t) => {
+    const created = allowSignup(t, { AadhaarVerification: { findFirst: () => ({ id: 'used-elsewhere' }) } });
+    await assert.rejects(registerBuyer(registration(verifiedIdentity())), (e) => e.statusCode === 409 && e.errorCode === 'AADHAAR_ALREADY_REGISTERED');
+    assert.equal(created.length, 0);
+  });
+
+  it('a buyer outside India is not asked for Aadhaar or PAN', async (t) => {
+    const created = allowSignup(t);
+    await registerBuyer(registration({ country: 'United Arab Emirates', phone: '501234567' })).catch((e) => {
+      // A phone-format rule for that country is fine; the identity rule must not be the reason
+      assert.ok(!['AADHAAR_NOT_VERIFIED', 'PAN_AADHAAR_NOT_VERIFIED'].includes(e.errorCode), e.message);
+    });
+    assert.ok(created.length <= 1);
   });
 });
 

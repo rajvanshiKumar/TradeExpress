@@ -14,6 +14,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+// Render and devtunnels put one proxy in front of the app: trust it so req.ip is the real client
+// (rate limits are per client, not one shared bucket for everyone). TRUST_PROXY_HOPS=0 turns it off.
+app.set('trust proxy', Number.parseInt(process.env.TRUST_PROXY_HOPS ?? '1', 10) || false);
 
 // Security and utility middleware
 app.use(

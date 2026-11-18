@@ -16,10 +16,8 @@ import {
   BadgeCheck,
   Sparkles,
   ArrowRight,
-  Building2,
   Shield,
   FileCheck2,
-  Clock,
 } from 'lucide-react';
 
 import CustomSelect from '../common/CustomSelect';
@@ -34,6 +32,9 @@ import { normalizeEmail, parseMobile, mobileExample } from '../../utils/validato
 import { enterOtpDigits, isCompleteOtp, otpSlots } from '../../utils/otpDigits';
 import { GoogleSignInCancelled, isGoogleSignInConfigured, signInWithGoogle } from '../../services/googleAuth';
 import { apiUrl } from '../../config/api.js';
+import useAadhaarOtp from '../../hooks/useAadhaarOtp.js';
+import { clearSignupSession, loadSignupSession, resolveResume, saveSignupSession } from '../../utils/signupSession.js';
+import { apiErrorCode, identityReverifyScope, IDENTITY_EXPIRED_MESSAGE, IDENTITY_PROOF_LIFETIME_MS } from '../../utils/identityVerification.js';
 
 const COUNTRY_DIAL_OPTIONS = COUNTRIES.map((c) => ({
   value: c,
@@ -46,6 +47,27 @@ const getApiUrl = (endpoint) => apiUrl(endpoint);
 const SERVER_UNREACHABLE = 'Unable to reach the TradeExpress server. Please check your connection and try again.';
 // OTP and registration calls wait for email/SMS delivery and password hashing on the server
 const AUTH_REQUEST_TIMEOUT_MS = 20000;
+
+/** Aadhaar / PAN input: green once verified, red on error. */
+const idFieldClass = (verified, hasError) => `w-full rounded-xl border pl-9 pr-[5rem] sm:pl-10 sm:pr-28 py-3 text-[13px] sm:text-sm font-mono sm:tracking-wider transition focus:outline-none focus:ring-2 disabled:cursor-not-allowed ${
+  verified
+    ? 'border-emerald-500 bg-emerald-50/70 text-emerald-900 font-semibold'
+    : hasError
+      ? 'border-red-500 bg-red-50/20 focus:ring-red-500/20'
+      : 'border-slate-300 bg-white focus:border-emerald-700 focus:ring-emerald-600/30 disabled:bg-slate-50 disabled:text-slate-400'
+}`;
+
+/** Verify button that sits inside the right end of the Aadhaar / PAN input. */
+const INLINE_VERIFY_BUTTON = 'inline-flex min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-800 px-3 py-2 sm:min-w-[4.75rem] sm:px-3.5 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-white disabled:shadow-none';
+
+function VerifiedBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2 py-1.5 text-xs font-bold text-white shadow-xs sm:px-2.5">
+      <CheckCircle2 className="h-3.5 w-3.5" />
+      Verified
+    </span>
+  );
+}
 
 export default function BuyerRegisterForm({ onRoleChange }) {
   const { setAuthUser } = useAuth();
@@ -66,9 +88,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     countryCode: 'India',
     companyName: '',
     aadhaarNumber: '',
-    aadhaarConsent: false,
     panNumber: '',
-    agreeTerms: false,
   });
 
   const [errors, setErrors] = useState({});
@@ -97,6 +117,55 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const [phoneOtpError, setPhoneOtpError] = useState('');
   const [phoneOtpLocked, setPhoneOtpLocked] = useState(false);
 
+  // Signup session: once the email is verified, progress survives a refresh (see utils/signupSession).
+  // resumeStep is where to continue after re-verifying an email whose session expired.
+  const [resumeStep, setResumeStep] = useState(null);
+  const [sessionNotice, setSessionNotice] = useState('');
+  const sessionRestoredRef = useRef(false);
+
+  useEffect(() => {
+    const session = loadSignupSession('buyer');
+    sessionRestoredRef.current = true;
+    if (!session) return;
+    const resume = resolveResume(session);
+    setValues((prev) => ({
+      ...prev,
+      name: session.name || '',
+      email: session.email || '',
+      phone: session.phone || '',
+      countryCode: session.countryCode || 'India',
+    }));
+    if (resume.emailValid) {
+      setEmailVerified(true);
+      setEmailToken(session.emailToken);
+    }
+    if (resume.phoneValid) {
+      setPhoneVerified(true);
+      setPhoneToken(session.phoneToken);
+    }
+    setCurrentStep(resume.step);
+    setResumeStep(resume.resumeStep);
+    setSessionNotice(resume.emailValid ? '' : 'Your session has expired. Please verify your email again to continue where you left off.');
+  }, []);
+
+  useEffect(() => {
+    // A session exists only after the email is verified; a finished signup clears it instead
+    if (!sessionRestoredRef.current || submittedData || !emailVerified || !emailToken) return;
+    const previous = loadSignupSession('buyer');
+    const phoneProof = phoneVerified && phoneToken
+      ? { phoneToken, phoneVerifiedAt: previous?.phoneToken === phoneToken && previous.phoneVerifiedAt ? previous.phoneVerifiedAt : Date.now() }
+      : {};
+    saveSignupSession('buyer', {
+      email: values.email,
+      name: values.name,
+      phone: values.phone,
+      countryCode: values.countryCode,
+      emailToken,
+      step: currentStep,
+      ...phoneProof,
+    });
+  }, [emailVerified, emailToken, phoneVerified, phoneToken, currentStep, values.name, values.email, values.phone, values.countryCode, submittedData]);
+
   // Step 3: PAN-Aadhaar Link Verification States
   const [panAadhaarVerifying, setPanAadhaarVerifying] = useState(false);
   const [panAadhaarLinked, setPanAadhaarLinked] = useState(false);
@@ -105,8 +174,40 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const [maskedAadhaar, setMaskedAadhaar] = useState('');
   const [maskedPan, setMaskedPan] = useState('');
   const [linkError, setLinkError] = useState('');
-  const [allowManualKyc, setAllowManualKyc] = useState(false);
-  const [manualKycAccepted, setManualKycAccepted] = useState(false);
+  // Aadhaar verified with OTP (step 1); the PAN–Aadhaar link check (step 2) needs its token
+  const [aadhaarOtp, setAadhaarOtp] = useState(null);
+  const aadhaarFlow = useAadhaarOtp({
+    aadhaarNumber: values.aadhaarNumber,
+    onVerified: (result) => {
+      setAadhaarOtp(result);
+      setLinkError('');
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.panAadhaar;
+        delete next.aadhaarNumber;
+        return next;
+      });
+    },
+  });
+  // Terms & Conditions, accepted after both checks are verified
+  const [agreeTerms, setAgreeTerms] = useState(false);
+
+  /** Clears the PAN proof (scope 'pan') or both proofs (scope 'aadhaar') so the user verifies again. */
+  const resetIdentityVerification = (message, scope = 'aadhaar') => {
+    if (scope === 'aadhaar') setAadhaarOtp(null);
+    setPanAadhaarLinked(false);
+    setPanAadhaarToken(null);
+    setMaskedPan('');
+    setAgreeTerms(false);
+    setLinkError(message || '');
+  };
+
+  // The server's proofs last 30 minutes: expire them here first, so an old proof is never submitted
+  useEffect(() => {
+    if (!aadhaarOtp) return undefined;
+    const timer = setTimeout(() => resetIdentityVerification(IDENTITY_EXPIRED_MESSAGE), IDENTITY_PROOF_LIFETIME_MS);
+    return () => clearTimeout(timer);
+  }, [aadhaarOtp]);
 
   // Compatibility aliases
   const aadhaarVerified = panAadhaarLinked;
@@ -125,6 +226,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const phoneOtpLockRef = useRef(false);
   const emailVerifyLockRef = useRef(false);
   const phoneVerifyLockRef = useRef(false);
+  const aadhaarOtpInputsRef = useRef([]);
 
   // Countdown timers for OTP cooldowns
   useEffect(() => {
@@ -180,15 +282,13 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     } else if (field === 'aadhaarNumber') {
       val = String(val || '').replace(/\D/g, '').slice(0, 12);
       setPanAadhaarLinked(false);
+      setPanAadhaarToken(null);
+      if (val !== values.aadhaarNumber) setAadhaarOtp(null);
       setLinkError('');
-      setAllowManualKyc(false);
-      setManualKycAccepted(false);
     } else if (field === 'panNumber') {
       val = String(val || '').toUpperCase().slice(0, 10);
       setPanAadhaarLinked(false);
       setLinkError('');
-      setAllowManualKyc(false);
-      setManualKycAccepted(false);
     }
 
     setValues((prev) => ({ ...prev, [field]: val }));
@@ -304,9 +404,18 @@ export default function BuyerRegisterForm({ onRoleChange }) {
         setEmailVerified(true);
         setEmailToken(data.verificationToken);
         setEmailOtpSent(false);
-        // Automatically redirect to Step 2 upon successful email verification
+        // Same email as the expired session: continue on the step the user was on; otherwise start Step 2
+        const saved = loadSignupSession('buyer');
+        const continueAt = resumeStep && saved?.email === cleanEmail ? resumeStep : 2;
+        if (saved && saved.email !== cleanEmail) {
+          clearSignupSession('buyer');
+          setPhoneVerified(false);
+          setPhoneToken('');
+        }
+        setResumeStep(null);
+        setSessionNotice('');
         setTimeout(() => {
-          setCurrentStep(2);
+          setCurrentStep(continueAt);
           window.scrollTo({ top: 80, behavior: 'smooth' });
         }, 300);
       } else if (res.status === 429) {
@@ -458,10 +567,14 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   };
 
   // Helper for 6-box OTP input management (positions are kept when a box is cleared; see utils/otpDigits)
+  const otpBoxes = (type) => ({
+    phone: { value: phoneOtp, set: setPhoneOtp, ref: phoneOtpInputsRef, submit: () => handleVerifyPhoneOtp() },
+    email: { value: emailOtp, set: setEmailOtp, ref: emailOtpInputsRef, submit: () => handleVerifyEmailOtp() },
+    aadhaar: { value: aadhaarFlow.otp, set: aadhaarFlow.setOtp, ref: aadhaarOtpInputsRef, submit: () => aadhaarFlow.verify() },
+  })[type];
+
   const handleOtpBoxChange = (type, index, value) => {
-    const currentVal = type === 'phone' ? phoneOtp : emailOtp;
-    const setOtpVal = type === 'phone' ? setPhoneOtp : setEmailOtp;
-    const inputsRef = type === 'phone' ? phoneOtpInputsRef : emailOtpInputsRef;
+    const { value: currentVal, set: setOtpVal, ref: inputsRef } = otpBoxes(type);
 
     const { value: next, focusIndex } = enterOtpDigits(currentVal, index, value);
     setOtpVal(next);
@@ -469,8 +582,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   };
 
   const handleOtpBoxKeyDown = (type, index, e) => {
-    const currentVal = type === 'phone' ? phoneOtp : emailOtp;
-    const inputsRef = type === 'phone' ? phoneOtpInputsRef : emailOtpInputsRef;
+    const { value: currentVal, ref: inputsRef, submit } = otpBoxes(type);
 
     if (e.key === 'Backspace' && !otpSlots(currentVal)[index] && index > 0) {
       inputsRef.current[index - 1]?.focus();
@@ -482,8 +594,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       inputsRef.current[index + 1]?.focus();
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (type === 'phone') handleVerifyPhoneOtp();
-      else handleVerifyEmailOtp();
+      submit();
     }
   };
 
@@ -492,15 +603,9 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     const pasted = e.clipboardData.getData('text/plain').replace(/\D/g, '').slice(0, 6);
     if (!pasted) return;
 
-    if (type === 'phone') {
-      setPhoneOtp(pasted);
-      const targetIdx = Math.min(5, pasted.length - 1);
-      phoneOtpInputsRef.current[targetIdx]?.focus();
-    } else {
-      setEmailOtp(pasted);
-      const targetIdx = Math.min(5, pasted.length - 1);
-      emailOtpInputsRef.current[targetIdx]?.focus();
-    }
+    const { set, ref } = otpBoxes(type);
+    set(pasted);
+    ref.current[Math.min(5, pasted.length - 1)]?.focus();
   };
 
   // ============================================================
@@ -520,8 +625,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       return;
     }
 
-    if (!values.aadhaarConsent) {
-      setLinkError('Explicit statutory consent is required to verify PAN–Aadhaar link status.');
+    if (!aadhaarOtp?.verificationToken) {
+      setLinkError('Please verify your Aadhaar with OTP first.');
       return;
     }
 
@@ -537,9 +642,9 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           aadhaarNumber: rawAadhaar,
           pan: rawPan,
           userConsent: true,
-          bypassCache: true,
+          aadhaarVerificationToken: aadhaarOtp.verificationToken,
         }),
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(35000),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -551,8 +656,6 @@ export default function BuyerRegisterForm({ onRoleChange }) {
         setMaskedAadhaar(`•••• •••• ${rawAadhaar.slice(-4)}`);
         setMaskedPan(linkData.maskedPan || `${rawPan.slice(0, 2)}XXXXXX${rawPan.slice(-2)}`);
         setLinkError('');
-        setAllowManualKyc(false);
-        setManualKycAccepted(false);
         setErrors((prev) => {
           const next = { ...prev };
           delete next.panAadhaar;
@@ -567,16 +670,9 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           linkData?.message ||
           data.message ||
           'Aadhaar is not linked with the entered PAN in Income Tax statutory records.';
-        setLinkError(errorMsg);
-        const isUnavailable =
-          /unavailable|unreachable|timeout|timed out|credit|support|could not be reached/i.test(errorMsg) ||
-          linkData?.reason === 'PROVIDER_ENDPOINT_NOT_FOUND' ||
-          linkData?.reason === 'PROVIDER_UNREACHABLE' ||
-          linkData?.reason === 'PROVIDER_TIMEOUT' ||
-          linkData?.reason === 'PROVIDER_NOT_CONFIGURED';
-        if (isUnavailable) {
-          setAllowManualKyc(true);
-        }
+        // An expired / used Aadhaar proof (or too many PAN attempts) needs a fresh Aadhaar OTP
+        if (identityReverifyScope(apiErrorCode(data)) === 'aadhaar') resetIdentityVerification(errorMsg);
+        else setLinkError(errorMsg);
       }
     } catch (err) {
       setPanAadhaarLinked(false);
@@ -587,7 +683,6 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           ? 'Income Tax verification server timed out. Please verify your internet connection and try again.'
           : 'Unable to connect to Income Tax verification service. Please try again.'
       );
-      setAllowManualKyc(true);
     } finally {
       setPanAadhaarVerifying(false);
     }
@@ -627,11 +722,13 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
   const validateStep3 = () => {
     const stepErrors = {};
-    if (!panAadhaarLinked && !manualKycAccepted) {
+    if (!aadhaarOtp?.verificationToken) {
+      stepErrors.panAadhaar = 'Please verify your Aadhaar with OTP first.';
+    } else if (!panAadhaarLinked) {
       stepErrors.panAadhaar = 'Please verify that your Aadhaar is linked with your PAN card to proceed.';
     }
-    if (!values.agreeTerms) {
-      stepErrors.agreeTerms = 'You must accept the Buyer Terms of Service and Privacy Policy.';
+    if (!agreeTerms) {
+      stepErrors.agreeTerms = 'Please accept the TradeExpress Terms & Conditions.';
     }
     setErrors(stepErrors);
     return Object.keys(stepErrors).length === 0;
@@ -696,9 +793,10 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       aadhaarNumber: rawAadhaar,
       aadhaarConsent: true,
       aadhaarLast4: rawAadhaar.slice(-4),
-      panAadhaarStatus: panAadhaarLinked ? 'LINKED' : (manualKycAccepted ? 'PENDING' : 'NOT_STARTED'),
+      panAadhaarStatus: panAadhaarLinked ? 'LINKED' : 'NOT_STARTED',
       panAadhaarLinked: Boolean(panAadhaarLinked),
       panAadhaarToken: panAadhaarLinked ? panAadhaarToken : null,
+      aadhaarVerificationToken: aadhaarOtp?.verificationToken || null,
       verificationToken: phoneToken,
       emailVerificationToken: emailToken,
       agree: true,
@@ -719,6 +817,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
         if (data.data?.token) {
           storeAuthToken(data.data.token);
         }
+        clearSignupSession('buyer');
         if (setAuthUser && data.data) {
           await setAuthUser(data.data.user || data.data, data.data.token, '');
         }
@@ -730,6 +829,15 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           email: payload.email,
         });
         window.scrollTo({ top: 80, behavior: 'smooth' });
+        return;
+      }
+
+      // The server refused the Aadhaar / PAN proof (expired, used, different number): verify again on Step 3
+      const reverify = identityReverifyScope(apiErrorCode(data));
+      if (reverify) {
+        resetIdentityVerification(data.message, reverify);
+        setFormError('');
+        setCurrentStep(3);
         return;
       }
 
@@ -987,6 +1095,14 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           </button>
         </div>
       </div>
+
+      {/* Signup session expired: verify the email again to continue */}
+      {sessionNotice && currentStep === 1 && (
+        <div role="status" className="mb-6 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900">
+          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+          <span>{sessionNotice}</span>
+        </div>
+      )}
 
       {/* Global Form Error Alert */}
       {formError && (
@@ -1385,222 +1501,214 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       {/* ============================================================ */}
       {currentStep === 3 && (
         <div className="space-y-4">
-          {/* Optional Business / Company Name */}
-          <div>
-            <label htmlFor="buyer-signup-company" className="block text-xs font-bold text-slate-800 mb-1.5">
-              Company / Legal Business Name <span className="text-slate-400 font-normal">(Optional)</span>
-            </label>
-            <div className="relative">
-              <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input
-                id="buyer-signup-company"
-                type="text"
-                placeholder="e.g. Apex Global Trade Pvt Ltd"
-                value={values.companyName}
-                onChange={handleChange('companyName')}
-                className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-700"
-              />
-            </div>
-          </div>
-
-          {/* Unified PAN-Aadhaar Link Verification Box (Single Verify Action) */}
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-emerald-700" />
-                <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                  PAN & Aadhaar Link Verification <span className="text-red-500">*</span>
+          {/* Identity verification: Aadhaar by OTP, then PAN matched with the PAN linked to that Aadhaar */}
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-6 shadow-xs space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 ring-1 ring-emerald-100 sm:flex">
+                  <ShieldCheck className="h-4.5 w-4.5 text-emerald-700" />
                 </span>
-              </div>
-              {panAadhaarLinked && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-xs font-bold">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
-                  Linked & Verified
-                </span>
-              )}
-            </div>
-
-            {/* Inputs: Aadhaar and PAN Side by Side (50% / 50%) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Aadhaar Number Input */}
-              <div>
-                <label htmlFor="buyer-signup-aadhaar" className="block text-xs font-bold text-slate-800 mb-1.5">
-                  Aadhaar Card Number <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                  <input
-                    id="buyer-signup-aadhaar"
-                    type="text"
-                    placeholder="12-digit Aadhaar Number"
-                    disabled={panAadhaarLinked}
-                    value={panAadhaarLinked ? maskedAadhaar : values.aadhaarNumber}
-                    onChange={handleChange('aadhaarNumber')}
-                    maxLength={12}
-                    className={`w-full rounded-xl border pl-10 pr-3.5 py-2.5 text-sm font-mono transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-50 disabled:text-slate-600 ${
-                      errors.aadhaarNumber ? 'border-red-500 bg-red-50/20' : 'border-slate-300 focus:border-emerald-700'
-                    }`}
-                  />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900">Identity verification</p>
+                  <p className="text-[11px] text-slate-500">Verify your Aadhaar first, then your PAN.</p>
                 </div>
-                {errors.aadhaarNumber && (
-                  <p className="mt-1 text-xs text-red-600 font-medium">{errors.aadhaarNumber}</p>
-                )}
               </div>
-
-              {/* PAN Number Input */}
-              <div>
-                <label htmlFor="buyer-signup-pan" className="block text-xs font-bold text-slate-800 mb-1.5">
-                  PAN Card Number <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <FileCheck2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                  <input
-                    id="buyer-signup-pan"
-                    type="text"
-                    placeholder="10-digit PAN (e.g. ABCDE1234F)"
-                    disabled={panAadhaarLinked}
-                    value={panAadhaarLinked ? maskedPan : values.panNumber}
-                    onChange={handleChange('panNumber')}
-                    maxLength={10}
-                    className={`w-full rounded-xl border pl-10 pr-3.5 py-2.5 text-sm font-mono uppercase transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-50 disabled:text-slate-600 ${
-                      errors.panNumber ? 'border-red-500 bg-red-50/20' : 'border-slate-300 focus:border-emerald-700'
-                    }`}
-                  />
-                </div>
-                {errors.panNumber && (
-                  <p className="mt-1 text-xs text-red-600 font-medium">{errors.panNumber}</p>
-                )}
-              </div>
+              <span className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ${aadhaarOtp && panAadhaarLinked ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
+                {(aadhaarOtp ? 1 : 0) + (panAadhaarLinked ? 1 : 0)}/2 verified
+              </span>
             </div>
 
-            {/* Statutory Consent Checkbox */}
-            {!panAadhaarLinked && (
-              <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
-                <input
-                  type="checkbox"
-                  checked={values.aadhaarConsent}
-                  onChange={handleChange('aadhaarConsent')}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
-                />
-                <span className="text-[11px] leading-relaxed text-slate-500">
-                  I hereby provide voluntary statutory consent to verify my Aadhaar credentials and link status with PAN pursuant to the Aadhaar Act, 2016 and DPDP Act, 2023.
-                </span>
+            {/* 1. Aadhaar: Verify sends an OTP to the Aadhaar-linked mobile */}
+            <div>
+              <label htmlFor="buyer-signup-aadhaar" className="mb-1.5 block text-xs font-bold text-slate-800">
+                Aadhaar Card Number <span className="text-red-500">*</span>
               </label>
-            )}
-
-            {/* Single Verify Action Button */}
-            <div className="pt-1">
-              {!panAadhaarLinked ? (
-                <button
-                  type="button"
-                  onClick={handleVerifyPanAadhaarLink}
-                  disabled={
-                    panAadhaarVerifying ||
-                    values.aadhaarNumber.length !== 12 ||
-                    values.panNumber.length !== 10 ||
-                    !values.aadhaarConsent
-                  }
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-800 px-6 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40 transition"
-                >
-                  {panAadhaarVerifying ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      <span>Verifying PAN–Aadhaar Link with Income Tax Dept...</span>
-                    </>
+              <div className="relative">
+                <Shield className={`absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none ${aadhaarOtp ? 'text-emerald-600' : 'text-slate-400'}`} />
+                <input
+                  id="buyer-signup-aadhaar"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="12-digit Aadhaar number"
+                  disabled={Boolean(aadhaarOtp)}
+                  value={aadhaarOtp ? `•••• •••• ${aadhaarOtp.aadhaarLast4}` : values.aadhaarNumber}
+                  onChange={handleChange('aadhaarNumber')}
+                  maxLength={12}
+                  className={idFieldClass(Boolean(aadhaarOtp), errors.aadhaarNumber)}
+                />
+                <div className="absolute inset-y-0 right-1.5 flex items-center">
+                  {aadhaarOtp ? (
+                    <VerifiedBadge />
                   ) : (
-                    <>
-                      <ShieldCheck className="h-4 w-4" />
-                      <span>Verify Aadhaar & PAN Link</span>
-                    </>
+                    <button
+                      type="button"
+                      onClick={aadhaarFlow.send}
+                      disabled={aadhaarFlow.digits.length !== 12 || aadhaarFlow.sending || aadhaarFlow.cooldown > 0}
+                      className={INLINE_VERIFY_BUTTON}
+                    >
+                      {aadhaarFlow.sending && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                      <span>
+                        {aadhaarFlow.sending ? 'Sending' : aadhaarFlow.cooldown > 0 ? `${aadhaarFlow.cooldown}s` : aadhaarFlow.request ? 'Resend' : 'Verify'}
+                      </span>
+                    </button>
                   )}
-                </button>
-              ) : (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-700 shrink-0" />
-                  <span>Aadhaar ({maskedAadhaar}) and PAN ({maskedPan}) are officially linked in Income Tax statutory records.</span>
                 </div>
-              )}
-              {manualKycAccepted && !panAadhaarLinked && (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
-                  <Clock className="h-4 w-4 text-amber-700 shrink-0" />
-                  <span>Your Aadhaar and PAN documents will be submitted for manual verification by Admin upon registration.</span>
-                </div>
-              )}
-            </div>
-
-            {/* Error Message Alert */}
-            {linkError && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium animate-in fade-in">
-                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-                <span>{linkError}</span>
               </div>
-            )}
-            {/* Fallback Option When Verification Service Is Unavailable */}
-            {allowManualKyc && !panAadhaarLinked && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 space-y-2.5 animate-in fade-in">
-                <div className="flex items-start gap-2.5">
-                  <Clock className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
-                  <div className="text-xs text-amber-900">
-                    <p className="font-bold">Verification Service Currently Unavailable</p>
-                    <p className="mt-0.5 text-amber-800 leading-relaxed">
-                      The government verification portal is temporarily down. You can proceed with registration; your identity details will be reviewed and verified by the TradeExpress Admin team.
-                    </p>
+
+              {aadhaarOtp ? (
+                <p className="mt-1.5 text-xs font-semibold text-emerald-700">
+                  Aadhaar verified{aadhaarOtp.fullName ? ` · ${aadhaarOtp.fullName}` : ''}
+                  {aadhaarOtp.environment === 'uat' && <span className="ml-1.5 font-medium text-amber-600">(UAT test)</span>}
+                </p>
+              ) : errors.aadhaarNumber ? (
+                <p className="mt-1.5 text-xs font-medium text-red-600">{errors.aadhaarNumber}</p>
+              ) : !aadhaarFlow.request && (
+                <p className="mt-1.5 text-[11px] text-slate-500">An OTP will be sent to the mobile number linked with your Aadhaar.</p>
+              )}
+
+              {/* 6-digit OTP, shown after Verify */}
+              {!aadhaarOtp && aadhaarFlow.request && (
+                <div className="mt-3 space-y-3 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3.5 sm:p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+                    <span className="font-bold text-slate-800">Enter 6-digit OTP</span>
+                    <span className="text-[11px] text-slate-500">
+                      Sent to mobile linked with Aadhaar •••• {aadhaarFlow.request.aadhaarLast4}
+                    </span>
                   </div>
-                </div>
-                {!manualKycAccepted ? (
+                  <div className="flex items-center justify-between gap-1.5 sm:gap-2.5">
+                    {[0, 1, 2, 3, 4, 5].map((index) => (
+                      <input
+                        key={index}
+                        ref={(el) => (aadhaarOtpInputsRef.current[index] = el)}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                        aria-label={`Aadhaar OTP digit ${index + 1}`}
+                        maxLength={1}
+                        value={otpSlots(aadhaarFlow.otp)[index]}
+                        onChange={(e) => handleOtpBoxChange('aadhaar', index, e.target.value)}
+                        onKeyDown={(e) => handleOtpBoxKeyDown('aadhaar', index, e)}
+                        onPaste={(e) => handleOtpBoxPaste('aadhaar', e)}
+                        className={`h-12 min-w-0 flex-1 sm:h-14 sm:max-w-14 text-center text-xl font-black font-mono rounded-xl border bg-white transition outline-none ${
+                          otpSlots(aadhaarFlow.otp)[index]
+                            ? 'border-emerald-700 bg-emerald-50/40 text-emerald-950 ring-1 ring-emerald-600/30'
+                            : 'border-slate-300 text-slate-900 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-600/20'
+                        }`}
+                      />
+                    ))}
+                  </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setManualKycAccepted(true);
-                      setLinkError('');
-                      setErrors((prev) => {
-                        const next = { ...prev };
-                        delete next.panAadhaar;
-                        return next;
-                      });
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white px-3.5 py-1.5 text-xs font-bold transition shadow-2xs"
+                    onClick={aadhaarFlow.verify}
+                    disabled={!isCompleteOtp(aadhaarFlow.otp) || aadhaarFlow.verifying}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40 transition"
                   >
-                    <span>Proceed with Manual Admin Verification</span>
+                    {aadhaarFlow.verifying ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                    <span>{aadhaarFlow.verifying ? 'Verifying Aadhaar...' : 'Verify OTP'}</span>
                   </button>
-                ) : (
-                  <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>Queued for Manual Admin Verification upon registration</span>
-                  </div>
-                )}
+                  {aadhaarFlow.request.environment === 'uat' && (
+                    <p className="text-[11px] font-medium text-amber-700">UAT test mode: any 6-digit OTP is accepted.</p>
+                  )}
+                </div>
+              )}
+
+              {aadhaarFlow.error && (
+                <p role="alert" className="mt-2 flex items-start gap-1.5 text-xs font-medium text-rose-700">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0">{aadhaarFlow.error}</span>
+                </p>
+              )}
+            </div>
+
+            {/* 2. PAN: verified when it matches the PAN linked with the verified Aadhaar (Income Tax records) */}
+            <div className="border-t border-slate-100 pt-5">
+              <label htmlFor="buyer-signup-pan" className="mb-1.5 block text-xs font-bold text-slate-800">
+                PAN Card Number <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <FileCheck2 className={`absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none ${panAadhaarLinked ? 'text-emerald-600' : 'text-slate-400'}`} />
+                <input
+                  id="buyer-signup-pan"
+                  type="text"
+                  autoComplete="off"
+                  placeholder="ABCDE1234F"
+                  disabled={panAadhaarLinked}
+                  value={panAadhaarLinked ? maskedPan : values.panNumber}
+                  onChange={handleChange('panNumber')}
+                  maxLength={10}
+                  className={`${idFieldClass(panAadhaarLinked, errors.panNumber)} uppercase placeholder:normal-case`}
+                />
+                <div className="absolute inset-y-0 right-1.5 flex items-center">
+                  {panAadhaarLinked ? (
+                    <VerifiedBadge />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleVerifyPanAadhaarLink}
+                      disabled={panAadhaarVerifying || !aadhaarOtp || values.panNumber.length !== 10}
+                      className={INLINE_VERIFY_BUTTON}
+                    >
+                      {panAadhaarVerifying && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                      <span>{panAadhaarVerifying ? 'Checking' : 'Verify'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
-            )}
+
+              {panAadhaarLinked ? (
+                <p className="mt-1.5 text-xs font-semibold text-emerald-700">
+                  PAN verified: matches the PAN linked with Aadhaar {maskedAadhaar}
+                </p>
+              ) : errors.panNumber ? (
+                <p className="mt-1.5 text-xs font-medium text-red-600">{errors.panNumber}</p>
+              ) : (
+                <p className="mt-1.5 text-[11px] text-slate-500">
+                  {aadhaarOtp
+                    ? 'We check that this PAN is the one linked with your Aadhaar in Income Tax records.'
+                    : 'Verify your Aadhaar first; your PAN is then matched with it.'}
+                </p>
+              )}
+
+              {linkError && (
+                <p role="alert" className="mt-2 flex items-start gap-1.5 text-xs font-medium text-rose-700">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0">{linkError}</span>
+                </p>
+              )}
+            </div>
+
             {errors.panAadhaar && (
               <p className="text-xs text-red-600 font-medium">{errors.panAadhaar}</p>
             )}
           </div>
 
-          {/* Terms Agreement Checkbox */}
-          <div className="pt-1">
-            <label className="flex items-start gap-2.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={values.agreeTerms}
-                onChange={handleChange('agreeTerms')}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
-              />
-              <span className="text-xs text-slate-600">
-                I agree to the{' '}
-                <Link to="/terms" target="_blank" className="font-semibold text-emerald-800 hover:underline">
-                  TradeExpress Buyer Terms of Service
-                </Link>{' '}
-                and{' '}
-                <Link to="/privacy" target="_blank" className="font-semibold text-emerald-800 hover:underline">
-                  Privacy Policy
-                </Link>
-                .
-              </span>
-            </label>
-            {errors.agreeTerms && (
-              <p className="mt-1 text-xs text-red-600 font-medium">{errors.agreeTerms}</p>
-            )}
-          </div>
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            By verifying, you consent to Aadhaar and PAN verification under the Aadhaar Act, 2016 and DPDP Act, 2023.
+          </p>
+
+          {/* Terms & Conditions: shown once Aadhaar and PAN are verified */}
+          {aadhaarOtp && panAadhaarLinked && (
+            <div>
+              <label className="flex cursor-pointer select-none items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
+                <input
+                  type="checkbox"
+                  checked={agreeTerms}
+                  onChange={(e) => {
+                    setAgreeTerms(e.target.checked);
+                    if (e.target.checked) setErrors((prev) => { const next = { ...prev }; delete next.agreeTerms; return next; });
+                  }}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
+                />
+                <span className="text-xs text-slate-700">
+                  I have read and agree to TradeExpress{' '}
+                  <Link to="/terms" target="_blank" className="font-semibold text-emerald-800 hover:underline">Terms &amp; Conditions</Link>.
+                </span>
+              </label>
+              {errors.agreeTerms && <p className="mt-1 text-xs font-medium text-red-600">{errors.agreeTerms}</p>}
+            </div>
+          )}
 
           {/* Final Navigation & Submit */}
           <div className="flex items-center justify-between pt-2">
@@ -1616,7 +1724,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={busy || !aadhaarVerified || !panVerified || !values.agreeTerms}
+              disabled={busy || !aadhaarVerified || !panVerified || !agreeTerms}
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-7 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40 transition"
             >
               {busy ? (

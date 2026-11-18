@@ -1,4 +1,5 @@
 import * as verificationService from '../services/verificationService.js';
+import * as aadhaarOtpService from '../services/aadhaarOtpService.js';
 import prisma from '../config/db.js';
 
 /**
@@ -14,12 +15,25 @@ export async function getPanAadhaarLinkStatus(req, res, next) {
 
     const userId = req.user ? req.user.id : null;
 
+    // Signup (not signed in): the Aadhaar must be verified with OTP before its PAN link is checked
+    let aadhaarVerificationId = null;
+    if (!userId) {
+      ({ verificationId: aadhaarVerificationId } = await aadhaarOtpService.resolveAadhaarVerification({
+        token: req.body.aadhaarVerificationToken,
+        aadhaarNumber: finalAadhaar,
+      }));
+    }
+    // One PAN, one account (checked before any paid provider call)
+    await verificationService.assertPanNotRegistered({ pan: finalPan, excludeUserId: userId });
+
     const result = await verificationService.checkPanAadhaarLinkStatus({
       aadhaarNumber: finalAadhaar,
       pan: finalPan,
       userConsent: finalConsent,
       userId,
-      bypassCache: bypassCache === true || bypassCache === 'true',
+      aadhaarVerificationId,
+      // Skipping the cache spends a paid credit, so only signed-in users may ask for it
+      bypassCache: Boolean(userId) && (bypassCache === true || bypassCache === 'true'),
     });
 
     return res.json({
@@ -252,6 +266,51 @@ export async function verifyPan(req, res, next) {
         message: error.message,
       });
     }
+    next(error);
+  }
+}
+
+/** Same error shape as the other verification endpoints. */
+function sendVerificationError(res, error) {
+  return res.status(error.statusCode).json({
+    success: false,
+    error: { code: error.code || 'VERIFICATION_ERROR', message: error.message },
+    message: error.message,
+    ...(error.retryAfterSeconds ? { retryAfterSeconds: error.retryAfterSeconds } : {}),
+  });
+}
+
+/**
+ * Step 1 of Aadhaar OTP verification.
+ * POST /api/verification/aadhaar/otp/send
+ */
+export async function sendAadhaarOtp(req, res, next) {
+  try {
+    const data = await aadhaarOtpService.sendAadhaarOtp({
+      aadhaarNumber: req.body.aadhaarNumber,
+      userConsent: req.body.userConsent,
+    });
+    return res.json({ success: true, data, message: data.message });
+  } catch (error) {
+    if (error.statusCode) return sendVerificationError(res, error);
+    next(error);
+  }
+}
+
+/**
+ * Step 2 of Aadhaar OTP verification.
+ * POST /api/verification/aadhaar/otp/verify
+ */
+export async function verifyAadhaarOtp(req, res, next) {
+  try {
+    const data = await aadhaarOtpService.verifyAadhaarOtp({
+      verificationId: req.body.verificationId,
+      otp: req.body.otp,
+      aadhaarNumber: req.body.aadhaarNumber,
+    });
+    return res.json({ success: true, data, message: data.message || 'Aadhaar verified.' });
+  } catch (error) {
+    if (error.statusCode) return sendVerificationError(res, error);
     next(error);
   }
 }

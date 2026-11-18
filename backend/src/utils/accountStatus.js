@@ -29,7 +29,7 @@ export const AUTH_MESSAGES = {
   EMAIL_NOT_FOUND: 'No account found with this email. Please sign up first.',
   MOBILE_NOT_FOUND: 'No account found with this mobile number. Please sign up first.',
   SIGNUP_INCOMPLETE: 'Your registration is incomplete. Please complete your signup to continue.',
-  ACCOUNT_EXISTS: 'An account with this email already exists. Please log in.',
+  ACCOUNT_EXISTS: 'This email is already registered. Please log in.',
   MOBILE_EXISTS: 'An account with this mobile number already exists. Please log in.',
   OTP_INVALID: 'Invalid OTP. Please enter the correct verification code.',
   OTP_EXPIRED: 'Your OTP has expired. Please request a new one.',

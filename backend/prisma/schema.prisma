@@ -105,7 +105,9 @@ model User {
   supplierDocument    SupplierDocument?
   passwordResetTokens PasswordResetToken[]
   accountVerifications AccountVerification[]
-  rfqs                Rfq[]                @relation("BuyerRfqs")
+  aadhaarVerifications AadhaarVerification[]
+  panAadhaarLinkChecks PanAadhaarLinkCheck[]
+  rfqs             Rfq[]                @relation("BuyerRfqs")
   quotations          Quotation[]          @relation("SupplierQuotes")
   disputesRaised      Dispute[]            @relation("BuyerDisputes")
   reviewsWritten      Review[]             @relation("BuyerReviews")
@@ -1414,4 +1416,59 @@ model SupplierDeletionRequest {
   @@index([status])
   @@index([supplierId])
   @@map("supplier_deletion_requests")
+}
+
+/// Aadhaar OTP (OKYC) verifications. One row per OTP request. The Aadhaar number itself is never stored: only a
+/// keyed hash (to match the signup) and the last 4 digits. responseData keeps the provider's full verify response
+/// (name, DOB, address, photo, ...) as JSON text, AES-256-GCM encrypted when DATA_ENCRYPTION_KEY is configured.
+/// userId is filled in when the signup that used this verification completes.
+model AadhaarVerification {
+  id                String    @id @default(uuid())
+  userId            String?
+  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  aadhaarHash       String
+  aadhaarLast4      String
+  referenceId       String    // provider reference returned by the OTP request
+  environment       String    // uat | prod (as reported by the provider)
+  status            String    @default("OTP_SENT") // OTP_SENT, VERIFIED, FAILED
+  attempts          Int       @default(0)
+  expiresAt         DateTime
+  providerRequestId String?
+  lastError         String?   @db.Text
+  responseData      String?   @db.LongText
+  verifiedAt        DateTime?
+  usedAt            DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  panLinkChecks     PanAadhaarLinkCheck[]
+
+  @@index([aadhaarHash, createdAt])
+  @@index([userId])
+  @@map("aadhaar_verifications")
+}
+
+/// Every PAN–Aadhaar link check made with the provider: the full PAN the user entered, the masked PAN the
+/// provider returned for the Aadhaar, the result and the provider's full reply (JSON text).
+/// result: LINKED (masked PAN matches the entered PAN) | NOT_LINKED (incl. reason PAN_MISMATCH) | UNABLE_TO_VERIFY.
+/// userId is filled in when the signup that used the Aadhaar verification completes.
+model PanAadhaarLinkCheck {
+  id                    String               @id @default(uuid())
+  aadhaarVerificationId String?
+  aadhaarVerification   AadhaarVerification? @relation(fields: [aadhaarVerificationId], references: [id], onDelete: SetNull)
+  userId                String?
+  user                  User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  pan                   String               // full PAN entered by the user
+  aadhaarLast4          String
+  maskedPan             String?              // PAN linked with the Aadhaar, as the provider returned it (e.g. BEXXXXXX4J)
+  linkingStatus         Boolean?
+  result                String
+  reason                String?
+  environment           String
+  responseData          String?              @db.LongText
+  createdAt             DateTime             @default(now())
+
+  @@index([aadhaarVerificationId])
+  @@index([userId])
+  @@index([pan])
+  @@map("pan_aadhaar_link_checks")
 }

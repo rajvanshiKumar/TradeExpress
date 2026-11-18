@@ -54,6 +54,17 @@ import { normalizeEmail, parseMobile, mobileExample, rules, validate, hasErrors 
 import { validatePassword } from '../../utils/passwordRules';
 import { certificateFormatHint, isValidCertificateFormat, normalizeCertificateNumber } from '../../utils/certificateFormats';
 import { API_BASE_URL } from '../../config/api.js';
+import AadhaarOtpVerify from './AadhaarOtpVerify.jsx';
+import { apiErrorCode, identityReverifyScope, IDENTITY_EXPIRED_MESSAGE, IDENTITY_PROOF_LIFETIME_MS } from '../../utils/identityVerification.js';
+import { clearSignupSession, loadSignupSession, resolveResume, saveSignupSession } from '../../utils/signupSession.js';
+
+// Never kept in the browser between visits: the password, and Aadhaar / PAN details and proofs
+const SESSION_EXCLUDED_FIELDS = [
+  'password', 'confirmPassword', 'aadhaarNumber', 'aadhaarLast4', 'aadhaarConsent', 'aadhaarOtpToken', 'aadhaarOtpName',
+  'aadhaarOtpEnv', 'panAadhaarStatus', 'panAadhaarLinked', 'panAadhaarMaskedPan', 'panAadhaarToken', 'panAadhaarCheckedAt',
+  'panAadhaarMessage', 'agreeTerms',
+];
+const sessionValues = (values) => Object.fromEntries(Object.entries(values).filter(([key]) => !SESSION_EXCLUDED_FIELDS.includes(key)));
 
 const LEGAL_STRUCTURES = ['Proprietorship', 'Partnership', 'Limited Liability Partnership (LLP)', 'Private Limited', 'Public Limited', 'One Person Company (OPC)', 'Other'];
 
@@ -169,6 +180,10 @@ export default function SupplierRegisterForm() {
     panAadhaarToken: null, // server-signed proof of a LINKED result; required for LINKED at registration
     panAadhaarCheckedAt: null,
     panAadhaarMessage: '',
+    // Aadhaar verified with OTP first; the PAN–Aadhaar link check needs this token
+    aadhaarOtpToken: null,
+    aadhaarOtpName: '',
+    aadhaarOtpEnv: '',
     documents: [],
     agreeTerms: false,
   });
@@ -255,6 +270,52 @@ export default function SupplierRegisterForm() {
       confirmPassword: '',
     }));
   }, []);
+
+  // Signup session: once the email is verified, progress survives a refresh (see utils/signupSession).
+  // The password is never stored, so a restored signup re-enters it on Step 1 and then continues at resumeStep.
+  const [resumeStep, setResumeStep] = useState(null);
+  const [sessionNotice, setSessionNotice] = useState('');
+  const sessionRestoredRef = useRef(false);
+
+  useEffect(() => {
+    sessionRestoredRef.current = true;
+    if (googleSignup) return; // a Google signup starts fresh with Google's verified email
+    const session = loadSignupSession('supplier');
+    if (!session) return;
+    const resume = resolveResume(session);
+    // Filtered on the way in too: a password or identity value is never taken from storage
+    setValues((prev) => ({ ...prev, ...sessionValues(session.values || {}), email: session.email }));
+    if (resume.emailValid) {
+      setEmailVerified(true);
+      setEmailToken(session.emailToken);
+    }
+    if (resume.phoneValid) {
+      setPhoneVerified(true);
+      setPhoneToken(session.phoneToken);
+    }
+    const target = Math.max(Number(session.step) || 1, resume.resumeStep || 1);
+    setCurrentStep(1);
+    setResumeStep(target > 1 ? target : null);
+    setSessionNotice(resume.emailValid
+      ? 'Welcome back. Re-enter your password to continue your registration.'
+      : 'Your session has expired. Please verify your email again and re-enter your password to continue where you left off.');
+  }, []);
+
+  useEffect(() => {
+    // A session exists only after the email is verified; a finished signup clears it instead
+    if (!sessionRestoredRef.current || submittedData || !emailVerified || !emailToken) return;
+    const previous = loadSignupSession('supplier');
+    const phoneProof = phoneVerified && phoneToken
+      ? { phoneToken, phoneVerifiedAt: previous?.phoneToken === phoneToken && previous.phoneVerifiedAt ? previous.phoneVerifiedAt : Date.now() }
+      : {};
+    saveSignupSession('supplier', {
+      email: values.email,
+      emailToken,
+      step: Math.max(currentStep, previous?.email === values.email ? Number(previous.step) || 1 : 1, resumeStep || 1),
+      values: sessionValues(values),
+      ...phoneProof,
+    });
+  }, [emailVerified, emailToken, phoneVerified, phoneToken, currentStep, values, submittedData, resumeStep]);
 
   const handlePhoneKeyDown = (e) => {
     // Prohibit alphabet keys and non-numeric characters from being typed
@@ -873,6 +934,9 @@ export default function SupplierRegisterForm() {
       panAadhaarCheckedAt: prev.aadhaarNumber !== digits ? null : prev.panAadhaarCheckedAt,
       panAadhaarMessage: prev.aadhaarNumber !== digits ? '' : prev.panAadhaarMessage,
       panAadhaarToken: prev.aadhaarNumber !== digits ? null : prev.panAadhaarToken,
+      aadhaarOtpToken: prev.aadhaarNumber !== digits ? null : prev.aadhaarOtpToken,
+      aadhaarOtpName: prev.aadhaarNumber !== digits ? '' : prev.aadhaarOtpName,
+      aadhaarOtpEnv: prev.aadhaarNumber !== digits ? '' : prev.aadhaarOtpEnv,
     }));
     setPanAadhaarError('');
     if (errors.aadhaarNumber) {
@@ -882,6 +946,27 @@ export default function SupplierRegisterForm() {
       setErrors((prev) => ({ ...prev, panAadhaar: '' }));
     }
   };
+
+  /** Clears the PAN proof (scope 'pan') or both proofs (scope 'aadhaar') and shows why, so the user verifies again. */
+  const resetIdentityVerification = (message, scope = 'aadhaar') => {
+    setPanAadhaarError(message || '');
+    setValues((prev) => ({
+      ...prev,
+      ...(scope === 'aadhaar' ? { aadhaarOtpToken: null, aadhaarOtpName: '', aadhaarOtpEnv: '' } : {}),
+      panAadhaarStatus: message ? 'UNABLE_TO_VERIFY' : 'NOT_STARTED',
+      panAadhaarLinked: false,
+      panAadhaarToken: null,
+      panAadhaarMaskedPan: null,
+      panAadhaarMessage: message || '',
+    }));
+  };
+
+  // The server's proofs last 30 minutes: expire them here first, so an old proof is never submitted
+  useEffect(() => {
+    if (!values.aadhaarOtpToken) return undefined;
+    const timer = setTimeout(() => resetIdentityVerification(IDENTITY_EXPIRED_MESSAGE), IDENTITY_PROOF_LIFETIME_MS);
+    return () => clearTimeout(timer);
+  }, [values.aadhaarOtpToken]);
 
   // PAN-Aadhaar Link Status Inquiry via UAT endpoint
   const handleCheckLinkStatus = async () => {
@@ -910,6 +995,10 @@ export default function SupplierRegisterForm() {
       }));
       return;
     }
+    if (!values.aadhaarOtpToken) {
+      setErrors((prev) => ({ ...prev, panAadhaar: 'Please verify your Aadhaar with OTP first, then check the PAN link.' }));
+      return false;
+    }
 
     setPanAadhaarLoading(true);
     setPanAadhaarError('');
@@ -927,7 +1016,7 @@ export default function SupplierRegisterForm() {
           aadhaarNumber: rawAadhaar,
           pan: rawPan,
           userConsent: true,
-          bypassCache: true,
+          aadhaarVerificationToken: values.aadhaarOtpToken,
         }),
         // Longer than the server's 30-second limit for the provider, so a slow reply is never reported as a connection failure
         signal: AbortSignal.timeout(35000),
@@ -963,6 +1052,11 @@ export default function SupplierRegisterForm() {
         }
       } else {
         const errorMsg = data.message || data.error?.message || 'Unable to verify link status.';
+        // An expired / used Aadhaar proof (or too many PAN attempts) needs a fresh Aadhaar OTP
+        if (identityReverifyScope(apiErrorCode(data)) === 'aadhaar') {
+          resetIdentityVerification(errorMsg);
+          return false;
+        }
         setPanAadhaarError(errorMsg);
         setValues((prev) => ({
           ...prev,
@@ -1232,7 +1326,9 @@ export default function SupplierRegisterForm() {
       // PAN-Aadhaar Link Verification requirement:
       // User must verify Aadhaar to PAN before proceeding to next process
       if (isInd || values.panNumber?.trim() || aadhaarDigits) {
-        if (values.panAadhaarStatus !== 'LINKED') {
+        if (aadhaarDigits && !values.aadhaarOtpToken) {
+          stepErrors.panAadhaar = 'Please verify your Aadhaar with OTP first, then check the PAN link.';
+        } else if (values.panAadhaarStatus !== 'LINKED') {
           stepErrors.panAadhaar = 'Please verify that your PAN and Aadhaar are linked by clicking "Check Link Status" before proceeding to the next step.';
         }
       }
@@ -1325,7 +1421,7 @@ export default function SupplierRegisterForm() {
       const rawPan = (values.panNumber || '').trim().toUpperCase();
       const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
       const rawAadhaar = String(values.aadhaarNumber || '').replace(/\D/g, '');
-      if (panRegex.test(rawPan) && rawAadhaar.length === 12 && values.aadhaarConsent) {
+      if (panRegex.test(rawPan) && rawAadhaar.length === 12 && values.aadhaarConsent && values.aadhaarOtpToken) {
         const verified = await handleCheckLinkStatus();
         if (verified) {
           if (!values.agreeTerms) {
@@ -1406,6 +1502,7 @@ export default function SupplierRegisterForm() {
       panAadhaarMaskedPan: values.panAadhaarMaskedPan || null,
       panAadhaarCheckedAt: values.panAadhaarCheckedAt || null,
       panAadhaarToken: values.panAadhaarToken || null,
+      aadhaarVerificationToken: values.aadhaarOtpToken || null,
       documents: values.documents || [],
       verificationToken: phoneToken || null,
       emailVerificationToken: emailToken || null,
@@ -1459,6 +1556,7 @@ export default function SupplierRegisterForm() {
           }
         }
 
+        clearSignupSession('supplier');
         setSubmittedData({
           ...data.data,
           supplierCode: data.data?.user?.supplierCode || 'SUP-PENDING',
@@ -1468,6 +1566,17 @@ export default function SupplierRegisterForm() {
         });
         setBusy(false);
         window.scrollTo({ top: 100, behavior: 'smooth' });
+        return;
+      }
+
+      // The server refused the Aadhaar / PAN proof (expired, used, different number): verify again on Step 4
+      const reverify = identityReverifyScope(apiErrorCode(data));
+      if (reverify) {
+        resetIdentityVerification(data.message, reverify);
+        setFormError('');
+        setCurrentStep(4);
+        setBusy(false);
+        window.scrollTo({ top: 120, behavior: 'smooth' });
         return;
       }
 
@@ -1628,6 +1737,31 @@ export default function SupplierRegisterForm() {
           />
         </div>
       </div>
+
+      {/* Restored signup: re-enter the password (and the email if the session expired), then continue */}
+      {sessionNotice && currentStep === 1 && (
+        <div role="status" className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <p>{sessionNotice}</p>
+          </div>
+          {resumeStep && (
+            <button
+              type="button"
+              onClick={() => {
+                const target = resumeStep;
+                setSessionNotice('');
+                setResumeStep(null);
+                goToStep(target);
+              }}
+              disabled={!emailVerified || !values.password || !values.confirmPassword}
+              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-800 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-40"
+            >
+              Continue to Step {resumeStep}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Global Form Error Alert */}
       {formError && (
@@ -2487,6 +2621,31 @@ export default function SupplierRegisterForm() {
                     </label>
                     {errors.aadhaarConsent && <p className="mt-1.5 text-xs text-red-600">{errors.aadhaarConsent}</p>}
                   </div>
+
+                  {/* Step 1: Aadhaar OTP (the PAN link check below needs it) */}
+                  <div className="mt-3">
+                    <AadhaarOtpVerify
+                      key={values.aadhaarNumber}
+                      aadhaarNumber={values.aadhaarNumber}
+                      consent={values.aadhaarConsent}
+                      verified={Boolean(values.aadhaarOtpToken)}
+                      verifiedName={values.aadhaarOtpName}
+                      environment={values.aadhaarOtpEnv}
+                      onVerified={(result) => {
+                        setValues((prev) => ({
+                          ...prev,
+                          aadhaarOtpToken: result.verificationToken,
+                          aadhaarOtpName: result.fullName,
+                          aadhaarOtpEnv: result.environment,
+                        }));
+                        setErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.panAadhaar;
+                          return next;
+                        });
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* Right Bottom: Check Link Status action bar */}
@@ -2500,7 +2659,7 @@ export default function SupplierRegisterForm() {
                     ) : values.panAadhaarStatus === 'NOT_LINKED' ? (
                       <span className="text-red-600 font-medium flex items-center gap-1.5">
                         <AlertCircle className="h-4 w-4 text-red-500" />
-                        PAN and Aadhaar are not linked in Income Tax records.
+                        {values.panAadhaarMessage || 'This PAN is not linked with your Aadhaar.'}
                       </span>
                     ) : values.panAadhaarStatus === 'UNABLE_TO_VERIFY' ? (
                       <span className="text-slate-600 font-medium flex items-center gap-1.5">
@@ -2514,7 +2673,9 @@ export default function SupplierRegisterForm() {
                       </span>
                     ) : (
                       <span className="text-slate-400 text-[11px]">
-                        PAN–Aadhaar verification is required before proceeding to the next step.
+                        {values.aadhaarOtpToken
+                          ? 'Step 2: check that this Aadhaar is linked with your PAN.'
+                          : 'Verify your Aadhaar with OTP first, then check the PAN link.'}
                       </span>
                     )}
                   </div>
@@ -2525,6 +2686,7 @@ export default function SupplierRegisterForm() {
                       onClick={handleCheckLinkStatus}
                       disabled={
                         panAadhaarLoading ||
+                        !values.aadhaarOtpToken ||
                         !values.panNumber ||
                         (values.aadhaarNumber || '').replace(/\D/g, '').length !== 12 ||
                         !values.aadhaarConsent

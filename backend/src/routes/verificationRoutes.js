@@ -59,6 +59,47 @@ router.post(
 );
 
 /**
+ * POST /api/verification/aadhaar/otp/send
+ * Step 1 of Aadhaar verification: the provider sends an OTP to the Aadhaar-linked mobile.
+ */
+router.post(
+  '/aadhaar/otp/send',
+  verificationLimiter,
+  validate([
+    body('aadhaarNumber')
+      .exists({ checkFalsy: true }).withMessage('Aadhaar number is required.')
+      .bail()
+      .customSanitizer((val) => String(val).replace(/\D/g, ''))
+      .isLength({ min: 12, max: 12 }).withMessage('Aadhaar number must be exactly 12 digits.'),
+    body('userConsent')
+      .custom((val) => {
+        if (val !== true && val !== 'true') throw new Error('Your consent is required to verify your Aadhaar.');
+        return true;
+      }),
+  ]),
+  verificationController.sendAadhaarOtp
+);
+
+/**
+ * POST /api/verification/aadhaar/otp/verify
+ * Step 2: checks the OTP; on success returns a short-lived verification token used by signup.
+ */
+router.post(
+  '/aadhaar/otp/verify',
+  verificationLimiter,
+  validate([
+    body('verificationId').isString().withMessage('Please request an OTP first.').bail().isLength({ min: 1, max: 64 }),
+    body('aadhaarNumber')
+      .exists({ checkFalsy: true }).withMessage('Aadhaar number is required.')
+      .bail()
+      .customSanitizer((val) => String(val).replace(/\D/g, ''))
+      .isLength({ min: 12, max: 12 }).withMessage('Aadhaar number must be exactly 12 digits.'),
+    body('otp').trim().matches(/^\d{6}$/).withMessage('Enter the 6-digit OTP.'),
+  ]),
+  verificationController.verifyAadhaarOtp
+);
+
+/**
  * GET /api/verification/pan-aadhaar/status
  * Fetches saved PAN-Aadhaar verification status for the logged-in user.
  */

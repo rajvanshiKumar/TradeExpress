@@ -7,7 +7,8 @@ import { issueLoginToken, invalidateSessionCache, reissueCurrentToken } from './
 import { getRequestContext } from '../utils/requestContext.js';
 import { ENV } from '../config/env.js';
 import { normalizeMobile, validateVerifiedMobile, validateVerifiedEmail, validateEmailLoginOtp, issueVerifiedEmailToken } from './otpService.js';
-import { resolveSignupGstin, resolveSignupPanAadhaar } from './verificationService.js';
+import { assertPanNotRegistered, resolveSignupGstin, resolveSignupPanAadhaar } from './verificationService.js';
+import { assertAadhaarNotRegistered, attachAadhaarVerification, resolveAadhaarVerification } from './aadhaarOtpService.js';
 import { getVerifiedGoogleProfile } from './googleAuthService.js';
 import { validatePassword } from '../utils/passwordValidator.js';
 import {
@@ -112,6 +113,10 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
 
   if (existing) {
     throw existingAccountError(existing, upperRole);
+  }
+
+  if ((country || 'India').trim().toLowerCase() === 'india') {
+    throw identityError('Please sign up using the Buyer or Supplier signup form, which verifies your Aadhaar and PAN.', 'AADHAAR_NOT_VERIFIED');
   }
 
   if (!phone) {
@@ -298,6 +303,37 @@ export async function authenticateGoogle({ code, role }) {
   return { status: 'SIGNED_IN', isNewUser: true, user: publicGoogleUser(created), token };
 }
 
+function identityError(message, code, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.errorCode = code;
+  return error;
+}
+
+/**
+ * Server-side identity rule for signup (the browser cannot skip it): an Indian Buyer or Supplier needs an Aadhaar
+ * verified with OTP and a PAN verified as linked with it, and one Aadhaar / one PAN belongs to one account.
+ */
+async function assertSignupIdentity({ isIndia, aadhaarCheck, panAadhaar, aadhaarNumber, pan, excludeUserId }) {
+  if (isIndia) {
+    if (!aadhaarCheck) throw identityError('Please verify your Aadhaar with OTP to complete signup.', 'AADHAAR_NOT_VERIFIED');
+    if (panAadhaar?.panAadhaarStatus !== 'LINKED') throw identityError('Please verify your PAN to complete signup.', 'PAN_AADHAAR_NOT_VERIFIED');
+  }
+  await assertAadhaarNotRegistered({ aadhaarNumber, excludeUserId });
+  await assertPanNotRegistered({ pan, excludeUserId });
+}
+
+/** Saves which account a verified Aadhaar OTP record belongs to. The account already exists, so a failure is logged, not thrown. */
+async function linkAadhaarVerification(verificationId, userId) {
+  try {
+    if (!(await attachAadhaarVerification({ verificationId, userId }))) {
+      console.warn('[Aadhaar OTP] Verification record was already linked to another account');
+    }
+  } catch (err) {
+    console.warn(`[Aadhaar OTP] Could not link verification record: ${err.message}`);
+  }
+}
+
 /**
  * Production-ready Enterprise Buyer Registration
  * Strictly assigns Role.BUYER on the server.
@@ -330,6 +366,7 @@ export async function registerBuyer({
   panAadhaarStatus = 'NOT_STARTED',
   panAadhaarLinked = false,
   panAadhaarToken,
+  aadhaarVerificationToken,
   verificationToken,
   emailVerificationToken,
   isGoogleVerified = false,
@@ -480,6 +517,11 @@ export async function registerBuyer({
     claimedLinked: panAadhaarStatus === 'LINKED' || panAadhaarLinked === true || panAadhaarLinked === 'true',
   });
 
+  // An Aadhaar number is accepted only after it was verified with OTP (single-use, for this exact number)
+  const aadhaarCheck = String(aadhaarNumber || '').replace(/\D/g, '')
+    ? await resolveAadhaarVerification({ token: aadhaarVerificationToken, aadhaarNumber })
+    : null;
+
   // Terms and Privacy acceptance
   const acceptedTerms = agree === true || agree === 'true' || agreeTerms === true || agreeTerms === 'true';
   if (!acceptedTerms) {
@@ -489,6 +531,8 @@ export async function registerBuyer({
   }
 
   // Hash password
+  // Identity last, after the cheaper form checks: verified Aadhaar + PAN (India) and one account per Aadhaar / PAN
+  await assertSignupIdentity({ isIndia, aadhaarCheck, panAadhaar, aadhaarNumber, pan: cleanPan, excludeUserId: resumeUser?.id });
   const passwordHash = await bcrypt.hash(effectivePassword, 10);
 
   // Generate unique buyer code
@@ -526,6 +570,7 @@ export async function registerBuyer({
   const user = resumeUser
     ? await prisma.user.update({ where: { id: resumeUser.id }, data: buyerData, select: BUYER_AUTH_RESPONSE_SELECT })
     : await prisma.user.create({ data: buyerData, select: BUYER_AUTH_RESPONSE_SELECT }).catch(rethrowDuplicateEmail);
+  if (aadhaarCheck) await linkAadhaarVerification(aadhaarCheck.verificationId, user.id);
 
   // Save a default address only when the buyer really entered one: the resolved city/state/PIN
   // defaults above are placeholders and must never appear in the address book.
@@ -688,6 +733,7 @@ export async function registerSupplier({
   panAadhaarStatus = 'NOT_STARTED',
   panAadhaarLinked = false,
   panAadhaarToken,
+  aadhaarVerificationToken,
   gstVerificationToken,
   documents = [],
   verificationToken,
@@ -887,6 +933,11 @@ export async function registerSupplier({
     claimedLinked: panAadhaarStatus === 'LINKED' || panAadhaarLinked === true || panAadhaarLinked === 'true',
   });
 
+  // An Aadhaar number is accepted only after it was verified with OTP (single-use, for this exact number)
+  const aadhaarCheck = String(aadhaarNumber || '').replace(/\D/g, '')
+    ? await resolveAadhaarVerification({ token: aadhaarVerificationToken, aadhaarNumber })
+    : null;
+
   // A GST Certificate GSTIN must have been verified as active with the GST provider for this exact GSTIN
   if (isIndia && isGstDoc) {
     resolveSignupGstin({ token: gstVerificationToken, gstin: cleanGstin });
@@ -1039,6 +1090,8 @@ export async function registerSupplier({
   }
 
   // 3. Hash password
+  // Identity last, after the cheaper form checks: verified Aadhaar + PAN (India) and one account per Aadhaar / PAN
+  await assertSignupIdentity({ isIndia, aadhaarCheck, panAadhaar, aadhaarNumber, pan: cleanPan, excludeUserId: resumeUser?.id });
   const passwordHash = await bcrypt.hash(password, 10);
 
   // 4. Create User (or complete the unfinished signup in place)
@@ -1117,6 +1170,7 @@ export async function registerSupplier({
   const user = resumeUser
     ? await prisma.user.update({ where: { id: resumeUser.id }, ...supplierWrite })
     : await prisma.user.create(supplierWrite).catch(rethrowDuplicateEmail);
+  if (aadhaarCheck) await linkAadhaarVerification(aadhaarCheck.verificationId, user.id);
 
   // 5. Save uploaded KYC / Business Documents if provided
   let validDocsCount = 0;

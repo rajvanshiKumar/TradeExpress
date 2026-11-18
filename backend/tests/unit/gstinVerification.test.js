@@ -39,6 +39,52 @@ describe('GSTIN verification uses only real provider answers', () => {
   beforeEach(() => clearVerificationCache());
   afterEach(() => { delete process.env.GST_TEST_MODE; });
 
+  // Current provider format: the taxpayer record sits under data.taxpayerDetails
+  const nestedReply = (taxpayer = {}, top = { success: true, requestId: 'rq_nested', environment: 'production' }) => ({
+    ...top,
+    data: {
+      goods_service: { bzsdtls: [] },
+      taxpayerDetails: { ctb: 'Private Limited Company', dty: 'Regular', sts: 'Active', lgnm: 'RELIANCE INDUSTRIES LIMITED', tradeNam: 'Reliance Industries', rgdt: '01/07/2017', gstin: GSTIN, pradr: { adr: 'Mumbai' }, ...taxpayer },
+      taxpayerReturnDetails: { filingStatus: [] },
+    },
+  });
+
+  it('reads the nested taxpayerDetails format: active GSTIN is VERIFIED with its details', async () => {
+    const result = await verifyGstin({ gstin: GSTIN, request: stubProvider(200, nestedReply()).request });
+    assert.equal(result.status, 'VERIFIED');
+    assert.equal(result.verified, true);
+    assert.equal(result.legalName, 'RELIANCE INDUSTRIES LIMITED');
+    assert.equal(result.tradeName, 'Reliance Industries');
+    assert.equal(result.gstStatus, 'ACTIVE');
+    assert.equal(result.constitutionOfBusiness, 'Private Limited Company');
+    assert.equal(result.taxpayerType, 'Regular');
+    assert.ok(result.verificationToken);
+  });
+
+  it('nested format: a cancelled GSTIN is NOT_VERIFIED', async () => {
+    const result = await verifyGstin({ gstin: GSTIN, request: stubProvider(200, nestedReply({ sts: 'Cancelled' })).request });
+    assert.equal(result.status, 'NOT_VERIFIED');
+    assert.equal(result.reason, 'GSTIN_NOT_ACTIVE');
+    assert.equal(result.verificationToken, undefined);
+  });
+
+  it('a record for a different GSTIN is never accepted', async () => {
+    const result = await verifyGstin({ gstin: GSTIN, request: stubProvider(200, nestedReply({ gstin: '27AAACR5055K1Z7' })).request });
+    assert.equal(result.status, 'NOT_VERIFIED');
+    assert.equal(result.reason, 'GSTIN_MISMATCH');
+    assert.equal(result.verificationToken, undefined);
+  });
+
+  it('UAT masked GSTIN (XXXXXXXXXXXXXXX) is accepted as the record for the GSTIN asked about', async () => {
+    const result = await verifyGstin({ gstin: GSTIN, request: stubProvider(200, nestedReply({ gstin: 'XXXXXXXXXXXXXXX' }, { success: true, environment: 'uat', simulated: true })).request });
+    assert.equal(result.status, 'VERIFIED');
+  });
+
+  it('PROD reply shape (status object, no "success" field) is understood', async () => {
+    const result = await verifyGstin({ gstin: GSTIN, request: stubProvider(200, nestedReply({}, { status: { code: 200, type: 'success', message: 'ok' } })).request });
+    assert.equal(result.status, 'VERIFIED');
+  });
+
   it('reads provider credentials from the environment only (no hardcoded keys)', () => {
     const config = getGstProviderConfig();
     assert.equal(config.baseUrl, 'https://provider.test/v1/prod/gst/verify');
@@ -99,7 +145,8 @@ describe('GSTIN verification uses only real provider answers', () => {
       assert.equal(result.legalName, null);
       assert.equal(result.gstStatus, null);
       assert.equal(result.verificationToken, undefined);
-      assert.match(result.message, /GST verification service|could not be understood/);
+      assert.match(result.message, /GST verification service|could not be understood|temporarily unavailable/);
+      assert.ok(!/credit|credential/i.test(result.message), 'internal details are never shown');
     }
   });
 

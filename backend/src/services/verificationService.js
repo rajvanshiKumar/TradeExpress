@@ -23,22 +23,37 @@ const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const DISCLAIMER = 'Link status indicates ITD PAN-Aadhaar linkage only. This does not constitute full PAN KYC, Aadhaar identity authentication, GST verification, or Gold Supplier approval.';
 
 /** Keyed hash so identity numbers are never stored or placed in tokens in a reversible form. */
-function secretHash(value) {
+export function secretHash(value) {
   return crypto.createHmac('sha256', ENV.JWT_SECRET).update(String(value)).digest('hex');
 }
 
-/** True when PAN_AADHAAR_API_BASE_URL points at the provider's UAT (test) environment. */
+/**
+ * PAN–Aadhaar link environment: PAN_AADHAAR_API_MODE = uat (provider test data) | prod (real Income Tax check).
+ * Without it, the older single PAN_AADHAAR_API_BASE_URL decides (a "/uat/" path means UAT).
+ */
+export function getPanAadhaarMode() {
+  const mode = String(process.env.PAN_AADHAAR_API_MODE || '').trim().toLowerCase();
+  if (mode === 'uat' || mode === 'prod') return mode;
+  return /\/uat\//i.test(process.env.PAN_AADHAAR_API_BASE_URL || '') ? 'uat' : 'prod';
+}
+
+/** True when PAN–Aadhaar link checks go to the provider's UAT (test) environment. */
 export function isPanAadhaarUatProvider() {
-  return /\/uat\//i.test(process.env.PAN_AADHAAR_API_BASE_URL || '');
+  return getPanAadhaarMode() === 'uat';
+}
+
+/** Provider URL for the current mode: PAN_AADHAAR_UAT_URL / PAN_AADHAAR_PROD_URL, else PAN_AADHAAR_API_BASE_URL. */
+export function getPanAadhaarUrl(mode = getPanAadhaarMode()) {
+  return String(process.env[`PAN_AADHAAR_${mode.toUpperCase()}_URL`] || process.env.PAN_AADHAAR_API_BASE_URL || '').trim();
 }
 
 function getProviderConfig() {
   return {
-    baseUrl: (process.env.PAN_AADHAAR_API_BASE_URL || '').trim(),
+    baseUrl: getPanAadhaarUrl(),
     apiId: process.env.PAN_AADHAAR_API_ID || process.env.api_id,
     apiKey: process.env.PAN_AADHAAR_API_KEY || process.env.api_key,
     tokenId: process.env.PAN_AADHAAR_TOKEN_ID || process.env.token_id,
-    timeoutMs: Math.min(parseInt(process.env.PAN_AADHAAR_API_TIMEOUT_MS, 10) || 15000, 30000),
+    timeoutMs: Math.min(parseInt(process.env.PAN_AADHAAR_API_TIMEOUT_MS, 10) || 25000, 30000), // PROD checks Income Tax records live and can take several seconds
   };
 }
 
@@ -65,29 +80,33 @@ export function isValidAadhaarNumber(digits) {
 
 const isMaskChar = (ch) => ch === 'X' || ch === '*' || ch === '•';
 
+// The PAN characters the provider shows: first 2 and last 2 (e.g. "MRXXXXXX1F")
+const PAN_CHECK_POSITIONS = [0, 1, 8, 9];
+
 /**
  * Compares the entered PAN with the provider's masked PAN (e.g. "MRXXXXXX1F").
- * A match needs at least 4 visible characters that all agree; a fully masked or missing value can
- * never prove a match.
+ * A match needs the first 2 and last 2 characters to be visible and equal to the entered PAN, and every
+ * other visible character to agree too; a fully masked or missing value can never prove a match.
  */
 export function doesPanMatchMaskedPan(enteredPan, maskedPan) {
   const entered = String(enteredPan || '').trim().toUpperCase();
   const masked = String(maskedPan || '').trim().toUpperCase();
   if (entered.length !== 10 || masked.length !== 10) return false;
-  let visible = 0;
-  for (let i = 0; i < 10; i += 1) {
-    if (isMaskChar(masked[i])) continue;
-    visible += 1;
-    if (masked[i] !== entered[i]) return false;
-  }
-  return visible >= 4;
+  if (PAN_CHECK_POSITIONS.some((i) => isMaskChar(masked[i]))) return false;
+  return !doesPanConflictWithMaskedPan(entered, masked);
 }
 
-const hasVisiblePanCharacters = (maskedPan) => String(maskedPan || '').split('').some((ch) => !isMaskChar(ch.toUpperCase()));
+/** True when any character the provider shows differs from the entered PAN (a different PAN is linked). */
+function doesPanConflictWithMaskedPan(enteredPan, maskedPan) {
+  const entered = String(enteredPan || '').trim().toUpperCase();
+  const masked = String(maskedPan || '').trim().toUpperCase();
+  if (masked.length !== 10) return false;
+  return masked.split('').some((ch, i) => !isMaskChar(ch) && ch !== entered[i]);
+}
 
 /** Readable explanations for the provider's "reason" codes. */
 const PROVIDER_REASONS = {
-  not_linked: 'Income Tax records show this Aadhaar number is not linked with the PAN you entered.',
+  not_linked: 'Your Aadhaar is not linked with a PAN. Please link them on the Income Tax portal and try again.',
   aadhaar_not_found: 'This Aadhaar number was not found in Income Tax records.',
   invalid_aadhaar: 'The provider rejected this Aadhaar number as invalid.',
   pan_not_found: 'This PAN was not found in Income Tax records.',
@@ -95,7 +114,7 @@ const PROVIDER_REASONS = {
 };
 
 /** Turns a failed provider call into a specific, user-facing reason. Secrets are never included. `service` names the check in messages. */
-function classifyProviderFailure({ httpStatus, body, networkError, service = 'PAN–Aadhaar verification service', inputs = 'Aadhaar or PAN details' }) {
+export function classifyProviderFailure({ httpStatus, body, networkError, service = 'PAN–Aadhaar verification service', inputs = 'Aadhaar or PAN details' }) {
   if (networkError) {
     const timedOut = networkError.code === 'ECONNABORTED' || networkError.code === 'ETIMEDOUT' || /timeout/i.test(networkError.message || '');
     return timedOut
@@ -107,10 +126,10 @@ function classifyProviderFailure({ httpStatus, body, networkError, service = 'PA
   const providerMessage = String(body?.error?.message || body?.message || '').slice(0, 200);
 
   if (httpStatus === 402 || /CREDIT|BALANCE|QUOTA/.test(code) || /credit|balance|quota/i.test(providerMessage)) {
-    return { reason: 'INSUFFICIENT_CREDITS', message: `Verification could not be completed: the ${service} has 0 credits remaining. Please contact TradeExpress support.` };
+    return { reason: 'INSUFFICIENT_CREDITS', message: 'Verification is temporarily unavailable. Please try again later or contact TradeExpress support.' };
   }
   if (httpStatus === 401 || httpStatus === 403 || /AUTH|CREDENTIAL|INVALID_KEY|UNAUTHORI[SZ]ED|FORBIDDEN/.test(code)) {
-    return { reason: 'PROVIDER_AUTH_FAILED', message: 'Verification could not be completed: the verification service rejected TradeExpress\'s API credentials. Please contact TradeExpress support.' };
+    return { reason: 'PROVIDER_AUTH_FAILED', message: 'Verification is temporarily unavailable. Please try again later or contact TradeExpress support.' };
   }
   if (httpStatus === 429) {
     return { reason: 'PROVIDER_RATE_LIMITED', message: 'Too many verification requests right now. Please wait a minute and try again.' };
@@ -131,10 +150,22 @@ function classifyProviderFailure({ httpStatus, body, networkError, service = 'PA
   return { reason: 'PROVIDER_INVALID_RESPONSE', message: 'The verification service returned a response that could not be understood. Please try again later.' };
 }
 
+/**
+ * True when the provider says the request succeeded. UAT replies { success: true, ... }; PROD can reply
+ * { status: { code: 200, type: 'success' }, ... } without a "success" field.
+ */
+function providerReportsSuccess(body) {
+  if (!body || typeof body !== 'object') return false;
+  if (body.success === true) return true;
+  const status = body.status;
+  return Boolean(status && typeof status === 'object' && (String(status.type).toLowerCase() === 'success' || Number(status.code) === 200));
+}
+
 function inputError(message, code, statusCode = 422) {
   const error = new Error(message);
   error.statusCode = statusCode;
   error.code = code;
+  error.errorCode = code; // the API error handler sends errorCode to the browser as "code"
   return error;
 }
 
@@ -166,8 +197,7 @@ async function queryProvider({ aadhaar, pan, request }) {
   const body = response?.data;
   const httpStatus = response?.status;
   const data = body && typeof body === 'object' ? body.data : null;
-
-  if (httpStatus !== 200 || body?.success !== true || !data || typeof data.linking_status !== 'boolean') {
+  if (httpStatus !== 200 || !providerReportsSuccess(body) || !data || typeof data.linking_status !== 'boolean') {
     const failure = classifyProviderFailure({ httpStatus, body });
     // Host only (never the query or credentials), so an operator can see which provider address failed
     let providerHost = 'unknown host';
@@ -195,15 +225,23 @@ async function queryProvider({ aadhaar, pan, request }) {
       message: 'Verified: this Aadhaar number is linked with the PAN you entered in Income Tax records.',
     };
   }
-  if (hasVisiblePanCharacters(maskedPan)) {
+  if (doesPanConflictWithMaskedPan(pan, maskedPan)) {
     return {
       status: 'NOT_LINKED', linked: false, maskedPan, requestId, definitive: true, reason: 'PAN_MISMATCH',
-      message: `Not verified: this Aadhaar number is linked to a different PAN (${maskedPan}), not the PAN you entered.`,
+      message: 'This PAN is not linked with your Aadhaar. Please enter the PAN linked with your Aadhaar.',
+    };
+  }
+  // UAT returns dummy data with the PAN fully masked ("XXXXXXXXXX"), so the match cannot be checked there;
+  // the test environment's "linked" answer is accepted and labelled as a test. Never in PROD.
+  if (String(body.environment || '').toLowerCase() === 'uat' || isPanAadhaarUatProvider()) {
+    return {
+      status: 'LINKED', linked: true, maskedPan: null, requestId, definitive: true, reason: 'UAT_LINKED',
+      message: 'Verified (UAT test): the test service reports this Aadhaar as linked. The PAN was not matched because UAT returns dummy data.',
     };
   }
   return {
     status: 'UNABLE_TO_VERIFY', linked: false, maskedPan: null, requestId, definitive: false, reason: 'PAN_MATCH_UNCONFIRMED',
-    message: 'Not verified: the verification service confirmed an Aadhaar–PAN link but did not return enough of the PAN to confirm it is the PAN you entered.',
+    message: 'We could not confirm your PAN right now. Please try again later.',
   };
 }
 
@@ -236,18 +274,73 @@ function issueSignupToken({ aadhaar, pan, maskedPan, requestId }) {
   );
 }
 
+// Email domain given to accounts when they are deleted (see accountDeletionService)
+export const DELETED_ACCOUNT_EMAIL_DOMAIN = '@deleted.tradeexpress.invalid';
+
+// Provider PAN checks allowed for one Aadhaar OTP verification (each one is a paid credit)
+const MAX_PAN_CHECKS_PER_AADHAAR = 5;
+
+/**
+ * One PAN, one account: refuses a PAN already saved on another TradeExpress account (other than excludeUserId).
+ */
+export async function assertPanNotRegistered({ pan, excludeUserId = null, db = prisma }) {
+  const cleanPan = String(pan || '').trim().toUpperCase();
+  if (!PAN_REGEX.test(cleanPan)) return;
+  const owner = await db.user.findFirst({
+    where: {
+      pan: cleanPan,
+      // A deleted (anonymised) account no longer holds the PAN
+      NOT: { email: { endsWith: DELETED_ACCOUNT_EMAIL_DOMAIN } },
+      ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (owner) throw inputError('This PAN is already registered with another TradeExpress account.', 'PAN_ALREADY_REGISTERED', 409);
+}
+
+// Provider failures where test mode may stand in for the provider (it could not be reached at all)
+const TEST_MODE_REASONS = new Set(['PROVIDER_TIMEOUT', 'PROVIDER_UNREACHABLE', 'PROVIDER_ENDPOINT_NOT_FOUND', 'PROVIDER_NOT_CONFIGURED', 'PROVIDER_ERROR']);
+
+/**
+ * Saves one PAN–Aadhaar link check: the full PAN the user entered, the result and the provider's raw reply.
+ * Never blocks the answer: a storage failure is only logged.
+ */
+async function recordLinkCheck({ db, aadhaarVerificationId, userId, aadhaar, pan, outcome, providerReply }) {
+  try {
+    await db.panAadhaarLinkCheck.create({
+      data: {
+        aadhaarVerificationId: aadhaarVerificationId || null,
+        userId: userId || null,
+        pan,
+        aadhaarLast4: aadhaar.slice(-4),
+        maskedPan: outcome.maskedPan || (providerReply?.data?.masked_pan ? String(providerReply.data.masked_pan).toUpperCase() : null),
+        linkingStatus: typeof providerReply?.data?.linking_status === 'boolean' ? providerReply.data.linking_status : null,
+        result: outcome.status,
+        reason: outcome.reason ? String(outcome.reason).slice(0, 191) : null,
+        environment: providerReply?.environment ? String(providerReply.environment) : (isPanAadhaarUatProvider() ? 'uat' : 'prod'),
+        responseData: providerReply ? JSON.stringify(providerReply) : null,
+      },
+    });
+  } catch (err) {
+    console.warn(`[PAN-Aadhaar Verification] Could not save the link check: ${err.message}`);
+  }
+}
+
 /**
  * Verifies that an Aadhaar number is linked with the given PAN using the configured provider.
- * Statuses: LINKED | NOT_LINKED | UNABLE_TO_VERIFY. Full Aadhaar and PAN are never logged or stored.
- * `request` can be replaced in tests; it defaults to axios.post.
+ * Statuses: LINKED | NOT_LINKED | UNABLE_TO_VERIFY. LINKED needs the provider's masked PAN to match the
+ * entered PAN (first 2 and last 2 characters). Every provider check is saved in pan_aadhaar_link_checks.
+ * `request` and `db` can be replaced in tests.
  */
 export async function checkPanAadhaarLinkStatus({
   aadhaarNumber,
   pan = null,
   userConsent,
   userId = null,
+  aadhaarVerificationId = null,
   bypassCache = false,
   request = axios.post,
+  db = prisma,
 }) {
   if (userConsent !== true && userConsent !== 'true') {
     throw inputError('Explicit consent is required to verify PAN–Aadhaar link status.', 'CONSENT_REQUIRED', 400);
@@ -280,10 +373,26 @@ export async function checkPanAadhaarLinkStatus({
     outcome = cached.outcome;
     fromCache = true;
   } else {
-    outcome = await queryProvider({ aadhaar, pan: cleanPan, request });
+    if (aadhaarVerificationId && db.panAadhaarLinkCheck.count) {
+      const used = await db.panAadhaarLinkCheck.count({ where: { aadhaarVerificationId } });
+      if (used >= MAX_PAN_CHECKS_PER_AADHAAR) {
+        throw inputError('Too many PAN attempts. Please verify your Aadhaar again with a new OTP.', 'PAN_CHECK_LIMIT', 429);
+      }
+    }
+    // Keep the provider's raw reply so the check can be saved as it was answered
+    let providerReply = null;
+    const recordingRequest = async (...args) => {
+      const response = await request(...args);
+      providerReply = response?.data ?? null;
+      return response;
+    };
+    outcome = await queryProvider({ aadhaar, pan: cleanPan, request: recordingRequest });
     // Only real answers are cached; failures (credits, outage, ...) are retried next time
     if (outcome.definitive) linkStatusCache.set(cacheKey, { outcome, expiresAt: Date.now() + CACHE_TTL_MS });
-    else if (isPanAadhaarTestMode() && outcome.reason !== 'PAN_MATCH_UNCONFIRMED') outcome = testModeOutcome(outcome);
+    // Test mode covers only an unreachable provider: a reply that arrived (even one that could not be read)
+    // is never turned into "linked"
+    else if (isPanAadhaarTestMode() && TEST_MODE_REASONS.has(outcome.reason)) outcome = testModeOutcome(outcome);
+    await recordLinkCheck({ db, aadhaarVerificationId, userId, aadhaar, pan: cleanPan, outcome, providerReply });
   }
 
   const result = {
@@ -422,7 +531,7 @@ export function getGstProviderConfig() {
     apiId: process.env.GST_API_ID || process.env.api_id,
     apiKey: process.env.GST_API_KEY || process.env.api_key,
     tokenId: process.env.GST_TOKEN_ID || process.env.token_id,
-    timeoutMs: Math.min(parseInt(process.env.GST_API_TIMEOUT_MS, 10) || 15000, 30000),
+    timeoutMs: Math.min(parseInt(process.env.GST_API_TIMEOUT_MS, 10) || 25000, 30000),
   };
 }
 
@@ -469,20 +578,27 @@ async function queryGstProvider({ gstin, request }) {
   const isObject = body && typeof body === 'object';
   const data = isObject && body.data && typeof body.data === 'object' ? body.data : null;
   const requestId = (isObject && (body.requestId || data?.client_id)) || null;
+  // The taxpayer record is either directly in data or under data.taxpayerDetails (current provider format)
+  const taxpayer = data && data.taxpayerDetails && typeof data.taxpayerDetails === 'object' ? data.taxpayerDetails : data;
 
-  if (httpStatus === 200 && body?.success === true && data) {
-    const legalName = firstText(data.legal_name, data.legalName, data.lgnm);
-    const tradeName = firstText(data.trade_name, data.tradeName, data.tradeNam, legalName);
-    const gstStatus = firstText(data.status, data.gstin_status, data.sts);
+  if (httpStatus === 200 && providerReportsSuccess(body) && taxpayer) {
+    // The provider's record must be for the GSTIN that was asked about (UAT masks it as XXXXXXXXXXXXXXX)
+    const returnedGstin = firstText(taxpayer.gstin, data.gstin);
+    if (returnedGstin && !/X/i.test(returnedGstin) && returnedGstin.toUpperCase() !== gstin) {
+      return { outcome: 'NOT_VERIFIED', definitive: true, requestId, record: null, reason: 'GSTIN_MISMATCH', message: 'The GST records returned are for a different GSTIN. Please check the 15 characters and try again.' };
+    }
+    const legalName = firstText(taxpayer.legal_name, taxpayer.legalName, taxpayer.lgnm);
+    const tradeName = firstText(taxpayer.trade_name, taxpayer.tradeName, taxpayer.tradeNam, legalName);
+    const gstStatus = firstText(taxpayer.status, taxpayer.gstin_status, taxpayer.sts);
     if (legalName || tradeName) {
       const record = {
         legalName: legalName || tradeName,
         tradeName,
         gstStatus: gstStatus ? gstStatus.toUpperCase() : null,
-        state: firstText(data.state, data.state_name),
-        taxpayerType: firstText(data.taxpayer_type, data.taxpayerType, data.dty),
-        constitutionOfBusiness: firstText(data.constitution_of_business, data.ctb),
-        registrationDate: firstText(data.date_of_registration, data.rgdt),
+        state: firstText(taxpayer.state, taxpayer.state_name),
+        taxpayerType: firstText(taxpayer.taxpayer_type, taxpayer.taxpayerType, taxpayer.dty),
+        constitutionOfBusiness: firstText(taxpayer.constitution_of_business, taxpayer.ctb),
+        registrationDate: firstText(taxpayer.date_of_registration, taxpayer.rgdt),
       };
       if (record.gstStatus === 'ACTIVE') {
         return { outcome: 'VERIFIED', definitive: true, requestId, record, reason: 'ACTIVE', message: 'GSTIN verified: active registration found in GST records.' };

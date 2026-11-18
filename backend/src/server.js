@@ -6,6 +6,8 @@ import { initSocket } from './services/socketService.js';
 import { RESERVATION_MINUTES, startReservationSweeper } from './services/inventoryLifecycleService.js';
 import { bootstrapSuperAdmin } from '../scripts/bootstrapSuperAdmin.js';
 import { startDeletionWorker } from './services/supplierDeletionService.js';
+import { getAadhaarProviderConfig } from './services/aadhaarOtpService.js';
+import { getPanAadhaarMode, getPanAadhaarUrl } from './services/verificationService.js';
 
 async function startServer() {
   try {
@@ -29,6 +31,20 @@ async function startServer() {
     // Closes supplier accounts whose approved deletion grace period has ended (hourly)
     startDeletionWorker();
     console.log(`✓ Stock reservations expire after ${RESERVATION_MINUTES} minutes without payment.`);
+    // Which provider environment each identity check uses (UAT returns simulated answers)
+    const aadhaarMode = getAadhaarProviderConfig().mode;
+    const panMode = getPanAadhaarMode();
+    const panUrlMatchesMode = getPanAadhaarUrl(panMode).includes(`/${panMode}/`);
+    console.log(`✓ Identity checks: Aadhaar OTP = ${aadhaarMode.toUpperCase()}, PAN–Aadhaar link = ${panMode.toUpperCase()}`);
+    if (!panUrlMatchesMode) console.warn(`⚠️ PAN–Aadhaar link mode is ${panMode.toUpperCase()} but its URL does not contain "/${panMode}/". Check PAN_AADHAAR_${panMode.toUpperCase()}_URL in .env.`);
+    // UAT identity checks return simulated "verified" answers: never what a live server should use
+    if (ENV.NODE_ENV === 'production') {
+      const simulated = [
+        aadhaarMode === 'uat' && 'Aadhaar OTP',
+        panMode === 'uat' && 'PAN–Aadhaar link',
+      ].filter(Boolean);
+      if (simulated.length) console.warn(`⚠️ ${simulated.join(' and ')} verification is in UAT (test) mode: results are simulated. Switch to prod for live signups.`);
+    }
 
     httpServer.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
