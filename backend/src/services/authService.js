@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { encryptIfConfigured, readEncryptedField } from '../utils/dataCrypto.js';
+import { readEncryptedField } from '../utils/dataCrypto.js';
 import { cleanRegistrationNumber, ensureSupplierDocument, parseProfilePhoto, validateLegalStructure } from './supplierDocumentService.js';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
@@ -10,6 +10,8 @@ import { normalizeMobile, validateVerifiedMobile, validateVerifiedEmail, validat
 import { assertPanNotRegistered, resolveSignupGstin, resolveSignupPanAadhaar } from './verificationService.js';
 import { assertAadhaarNotRegistered, attachAadhaarVerification, resolveAadhaarVerification } from './aadhaarOtpService.js';
 import { getVerifiedGoogleProfile } from './googleAuthService.js';
+import { prepareShopProfile } from './buyerShopService.js';
+import { assertIdentityNotSuspended } from './identityBlockService.js';
 import { validatePassword } from '../utils/passwordValidator.js';
 import {
   AUTH_ERROR_CODES,
@@ -21,7 +23,8 @@ import {
 } from '../utils/accountStatus.js';
 
 // Fields needed to decide whether an existing email belongs to a complete or resumable signup
-const SIGNUP_STATUS_SELECT = { id: true, role: true, name: true, phone: true, company: true, passwordHash: true, supplierCode: true };
+// status / isActive: a suspended account's email is refused as suspended (not "please log in")
+const SIGNUP_STATUS_SELECT = { id: true, role: true, name: true, phone: true, company: true, passwordHash: true, supplierCode: true, status: true, isActive: true };
 const AUTH_USER_SELECT = {
   id: true,
   email: true,
@@ -115,6 +118,7 @@ export async function registerUser({ email, password, name, role = 'BUYER', comp
     throw existingAccountError(existing, upperRole);
   }
 
+  await assertIdentityNotSuspended('EMAIL', normalizedEmail);
   if ((country || 'India').trim().toLowerCase() === 'india') {
     throw identityError('Please sign up using the Buyer or Supplier signup form, which verifies your Aadhaar and PAN.', 'AADHAAR_NOT_VERIFIED');
   }
@@ -268,6 +272,9 @@ export async function authenticateGoogle({ code, role }) {
     return { status: 'SIGNED_IN', isNewUser: false, user: publicGoogleUser(user), token };
   }
 
+  // A new account (buyer or supplier) can never use the email of a suspended account
+  await assertIdentityNotSuspended('EMAIL', profile.email);
+
   if (requestedRole === 'SUPPLIER') {
     return {
       status: 'SUPPLIER_SIGNUP_REQUIRED',
@@ -314,7 +321,9 @@ function identityError(message, code, statusCode = 400) {
  * Server-side identity rule for signup (the browser cannot skip it): an Indian Buyer or Supplier needs an Aadhaar
  * verified with OTP and a PAN verified as linked with it, and one Aadhaar / one PAN belongs to one account.
  */
-async function assertSignupIdentity({ isIndia, aadhaarCheck, panAadhaar, aadhaarNumber, pan, excludeUserId }) {
+async function assertSignupIdentity({ isIndia, aadhaarCheck, panAadhaar, aadhaarNumber, pan, email, excludeUserId }) {
+  // Email, Aadhaar or PAN of a suspended account can never be used for a new account
+  await assertIdentityNotSuspended('EMAIL', email);
   if (isIndia) {
     if (!aadhaarCheck) throw identityError('Please verify your Aadhaar with OTP to complete signup.', 'AADHAAR_NOT_VERIFIED');
     if (panAadhaar?.panAadhaarStatus !== 'LINKED') throw identityError('Please verify your PAN to complete signup.', 'PAN_AADHAAR_NOT_VERIFIED');
@@ -367,6 +376,14 @@ export async function registerBuyer({
   panAadhaarLinked = false,
   panAadhaarToken,
   aadhaarVerificationToken,
+  // Step 4: live shop photo + live location, optional shop name and social links
+  shopName,
+  shopPhotoUrl,
+  shopLatitude,
+  shopLongitude,
+  shopLocationAccuracy,
+  shopCapturedAt,
+  socialLinks,
   verificationToken,
   emailVerificationToken,
   isGoogleVerified = false,
@@ -532,7 +549,9 @@ export async function registerBuyer({
 
   // Hash password
   // Identity last, after the cheaper form checks: verified Aadhaar + PAN (India) and one account per Aadhaar / PAN
-  await assertSignupIdentity({ isIndia, aadhaarCheck, panAadhaar, aadhaarNumber, pan: cleanPan, excludeUserId: resumeUser?.id });
+  await assertSignupIdentity({ isIndia, aadhaarCheck, panAadhaar, aadhaarNumber, pan: cleanPan, email: normalizedEmail, excludeUserId: resumeUser?.id });
+  // Step 4: a live shop photo with its live location is required; the address is resolved on the server
+  const shopProfile = await prepareShopProfile({ shopName, shopPhotoUrl, shopLatitude, shopLongitude, shopLocationAccuracy, shopCapturedAt, socialLinks });
   const passwordHash = await bcrypt.hash(effectivePassword, 10);
 
   // Generate unique buyer code
@@ -567,9 +586,14 @@ export async function registerBuyer({
     isPhoneVerified: true,
     kycStatus: 'PENDING',
   };
+  // The account and its shop profile are written together (one nested write), so neither exists without the other
   const user = resumeUser
-    ? await prisma.user.update({ where: { id: resumeUser.id }, data: buyerData, select: BUYER_AUTH_RESPONSE_SELECT })
-    : await prisma.user.create({ data: buyerData, select: BUYER_AUTH_RESPONSE_SELECT }).catch(rethrowDuplicateEmail);
+    ? await prisma.user.update({
+      where: { id: resumeUser.id },
+      data: { ...buyerData, shopProfile: { upsert: { create: shopProfile, update: shopProfile } } },
+      select: BUYER_AUTH_RESPONSE_SELECT,
+    })
+    : await prisma.user.create({ data: { ...buyerData, shopProfile: { create: shopProfile } }, select: BUYER_AUTH_RESPONSE_SELECT }).catch(rethrowDuplicateEmail);
   if (aadhaarCheck) await linkAadhaarVerification(aadhaarCheck.verificationId, user.id);
 
   // Save a default address only when the buyer really entered one: the resolved city/state/PIN
@@ -1091,7 +1115,7 @@ export async function registerSupplier({
 
   // 3. Hash password
   // Identity last, after the cheaper form checks: verified Aadhaar + PAN (India) and one account per Aadhaar / PAN
-  await assertSignupIdentity({ isIndia, aadhaarCheck, panAadhaar, aadhaarNumber, pan: cleanPan, excludeUserId: resumeUser?.id });
+  await assertSignupIdentity({ isIndia, aadhaarCheck, panAadhaar, aadhaarNumber, pan: cleanPan, email: normalizedEmail, excludeUserId: resumeUser?.id });
   const passwordHash = await bcrypt.hash(password, 10);
 
   // 4. Create User (or complete the unfinished signup in place)
@@ -1732,8 +1756,6 @@ function buildBusinessUpdate({ business = {}, statutory = {}, warehouse = {} }) 
   if (data.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(data.pan)) throw kycError('Enter a valid 10-character PAN (e.g. ABCDE1234F).', 400, 'pan');
   if (data.bankIfsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(data.bankIfsc)) throw kycError('Enter a valid 11-character IFSC (e.g. HDFC0001234).', 400, 'bankIfsc');
   if (data.bankAccountNumber && !/^\d{9,18}$/.test(data.bankAccountNumber)) throw kycError('Bank account number must be 9 to 18 digits.', 400, 'bankAccountNumber');
-  // Stored encrypted at rest when DATA_ENCRYPTION_KEY is configured
-  if (data.bankAccountNumber) data.bankAccountNumber = encryptIfConfigured(data.bankAccountNumber);
   if (data.postalCode && !/^[1-9][0-9]{5}$/.test(data.postalCode) && !/^[A-Za-z0-9 -]{3,10}$/.test(data.postalCode)) throw kycError('Enter a valid PIN / postal code.', 400, 'postalCode');
   if (data.warehousePincode && !/^[1-9][0-9]{5}$/.test(data.warehousePincode)) throw kycError('Enter a valid 6-digit warehouse PIN code.', 400, 'warehousePincode');
 

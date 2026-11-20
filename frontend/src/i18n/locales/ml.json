@@ -22,11 +22,12 @@
   "nav.suppliers": "വിതരണക്കാർ",
   "nav.exporters": "കയറ്റുമതിക്കാർ",
   "nav.rfq": "ക്വട്ടേഷൻ അഭ്യർത്ഥന (RFQ)",
+  "nav.compare": "താരതമ്യം",
   "nav.compareProducts": "ഉൽപ്പന്നങ്ങൾ താരതമ്യം ചെയ്യുക",
   "nav.compareShort": "താരതമ്യം",
   "nav.wishlist": "ആഗ്രഹപ്പട്ടിക",
   "nav.help": "സഹായം",
-  "nav.about": "ഞങ്ങളെക്കുറിച്ച്",
+  "nav.about": "പരിചയം",
   "nav.becomeSupplier": "വിതരണക്കാരനാകൂ",
 
   "header.searchPlaceholder": "ഉൽപ്പന്നങ്ങൾ, വിഭാഗങ്ങൾ അല്ലെങ്കിൽ വിതരണക്കാരെ തിരയുക...",

@@ -2,8 +2,9 @@ import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/db.js';
 import { ENV } from '../config/env.js';
-import { encryptIfConfigured } from '../utils/dataCrypto.js';
+import { aadhaarHolderDetails } from '../utils/aadhaarResponse.js';
 import { classifyProviderFailure, DELETED_ACCOUNT_EMAIL_DOMAIN, isValidAadhaarNumber, secretHash } from './verificationService.js';
+import { isIdentityBlocked, suspendedIdentityError } from './identityBlockService.js';
 
 /*
  * Aadhaar OTP (OKYC) verification through the same provider as the PAN–Aadhaar link check.
@@ -80,8 +81,21 @@ async function callProvider(url, payload, config, request) {
 }
 
 /** A provider reply that clearly answers "no" (wrong OTP, invalid Aadhaar, ...) rather than failing to answer. */
+/**
+ * The provider answers in two formats: { success: true, status: 'VERIFIED', ... } (relay) or
+ * { status: { code: 200, type: 'success' }, ... } (direct, no "success" field). An explicit success: false always fails.
+ */
+function providerSucceeded(body) {
+  if (!body || typeof body !== 'object' || body.success === false) return false;
+  if (body.success === true) return true;
+  const status = body.status;
+  return Boolean(status && typeof status === 'object'
+    && String(status.type || '').toLowerCase() === 'success'
+    && (status.code === undefined || Number(status.code) === 200));
+}
+
 const isDefinitiveRejection = ({ httpStatus, body }) =>
-  Boolean(body) && (httpStatus === 400 || httpStatus === 422 || (httpStatus === 200 && body.success !== true));
+  Boolean(body) && (httpStatus === 400 || httpStatus === 422 || (httpStatus === 200 && !providerSucceeded(body)));
 
 const providerMessage = (body) => String(body?.error?.message || body?.message || body?.data?.message || '').slice(0, 200);
 
@@ -128,7 +142,7 @@ export async function sendAadhaarOtp({ aadhaarNumber, userConsent, request = axi
   const result = await callProvider(config.generateUrl, { aadhaarNumber: digits, consent: true }, config, request);
   const { body } = result;
   const referenceId = body?.data?.referenceId || body?.data?.reference_id || body?.referenceId;
-  if (result.httpStatus === 200 && body?.success === true && referenceId) {
+  if (result.httpStatus === 200 && providerSucceeded(body) && referenceId) {
     const environment = String(body.environment || config.mode).toLowerCase();
     const record = await db.aadhaarVerification.create({
       data: {
@@ -163,8 +177,9 @@ function issueToken({ id, hash, environment }) {
 }
 
 const isVerifiedResponse = (body) =>
-  body?.success === true
-  && String(body.status || '').toUpperCase() === 'VERIFIED'
+  providerSucceeded(body)
+  // The relay format says status "VERIFIED"; the direct format carries status as an object ({ code, type })
+  && (typeof body.status !== 'string' || body.status.toUpperCase() === 'VERIFIED')
   && body.data && typeof body.data === 'object'
   && (!body.data.status || /success/i.test(String(body.data.status)));
 
@@ -214,7 +229,8 @@ export async function verifyAadhaarOtp({ verificationId, otp, aadhaarNumber, req
         environment,
         providerRequestId: body.requestId ? String(body.requestId) : record.providerRequestId,
         lastError: null,
-        responseData: encryptIfConfigured(JSON.stringify(body)),
+        // Saved as readable JSON text (owner's decision: no encryption)
+        responseData: JSON.stringify(body),
       },
     });
     return {
@@ -224,6 +240,9 @@ export async function verifyAadhaarOtp({ verificationId, otp, aadhaarNumber, req
       aadhaarLast4: record.aadhaarLast4,
       environment,
       simulated: body.simulated === true,
+      // Shown to the person who just verified (their own Aadhaar details and photo), then the provider's full reply
+      holder: aadhaarHolderDetails(body),
+      providerResponse: body,
       message: environment === 'uat' ? 'Aadhaar verified (UAT test mode, simulated response).' : 'Aadhaar verified with UIDAI.',
     };
   }
@@ -253,6 +272,8 @@ export async function verifyAadhaarOtp({ verificationId, otp, aadhaarNumber, req
 export async function assertAadhaarNotRegistered({ aadhaarNumber, excludeUserId = null, db = prisma }) {
   const digits = String(aadhaarNumber || '').replace(/\D/g, '');
   if (digits.length !== 12) return;
+  // An Aadhaar of a suspended account (even one deleted later) can never be used again
+  if (await isIdentityBlocked('AADHAAR', aadhaarHash(digits), db)) throw suspendedIdentityError('AADHAAR');
   const owner = await db.aadhaarVerification.findFirst({
     where: {
       aadhaarHash: aadhaarHash(digits),
@@ -260,8 +281,9 @@ export async function assertAadhaarNotRegistered({ aadhaarNumber, excludeUserId 
       // A deleted (anonymised) account no longer holds the Aadhaar
       user: { NOT: { email: { endsWith: DELETED_ACCOUNT_EMAIL_DOMAIN } } },
     },
-    select: { id: true },
+    select: { id: true, user: { select: { status: true, isActive: true } } },
   });
+  if (owner?.user && (owner.user.status === 'SUSPENDED' || owner.user.isActive === false)) throw suspendedIdentityError('AADHAAR');
   if (owner) {
     throw aadhaarError('This Aadhaar is already registered with another TradeExpress account.', 'AADHAAR_ALREADY_REGISTERED', 409);
   }

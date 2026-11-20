@@ -7,6 +7,9 @@ import { useLocation, useNavigationType } from 'react-router-dom';
  * - Back and Forward return to exactly where the reader was on that page, instantly.
  * Filter changes that keep the same page (only the ?query changes) leave the position alone.
  */
+/** The portal a path belongs to ('buyer' | 'supplier'), or null for the rest of the site. */
+const portalOf = (path) => /^\/(buyer|supplier)(\/|$)/.exec(path || '')?.[1] || null;
+
 export default function ScrollToTop() {
   const { pathname, hash, key } = useLocation();
   const navigationType = useNavigationType();
@@ -39,6 +42,7 @@ export default function ScrollToTop() {
   useEffect(() => {
     currentKey.current = key;
     const pageChanged = lastPath.current !== pathname;
+    const previousPath = lastPath.current;
     lastPath.current = pathname;
 
     if (hash) {
@@ -67,7 +71,18 @@ export default function ScrollToTop() {
       return () => window.cancelAnimationFrame(frame);
     }
 
-    if (pageChanged) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    if (!pageChanged) return undefined;
+    // Inside a portal (buyer / supplier), moving between its pages keeps the site header and sidebar where
+    // they are: the window only goes back to the start of the content, never to the very top of the site
+    const portal = portalOf(pathname);
+    const main = portal && portal === portalOf(previousPath) ? document.getElementById('main') : null;
+    if (main) {
+      const header = document.querySelector('header');
+      const contentTop = Math.max(0, main.getBoundingClientRect().top + window.scrollY - (header?.offsetHeight || 0) - 16);
+      if (window.scrollY > contentTop) window.scrollTo({ top: contentTop, left: 0, behavior: 'instant' });
+      return undefined;
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     return undefined;
   }, [pathname, hash, key, navigationType]);
 

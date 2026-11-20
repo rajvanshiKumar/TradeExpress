@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { enterOtpDigits, isCompleteOtp, otpSlots, pastedOtp } from '../src/utils/otpDigits.js';
+import { enterOtpDigits, isCompleteOtp, otpBoxProps, otpSlots, pastedOtp } from '../src/utils/otpDigits.js';
 
 // Types a sequence of [boxIndex, keyValue] into the six boxes, starting from `start`
 const type = (steps, start = '') => steps.reduce((code, [i, v]) => enterOtpDigits(code, i, v).value, start);
@@ -49,5 +49,29 @@ describe('Six-box OTP entry keeps every digit in its box', () => {
     assert.equal(enterOtpDigits('', 0, '7').focusIndex, 1);
     assert.equal(enterOtpDigits('12345', 5, '6').focusIndex, null);
     assert.equal(enterOtpDigits('123456', 3, '').focusIndex, null);
+  });
+});
+
+describe('OTP boxes are never filled by the browser while another field is autofilled', () => {
+  it('every box is a one-time-code box with its own name, apart from the other code on the page', () => {
+    const mobile = [0, 1, 2, 3, 4, 5].map((i) => otpBoxProps('signup-mobile', i));
+    const email = [0, 1, 2, 3, 4, 5].map((i) => otpBoxProps('signup-email', i));
+    assert.ok([...mobile, ...email].every((p) => p.autoComplete === 'one-time-code'));
+    const names = [...mobile, ...email].map((p) => p.name);
+    assert.equal(new Set(names).size, 12, 'no two boxes share a name');
+    assert.equal(mobile[0]['data-lpignore'], 'true', 'password managers leave the boxes alone');
+  });
+
+  it('every OTP box in the signup and login forms uses these attributes', async () => {
+    const { readFileSync } = await import('node:fs');
+    const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
+    assert.ok(read('../src/components/common/SixDigitOtpRow.jsx').includes('otpBoxProps(group, index)'));
+    const buyer = read('../src/components/forms/BuyerRegisterForm.jsx');
+    for (const g of ['buyer-email', 'buyer-mobile', 'buyer-aadhaar']) assert.ok(buyer.includes(`otpBoxProps('${g}'`), g);
+    const login = read('../src/components/forms/LoginForm.jsx');
+    for (const g of ['login-email', 'login-mobile']) assert.ok(login.includes(`otpBoxProps("${g}"`), g);
+    const supplier = read('../src/components/forms/SupplierRegisterForm.jsx');
+    assert.ok(supplier.includes('readOnly={phoneOtpSent && !phoneVerified}'), 'the mobile number is locked while its code is open');
+    assert.ok(supplier.includes('readOnly={emailOtpSent && !emailVerified}'), 'the email is locked while its code is open');
   });
 });

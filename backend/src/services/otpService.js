@@ -4,6 +4,7 @@ import prisma from '../config/db.js';
 import { ENV } from '../config/env.js';
 import * as msg91Service from './msg91Service.js';
 import * as powerstextService from './powerstextService.js';
+import { assertIdentityNotSuspended } from './identityBlockService.js';
 import {
   AUTH_ERROR_CODES,
   AUTH_MESSAGES,
@@ -74,6 +75,22 @@ function logOtpCheck(flow, identifier, outcome, session = null) {
   const sends = session && Number.isFinite(session.resendCount) ? `, codes sent in this window: ${session.resendCount + 1}` : '';
   console.info(`[OTP] ${flow} ${masked}: ${outcome}${age}${sends}`);
 }
+
+/**
+ * Codes already sent to a mobile number in the running 1-hour window. The window ends one hour after the last code
+ * was sent; after that (or after a successful verification, which resets the count) the number starts fresh.
+ */
+export const mobileWindowOpen = (row) => Boolean(row?.lastSentAt) && Date.now() - new Date(row.lastSentAt).getTime() < RESEND_WINDOW_MS;
+export const mobileSendsInWindow = (row) => (mobileWindowOpen(row) ? Number(row.resendCount) || 0 : 0);
+/** resendCount for the code being sent now: one more in a running window, otherwise a new window from 0. */
+const nextMobileSendCount = (row) => (mobileWindowOpen(row) ? { increment: 1 } : 0);
+
+const tooManyMobileOtpsError = () => {
+  const error = new Error('Too many OTP requests for this mobile number. Please try again after 1 hour.');
+  error.statusCode = 429;
+  error.errorCode = 'OTP_HOURLY_LIMIT';
+  return error;
+};
 
 export const activeResendWindow = (entry) =>
   entry && entry.windowStartedAt && Date.now() - entry.windowStartedAt < RESEND_WINDOW_MS ? entry : null;
@@ -266,13 +283,8 @@ async function requestMobileOtpUnlocked({ phone, country = 'India', purpose, rol
       throw otpCooldownError(RESEND_COOLDOWN_SECONDS - elapsedSeconds);
     }
 
-    // Check hourly limit
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    if (existingVerification.updatedAt > oneHourAgo && existingVerification.resendCount >= MAX_HOURLY_ATTEMPTS) {
-      const error = new Error('Too many OTP requests for this mobile number. Please try again after 1 hour.');
-      error.statusCode = 429;
-      throw error;
-    }
+    // Hourly limit: counts only the codes sent in the running 1-hour window
+    if (mobileSendsInWindow(existingVerification) >= MAX_HOURLY_ATTEMPTS) throw tooManyMobileOtpsError();
   }
 
   // 3. Dispatch OTP through configured provider (PowersText or MSG91)
@@ -315,7 +327,8 @@ async function requestMobileOtpUnlocked({ phone, country = 'India', purpose, rol
       token: sessionToken,
       verified: false,
       attempts: 0,
-      resendCount: { increment: 1 },
+      // A new window starts once the previous one has ended
+      resendCount: nextMobileSendCount(existingVerification),
       lastSentAt: new Date(),
       expiresAt,
       used: false,
@@ -449,6 +462,8 @@ export async function verifyMobileOtp({ phone, country = 'India', otp }) {
       token: verificationToken,
       expiresAt: tokenExpiresAt,
       attempts: 0,
+      // A verified number starts its next hourly window fresh
+      resendCount: 0,
       used: false,
     },
   });
@@ -493,11 +508,7 @@ async function resendMobileOtpUnlocked({ phone, country = 'India', role }) {
     throw otpCooldownError(RESEND_COOLDOWN_SECONDS - elapsedSeconds);
   }
 
-  if (verification.resendCount >= 5) {
-    const error = new Error('Maximum OTP resend limit reached for this session. Please try again after some time.');
-    error.statusCode = 429;
-    throw error;
-  }
+  if (mobileSendsInWindow(verification) >= MAX_HOURLY_ATTEMPTS) throw tooManyMobileOtpsError();
 
   // Retry through PowersText or MSG91
   const isPowersText = Boolean(process.env.SMS_API_URL || process.env.SMS_SENDER_ID);
@@ -520,7 +531,7 @@ async function resendMobileOtpUnlocked({ phone, country = 'India', role }) {
     data: {
       token: sessionToken,
       lastSentAt: new Date(),
-      resendCount: { increment: 1 },
+      resendCount: nextMobileSendCount(verification),
       attempts: 0,
       expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
       used: false,
@@ -771,12 +782,7 @@ async function requestMobileLoginOtpUnlocked({ phone, country = 'India', role })
       throw otpCooldownError(RESEND_COOLDOWN_SECONDS - elapsedSeconds);
     }
 
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    if (existingVerification.updatedAt > oneHourAgo && existingVerification.resendCount >= MAX_HOURLY_ATTEMPTS) {
-      const error = new Error('Too many OTP requests for this mobile number. Please try again after 1 hour.');
-      error.statusCode = 429;
-      throw error;
-    }
+    if (mobileSendsInWindow(existingVerification) >= MAX_HOURLY_ATTEMPTS) throw tooManyMobileOtpsError();
   }
 
   // 3. Dispatch OTP through configured provider
@@ -813,7 +819,7 @@ async function requestMobileLoginOtpUnlocked({ phone, country = 'India', role })
       token: sessionToken,
       verified: false,
       attempts: 0,
-      resendCount: previousCodeUsed ? 0 : { increment: 1 },
+      resendCount: previousCodeUsed ? 0 : nextMobileSendCount(existingVerification),
       lastSentAt: new Date(),
       expiresAt,
       used: false,
@@ -902,10 +908,10 @@ export async function verifyAndLoginMobile({ phone, country = 'India', otp, role
       }
     }
 
-    // Mark as used
+    // Mark as used (a successful sign-in also starts the next hourly window fresh)
     await prisma.mobileVerification.update({
       where: { phone: formattedPhone },
-      data: { used: true, verified: true, verifiedAt: new Date() },
+      data: { used: true, verified: true, verifiedAt: new Date(), resendCount: 0 },
     });
   }
 
@@ -957,6 +963,8 @@ async function requestEmailVerificationOtpUnlocked({ email, name, purpose = 'reg
   }
 
   // If registering, check the email's account status before any cooldown applies
+  // (the email of a suspended account, even one deleted later, can never sign up again)
+  if (purpose === 'registration') await assertIdentityNotSuspended('EMAIL', normalizedEmail);
   let resumeSignup = false;
   if (purpose === 'registration') {
     const existingUser = await prisma.user.findUnique({
@@ -1168,4 +1176,22 @@ export function requestEmailLoginOtp(args = {}) {
 
 export function requestEmailVerificationOtp(args = {}) {
   return oneSendAtATime(`email-verify:${emailKey(args.email)}`, () => requestEmailVerificationOtpUnlocked(args));
+}
+
+/**
+ * Forgets the OTP history of a deleted account's email and mobile number (send counts, cooldowns, pending codes),
+ * so signing up again with them starts like a first signup. Suspension blocks are separate and still apply.
+ */
+export async function clearOtpHistory({ email, phone, country, db = prisma } = {}) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (normalizedEmail) {
+    emailVerificationStore.delete(normalizedEmail);
+    emailLoginOtpStore.delete(normalizedEmail);
+  }
+  const raw = String(phone || '').trim();
+  if (!raw) return;
+  const phones = new Set([raw]);
+  const normalized = normalizeMobile(raw, country || 'India');
+  if (normalized.ok) phones.add(normalized.formattedPhone);
+  await db.mobileVerification.deleteMany({ where: { phone: { in: [...phones] } } });
 }

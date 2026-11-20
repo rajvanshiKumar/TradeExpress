@@ -22,11 +22,12 @@
   "nav.suppliers": "ಪೂರೈಕೆದಾರರು",
   "nav.exporters": "ರಫ್ತುದಾರರು",
   "nav.rfq": "ಉಲ್ಲೇಖದ ವಿನಂತಿ (RFQ)",
+  "nav.compare": "ಹೋಲಿಕೆ",
   "nav.compareProducts": "ಉತ್ಪನ್ನಗಳನ್ನು ಹೋಲಿಕೆ ಮಾಡಿ",
   "nav.compareShort": "ಹೋಲಿಕೆ",
   "nav.wishlist": "ಮೆಚ್ಚಿನ ಪಟ್ಟಿ",
   "nav.help": "ಸಹಾಯ",
-  "nav.about": "ನಮ್ಮ ಬಗ್ಗೆ",
+  "nav.about": "ಪರಿಚಯ",
   "nav.becomeSupplier": "ಪೂರೈಕೆದಾರರಾಗಿ",
 
   "header.searchPlaceholder": "ಉತ್ಪನ್ನಗಳು, ವರ್ಗಗಳು ಅಥವಾ ಪೂರೈಕೆದಾರರನ್ನು ಹುಡುಕಿ...",

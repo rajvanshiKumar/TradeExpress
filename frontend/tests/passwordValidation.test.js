@@ -169,11 +169,14 @@ describe('TradeExpress Frontend Password Validation & Security Suite', () => {
   describe('4. Component Integration & Real-Time Indicators Integrity', () => {
     const readSrc = (relPath) => fs.readFileSync(path.resolve(__dirname, relPath), 'utf8');
 
-    it('buyer signup asks for no password (buyers sign in with a code or Google, and can set one later)', () => {
+    it('buyer signup asks for a password and its confirmation on the last step (Step 4)', () => {
       const src = readSrc('../src/components/forms/BuyerRegisterForm.jsx');
-      assert.ok(!src.includes('PasswordValidationIndicator'), 'Buyer signup must not render a password strength indicator');
-      assert.ok(!/type={show(Confirm)?Password/.test(src), 'Buyer signup must not render password inputs');
-      assert.ok(!/password:s*values.password/.test(src), 'Buyer signup must not send a password');
+      const step4 = src.slice(src.indexOf('{currentStep === 4 && ('));
+      assert.ok(step4.includes('<PasswordValidationIndicator'), 'Step 4 renders the password requirements');
+      assert.ok(step4.includes('id="buyer-password"') && step4.includes('id="buyer-confirm-password"'), 'Step 4 has both password inputs');
+      assert.ok(/!passwordReady/.test(step4), 'Registration stays disabled until the password is valid and confirmed');
+      assert.ok(/\n\s+password,\n\s+confirmPassword,\n/.test(src), 'The password and its confirmation are sent to the server');
+      assert.ok(!/saveSignupSession\('buyer', \{[^}]*password/.test(src), 'The password is never saved in the signup session');
     });
 
     it('ensures SupplierRegisterForm integrates PasswordValidationIndicator and validatePassword', () => {

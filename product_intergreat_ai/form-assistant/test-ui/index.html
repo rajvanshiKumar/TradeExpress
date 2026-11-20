@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Form Assistant - test page</title>
+<style>
+  :root { --b:#cbd5e1; --g:#059669; --t:#0f172a; --m:#64748b; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.45 system-ui, sans-serif; color: var(--t); margin: 0; background: #f8fafc; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+  section { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 0 0 10px; }
+  label { display: block; font-weight: 600; margin: 8px 0 3px; }
+  input, textarea, select { width: 100%; padding: 7px 9px; border: 1px solid var(--b); border-radius: 6px; font: inherit; }
+  textarea { resize: vertical; }
+  button { padding: 7px 12px; border-radius: 6px; border: 1px solid var(--b); background: #fff; cursor: pointer; font: inherit; }
+  button.primary { background: var(--g); color: #fff; border-color: var(--g); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tabs button.on { background: var(--t); color: #fff; border-color: var(--t); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .sugg { font-size: 12px; color: var(--m); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 3px; }
+  .pill { padding: 1px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .prefill { background: #d1fae5; color: #065f46; } .confirm { background: #fef3c7; color: #92400e; }
+  .banner { padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-top: 6px; }
+  .fake, .warn { background: #fef3c7; color: #92400e; } .err { background: #fee2e2; color: #991b1b; } .info { background: #e0f2fe; color: #075985; }
+  .muted { color: var(--m); font-size: 12px; }
+  .never { background: #f1f5f9; border-radius: 6px; padding: 6px 10px; margin-top: 8px; font-size: 12px; color: var(--m); }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>Form Assistant - test page</h1>
+    <div class="muted">Only for checking the service. In production your Express backend calls it; the API key must never be in browser code.</div>
+  </div>
+
+  <section>
+    <h2>1. Connection</h2>
+    <div class="row">
+      <div><label for="base">Service URL</label><input id="base" value="http://localhost:8100"></div>
+      <div><label for="key">X-API-Key</label><input id="key" type="password" autocomplete="off" placeholder="your ASSIST_API_KEY"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="tabs" id="tabs" role="tablist"></div>
+  </section>
+
+  <section>
+    <h2 id="inTitle">2. Input</h2>
+    <div id="inputs"></div>
+    <p><button class="primary" id="go">✨ Suggest form fields</button> <span id="status" class="muted"></span></p>
+    <div id="banners"></div>
+  </section>
+
+  <section>
+    <h2>3. Form (suggestions are NOT applied until you click)</h2>
+    <form id="form" onsubmit="return false"></form>
+    <p><button id="applyAll" disabled>Apply all suggestions</button></p>
+    <div class="never" id="never"></div>
+  </section>
+</main>
+
+<script>
+const MODULES = {
+  rfq: {
+    label: "RFQ", path: "/v1/rfq", title: "2. Buyer's requirement (plain words)",
+    text: "500 pcs steel hex bolts M12, grade 8.8, need in 2 weeks, deliver to Pune 411001",
+    extra: [{ id: "cats", label: "Your category list (JSON: slug + name)", rows: 3,
+      value: '[{"slug":"fasteners","name":"Nuts, Bolts and Fasteners"},{"slug":"textiles","name":"Textiles and Fabrics"},{"slug":"packaging","name":"Packaging Materials"}]' }],
+    fields: [["title","Title"],["specifications","Specifications","area"],["categorySlug","Category (slug)"],["destinationCountry","Destination country"],
+             ["quantity","Quantity"],["unit","Unit"],["deliveryPincode","Delivery pincode"],["requiredByDate","Required by (YYYY-MM-DD)"],["targetPrice","Target price (AI never fills)", "never"]],
+    build: (v) => ({ categories: JSON.parse(v.cats || "[]") }),
+  },
+  address: {
+    label: "Order address", path: "/v1/order-address", title: "2. Paste address / contact text",
+    text: "Name: Rahul Sharma\nCompany: Sharma Traders Pvt Ltd\nPhone: +91 98765 43210\nEmail: rahul@sharmatraders.in\nGSTIN: 27AAPFU0939F1ZV\nAddress: Flat 4B, Shiv Residency, Baner Road, Pune, Maharashtra 411045",
+    extra: [],
+    fields: [["buyerName","Buyer name"],["buyerCompany","Buyer company"],["buyerPhone","Buyer phone"],["buyerEmail","Buyer email"],["buyerGstin","Buyer GSTIN"],
+             ["deliveryAddress.line1","Address line 1"],["deliveryAddress.line2","Address line 2"],["deliveryAddress.landmark","Landmark"],["deliveryAddress.city","City"],
+             ["deliveryAddress.state","State"],["deliveryAddress.pincode","Pincode"],["deliveryAddress.country","Country"],["total","Total / tax (AI never fills)","never"]],
+    build: () => ({}),
+  },
+  vehicle: {
+    label: "Transport vehicle", path: "/v1/transport-vehicle", title: "2. Upload RC / insurance / permit photos and/or paste text", images: 4,
+    text: "",
+    extra: [{ id: "company", label: "Your company name (only used to suggest ownershipType)", rows: 1, value: "Sharma Transport" }],
+    fields: [["vehicleNumber","Vehicle number"],["make","Make"],["model","Model"],["yearOfManufacture","Year of manufacture"],["ownerName","Owner name"],["ownershipType","Ownership type"],
+             ["rcNumber","RC number"],["rcExpiryDate","RC expiry"],["insuranceNumber","Insurance number"],["insuranceExpiryDate","Insurance expiry"],["fitnessExpiryDate","Fitness expiry"],
+             ["permitNumber","Permit number"],["permitType","Permit type"],["permitExpiryDate","Permit expiry"],["pucExpiryDate","PUC expiry"],
+             ["vehicleType","Vehicle type"],["bodyType","Body type"],["capacityTons","Capacity (tons)"],["gpsProvider","GPS provider"],["gpsImei","GPS IMEI"],["isVerified","Verified (AI never fills)","never"]],
+    build: (v) => ({ company_name: v.company || null }),
+  },
+  driver: {
+    label: "Transport driver", path: "/v1/transport-driver", title: "2. Upload licence photo and/or paste contact text", images: 2,
+    text: "", extra: [],
+    fields: [["name","Driver name"],["licenseNumber","Licence number"],["licenseType","Licence type"],["licenseExpiryDate","Licence expiry"],["phone","Phone"],
+             ["alternatePhone","Alternate phone"],["emergencyContactName","Emergency contact name"],["emergencyContactPhone","Emergency contact phone"],
+             ["aadhaarNumber","Aadhaar (AI never fills)","never"],["isVerified","Verified (AI never fills)","never"]],
+    build: () => ({}),
+  },
+};
+
+const $ = (id) => document.getElementById(id);
+let cur = "rfq", last = null, files = [];
+
+function el(tag, props = {}, ...kids) { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; }
+function banner(cls, text) { $("banners").appendChild(el("div", { className: "banner " + cls, textContent: text })); }
+
+function fileToB64(f) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res({ mime_type: f.type, data_base64: String(r.result).split(",")[1] }); r.onerror = rej; r.readAsDataURL(f); });
+}
+
+function selectTab(name) {
+  cur = name; last = null; files = [];
+  const m = MODULES[name];
+  [...$("tabs").children].forEach((b) => b.classList.toggle("on", b.dataset.k === name));
+  $("inTitle").textContent = m.title; $("banners").replaceChildren(); $("applyAll").disabled = true;
+  const box = $("inputs"); box.replaceChildren();
+  box.append(el("label", { htmlFor: "text", textContent: m.images ? "Pasted text (optional; supports 'Label: value' lines)" : "Text" }),
+             el("textarea", { id: "text", rows: m.images ? 3 : 4, value: m.text }));
+  if (m.images) {
+    box.append(el("label", { htmlFor: "files", textContent: `Document photos (JPG/PNG/WebP, max ${m.images}, 5 MB each)` }),
+               el("input", { id: "files", type: "file", accept: "image/jpeg,image/png,image/webp", multiple: true, onchange: (e) => { files = [...e.target.files].slice(0, m.images); } }));
+  }
+  m.extra.forEach((x) => box.append(el("label", { htmlFor: x.id, textContent: x.label }), el("textarea", { id: x.id, rows: x.rows, value: x.value })));
+  box.append(el("label", { htmlFor: "today", textContent: "Today (optional, YYYY-MM-DD)" }), el("input", { id: "today", placeholder: "empty = server date" }),
+             el("label", {}, el("input", { id: "skip", type: "checkbox", checked: true, style: "width:auto" }), " Don't overwrite fields I already filled"));
+  const form = $("form"); form.replaceChildren();
+  const never = [];
+  m.fields.forEach(([key, label, kind]) => {
+    if (kind === "never") { never.push(label); }
+    const wrap = el("div"); wrap.dataset.f = key;
+    wrap.append(el("label", { htmlFor: "f_" + key, textContent: label }),
+                kind === "area" ? el("textarea", { id: "f_" + key, rows: 3 }) : el("input", { id: "f_" + key, placeholder: kind === "never" ? "you decide" : "" }));
+    form.append(wrap);
+  });
+  $("never").textContent = "Not AI-fillable here: " + never.join("; ") + ". Full list with reasons: GET " + m.path + "/fields";
+}
+
+function applyOne(f) { $("f_" + f).value = last.suggestions[f].value; }
+
+function render(res) {
+  last = res; const u = res.usage;
+  if (u.provider === "fake") banner("fake", "FAKE provider (offline rule-based stand-in; it cannot read photos). Set ASSIST_AI_PROVIDER=gemini or openai for real output.");
+  else banner("info", `Provider: ${u.provider} / ${u.model} · ${u.input_tokens} in / ${u.output_tokens} out · ${u.latency_ms} ms`);
+  res.warnings.forEach((w) => banner("warn", "⚠ " + w));
+  document.querySelectorAll(".sugg").forEach((e) => e.remove());
+  for (const [f] of MODULES[cur].fields) {
+    const holder = document.querySelector(`[data-f="${CSS.escape(f)}"]`); if (!holder) continue;
+    const s = res.suggestions[f]; const box = el("div", { className: "sugg" });
+    if (s) {
+      box.append(el("span", { className: "pill " + s.routing, textContent: s.routing === "prefill" ? "high confidence" : "please confirm" }),
+                 el("span", { textContent: `AI suggests: ${s.value} (${Math.round(s.confidence * 100)}%)` }),
+                 el("button", { type: "button", textContent: "Apply", onclick: () => applyOne(f) }));
+      if (s.reason) box.append(el("span", { textContent: "· " + s.reason }));
+    } else if (res.skipped[f]) { box.textContent = "No suggestion: " + res.skipped[f]; }
+    else continue;
+    holder.append(box);
+  }
+  $("applyAll").disabled = Object.keys(res.suggestions).length === 0;
+}
+
+$("applyAll").onclick = () => Object.keys(last.suggestions).forEach(applyOne);
+
+$("go").onclick = async () => {
+  $("banners").replaceChildren(); document.querySelectorAll(".sugg").forEach((e) => e.remove()); $("applyAll").disabled = true;
+  const m = MODULES[cur]; const v = {}; m.extra.forEach((x) => (v[x.id] = $(x.id).value));
+  const current = {}; m.fields.forEach(([f, , kind]) => { if (kind !== "never" && $("f_" + f).value.trim()) current[f] = $("f_" + f).value.trim(); });
+  let body;
+  try { body = { text: $("text").value, current_values: current, skip_filled: $("skip").checked, ...m.build(v) }; }
+  catch { return banner("err", "Category JSON is invalid"); }
+  if ($("today").value) body.today = $("today").value;
+  $("go").disabled = true; $("status").textContent = "Thinking…";
+  try {
+    if (m.images) body.images = await Promise.all(files.map(fileToB64));
+    const r = await fetch($("base").value.replace(/\/$/, "") + m.path + "/assist", {
+      method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": $("key").value }, body: JSON.stringify(body) });
+    const data = await r.json();
+    if (!r.ok) banner("err", `${r.status} ${data.error?.code || ""}: ${data.error?.message || "request failed"}`);
+    else render(data);
+  } catch (e) { banner("err", "Cannot reach the service: " + e.message); }
+  finally { $("go").disabled = false; $("status").textContent = ""; }
+};
+
+Object.entries(MODULES).forEach(([k, m]) => $("tabs").append(el("button", { type: "button", role: "tab", textContent: m.label, onclick: () => selectTab(k) }, )));
+[...$("tabs").children].forEach((b, i) => (b.dataset.k = Object.keys(MODULES)[i]));
+selectTab("rfq");
+</script>
+</body>
+</html>

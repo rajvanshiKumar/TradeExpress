@@ -30,9 +30,15 @@ const parseBody = (text) => {
   }
 };
 
-const failure = (status, message) => ({
+/**
+ * reason: 'timeout'     the request was sent but no reply came in time (the server may still have acted on it);
+ *         'unreachable' no server answered at all, so nothing was done (e.g. backend or tunnel down);
+ *         'not-api'     something answered, but not the TradeExpress API.
+ */
+const failure = (status, message, reason) => ({
   ok: false,
   status,
+  reason,
   data: { success: false, message },
   error: message,
 });
@@ -63,15 +69,19 @@ export async function authFetch(endpoint, options = {}) {
       },
     });
   } catch (err) {
+    if (err?.name === 'TimeoutError') {
+      console.error('The authentication server did not reply in time.');
+      return failure(0, 'The server is taking longer than usual to respond.', 'timeout');
+    }
     console.error('The authentication server could not be reached.', err?.name || 'NetworkError');
-    return failure(0, 'Unable to connect to the authentication server. Please ensure the backend is running and reachable.');
+    return failure(0, 'Unable to connect to the authentication server. Please ensure the backend is running and reachable.', 'unreachable');
   }
 
   const contentType = response.headers.get('content-type') || '';
   const data = parseBody(await response.text());
   if (isMissingRouteResponse(response.status, contentType, data)) {
     console.error(`The backend address in VITE_PUBLIC_API_BASE_URL did not answer as the TradeExpress API (${API_BASE_URL}).`);
-    return failure(0, 'Unable to connect to the authentication server. The configured backend address did not answer as the TradeExpress API.');
+    return failure(0, 'Unable to connect to the authentication server. The configured backend address did not answer as the TradeExpress API.', 'not-api');
   }
 
   return {

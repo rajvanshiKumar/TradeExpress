@@ -1,0 +1,23 @@
+{
+  "form": "rfq",
+  "version": 1,
+  "description": "Buyer types a short requirement in plain words; AI proposes values for these RFQ form fields. Nothing is saved automatically: the user must review and apply.",
+  "thresholds": { "prefill": 0.85, "confirm": 0.5 },
+  "fields": [
+    { "key": "title", "label": "Title", "type": "string", "max_length": 150, "ai_fillable": true },
+    { "key": "specifications", "label": "Specifications", "type": "text", "max_length": 4000, "ai_fillable": true },
+    { "key": "categorySlug", "label": "Category", "type": "enum_from_request", "ai_fillable": true, "note": "Must be one of the slugs sent in request.categories" },
+    { "key": "quantity", "label": "Quantity", "type": "integer", "ai_fillable": true },
+    { "key": "unit", "label": "Unit", "type": "enum", "ai_fillable": true },
+    { "key": "deliveryPincode", "label": "Delivery pincode", "type": "string", "pattern": "^[1-9][0-9]{5}$", "ai_fillable": true, "note": "Only if the pincode is written in the text" },
+    { "key": "destinationCountry", "label": "Destination country", "type": "string", "ai_fillable": true },
+    { "key": "requiredByDate", "label": "Required by date", "type": "date", "format": "YYYY-MM-DD", "ai_fillable": true },
+    { "key": "targetPrice", "label": "Target price", "type": "decimal", "ai_fillable": false, "reason": "Commercial decision of the buyer; AI never proposes prices" },
+    { "key": "buyerName", "label": "Buyer name", "type": "string", "ai_fillable": false, "reason": "Prefill from the logged-in profile, not AI" },
+    { "key": "buyerEmail", "label": "Buyer email", "type": "string", "ai_fillable": false, "reason": "Prefill from the logged-in profile, not AI" },
+    { "key": "buyerCompany", "label": "Buyer company", "type": "string", "ai_fillable": false, "reason": "Prefill from the logged-in profile, not AI" },
+    { "key": "attachmentUrl", "label": "Attachment", "type": "url", "ai_fillable": false, "reason": "File upload" },
+    { "key": "status", "label": "Status", "type": "string", "ai_fillable": false, "reason": "System field" },
+    { "key": "rfqNumber", "label": "RFQ number", "type": "string", "ai_fillable": false, "reason": "System field" }
+  ]
+}

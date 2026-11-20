@@ -6,6 +6,7 @@ import { consumeAccountGrant } from './accountSecurityService.js';
 import { removePaymentMethod } from './paymentMethodService.js';
 import { sendAccountSecurityEmail } from './emailService.js';
 import { maskEmail } from './accountService.js';
+import { clearOtpHistory } from './otpService.js';
 
 /*
  * Self-service account deletion (Buyers and Suppliers; never the Super Admin).
@@ -95,6 +96,9 @@ async function closeAccount({ userId, role, statusReason, authorize }) {
     }
 
     await tx.supplierDocument.deleteMany({ where: { userId } });
+    // The old email / mobile number can sign up again later without the old account's OTP send counts
+    const before = await tx.user.findUnique({ where: { id: userId }, select: { email: true, phone: true, country: true } });
+    if (before) await clearOtpHistory({ ...before, db: tx });
     await tx.user.update({
       where: { id: userId },
       data: {
@@ -166,15 +170,26 @@ export const ADMIN_DELETION_REASONS = {
   FRAUDULENT_ACCOUNT: 'Fraudulent account',
   USER_REQUESTED: 'User requested account deletion',
   DUPLICATE_ACCOUNT: 'Duplicate account',
+  OTHER: 'Other',
 };
+
+/** "Other" needs the Super Admin to write the reason (5–200 characters); it is then used as the reason. */
+export function resolveAdminDeletionReason(reason, otherReason) {
+  if (!ADMIN_DELETION_REASONS[reason]) throw fail('Choose a reason for deleting this account.', 400, 'REASON_REQUIRED');
+  if (reason !== 'OTHER') return ADMIN_DELETION_REASONS[reason];
+  const text = String(otherReason || '').replace(/\s+/g, ' ').trim();
+  if (text.length < 5) throw fail('Please describe the reason (at least 5 characters).', 400, 'OTHER_REASON_REQUIRED');
+  if (text.length > 200) throw fail('Keep the reason under 200 characters.', 400, 'OTHER_REASON_TOO_LONG');
+  return `Other: ${text}`;
+}
 
 /**
  * Super Admin deletes a Buyer or Supplier account. Requires a listed reason, typing DELETE and re-entering the
  * Super Admin's own password. Administrator accounts can never be deleted through this workflow.
  */
-export async function adminDeleteAccount({ admin, targetUserId, reason, note, confirmation, adminPassword, ipAddress, userAgent }) {
+export async function adminDeleteAccount({ admin, targetUserId, reason, otherReason, note, confirmation, adminPassword, ipAddress, userAgent }) {
   if (admin?.role !== 'SUPER_ADMIN') throw fail('Only a Super Admin can delete accounts.', 403, 'FORBIDDEN');
-  if (!ADMIN_DELETION_REASONS[reason]) throw fail('Choose a reason for deleting this account.', 400, 'REASON_REQUIRED');
+  const reasonLabel = resolveAdminDeletionReason(reason, otherReason);
   if (String(confirmation || '').trim() !== 'DELETE') throw fail('Type DELETE to confirm.', 400, 'CONFIRMATION_REQUIRED');
 
   // Recent re-authentication: the Super Admin confirms with their own password
@@ -189,12 +204,12 @@ export async function adminDeleteAccount({ admin, targetUserId, reason, note, co
   if (target.status === 'DEACTIVATED') throw fail('This account has already been deleted.', 409, 'ALREADY_DELETED');
 
   const cleanNote = String(note || '').trim().slice(0, 500);
-  await closeAccount({ userId: target.id, role: target.role, statusReason: `Account deleted by TradeExpress: ${ADMIN_DELETION_REASONS[reason]}.` });
+  await closeAccount({ userId: target.id, role: target.role, statusReason: `Account deleted by TradeExpress: ${reasonLabel}.` });
 
   await prisma.auditLog.create({
     data: {
       actorId: actor.id, actorEmail: actor.email, actorRole: 'SUPER_ADMIN', action: 'ACCOUNT_DELETE_BY_ADMIN', resource: 'USERS', targetId: target.id,
-      details: { reason, reasonLabel: ADMIN_DELETION_REASONS[reason], note: cleanNote || null, targetEmail: maskEmail(target.email), targetRole: target.role },
+      details: { reason, reasonLabel, note: cleanNote || null, targetEmail: maskEmail(target.email), targetRole: target.role },
       ipAddress: ipAddress || null, userAgent: userAgent || null, result: 'SUCCESS',
     },
   }).catch(() => {});
@@ -204,5 +219,5 @@ export async function adminDeleteAccount({ admin, targetUserId, reason, note, co
     subject: 'Your TradeExpress account has been closed',
     message: `Your TradeExpress account has been closed by TradeExpress and you have been signed out everywhere. ${RETENTION_NOTE} If you believe this is a mistake, please contact TradeExpress support.`,
   });
-  return { deleted: true, reason: ADMIN_DELETION_REASONS[reason] };
+  return { deleted: true, reason: reasonLabel };
 }

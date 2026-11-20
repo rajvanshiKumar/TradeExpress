@@ -57,6 +57,27 @@ describe('authFetch — wrong email is not a connection failure', () => {
     const res = await authFetch('/auth/login', { method: 'POST', body: '{}' });
     assert.equal(res.status, 0);
     assert.match(res.data.message, /Unable to connect to the authentication server/);
+    assert.equal(res.reason, 'unreachable', 'nothing reached the server, so no code can have been sent');
+  });
+
+  it('reports a late reply as a timeout (the server may still have sent the code)', async () => {
+    globalThis.fetch = async () => {
+      throw new DOMException('The operation timed out.', 'TimeoutError');
+    };
+    const res = await authFetch('/auth/send-email-otp', { method: 'POST', body: '{}' });
+    assert.equal(res.status, 0);
+    assert.equal(res.reason, 'timeout');
+    assert.match(res.data.message, /taking longer than usual/);
+  });
+});
+
+describe('Login OTP request failures', () => {
+  it('never claims a code was sent when the server could not be reached', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../src/components/forms/LoginForm.jsx', import.meta.url), 'utf8');
+    assert.ok(!src.includes('Verification code was dispatched'), 'no "code dispatched" message on a failed request');
+    assert.match(src, /res\.reason === "unreachable"/, 'an unreachable server is reported as a connection problem');
+    assert.match(src, /res\.reason === "timeout"/, 'only a late reply keeps the code boxes open');
   });
 });
 

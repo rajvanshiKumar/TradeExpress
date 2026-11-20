@@ -9,7 +9,7 @@ import { NotificationContext } from './NotificationContext';
 export { OrderContext };
 
 export function OrderProvider({ children }) {
-  const { items: orders, setItems, loading, error, reload } = useCollection(orderService.listOrders, orderService.saveOrders);
+  const { items: orders, setItems, loading, error, reload, refresh } = useCollection(orderService.listOrders, orderService.saveOrders);
   const { addNotification } = useContext(NotificationContext);
   const { user } = useContext(AuthContext);
 
@@ -98,6 +98,19 @@ export function OrderProvider({ children }) {
     addNotification({ audience: order.buyerId, type: 'orders', title: `Order ${status.toLowerCase()}`, body: `Order ${order.id} is now marked as ${status}.`, link: '/buyer/orders' });
   }, [orders, setItems, addNotification]);
 
+  /**
+   * Buyer cancels an order on the server first; the list changes only when the server agrees (it refuses once the
+   * order is packed). Then the orders are read again, so status, payment and stock reflect the database.
+   */
+  const cancelOrder = useCallback(async (id, reason = '') => {
+    const order = orders.find((item) => item.id === id);
+    if (!order) throw new Error('Order not found.');
+    await orderService.cancelOrder(order.orderNumber || order.id, reason);
+    setItems((previous) => previous.map((item) => (item.id === id ? { ...item, status: 'Cancelled' } : item)));
+    addNotification({ audience: order.buyerId, type: 'orders', title: 'Order cancelled', body: `Order ${order.id} has been cancelled.`, link: '/buyer/orders' });
+    refresh(0);
+  }, [orders, setItems, addNotification, refresh]);
+
   const getOrder = useCallback((id) => orders.find((item) => item.id === id) ?? null, [orders]);
 
   const value = useMemo(() => ({
@@ -105,6 +118,8 @@ export function OrderProvider({ children }) {
     loading,
     error,
     reload,
+    refresh,
+    cancelOrder,
     placeOrder,
     updateOrderStatus,
     getOrder,
@@ -112,7 +127,7 @@ export function OrderProvider({ children }) {
     markOrderSeen,
     markAllOrdersSeen,
     isOrderSeen,
-  }), [orders, loading, error, reload, placeOrder, updateOrderStatus, getOrder, unseenOrdersCount, markOrderSeen, markAllOrdersSeen, isOrderSeen]);
+  }), [orders, loading, error, reload, refresh, cancelOrder, placeOrder, updateOrderStatus, getOrder, unseenOrdersCount, markOrderSeen, markAllOrdersSeen, isOrderSeen]);
 
   return <OrderContext.Provider value={value}>{children}</OrderContext.Provider>;
 }

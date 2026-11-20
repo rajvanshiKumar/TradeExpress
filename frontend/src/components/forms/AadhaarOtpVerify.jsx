@@ -1,5 +1,6 @@
 import { AlertCircle, BadgeCheck, KeyRound, RefreshCw, Smartphone } from 'lucide-react';
 import useAadhaarOtp from '../../hooks/useAadhaarOtp.js';
+import AadhaarHolderCard from './AadhaarHolderCard.jsx';
 
 /**
  * Aadhaar OTP verification panel (used by Supplier signup; Buyer signup uses useAadhaarOtp inline).
@@ -9,21 +10,25 @@ import useAadhaarOtp from '../../hooks/useAadhaarOtp.js';
  *   consent        the user's consent checkbox
  *   verified       parent state: this number is already verified
  *   verifiedName   name returned by the provider (shown once verified)
+ *   holder         UIDAI details and photo of the verified holder (shown once verified)
  *   environment    'uat' | 'prod' of the verified result
  *   onVerified({ verificationToken, fullName, aadhaarLast4, environment })
  */
-export default function AadhaarOtpVerify({ aadhaarNumber, consent, verified, verifiedName, environment, onVerified }) {
+export default function AadhaarOtpVerify({ aadhaarNumber, consent, verified, verifiedName, holder, environment, onVerified }) {
   const otp = useAadhaarOtp({ aadhaarNumber, onVerified });
   const ready = otp.digits.length === 12 && consent;
 
   if (verified) {
     return (
-      <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900">
-        <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
-        <span className="min-w-0">
-          Aadhaar verified with OTP{verifiedName ? ` (${verifiedName})` : ''}.
-          {environment === 'uat' && <span className="ml-1 font-medium text-amber-700">UAT test result</span>}
-        </span>
+      <div>
+        <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900">
+          <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+          <span className="min-w-0">
+            Aadhaar verified with OTP{verifiedName ? ` (${verifiedName})` : ''}.
+            {environment === 'uat' && <span className="ml-1 font-medium text-amber-700">UAT test result</span>}
+          </span>
+        </div>
+        <AadhaarHolderCard holder={holder} />
       </div>
     );
   }
@@ -64,6 +69,10 @@ export default function AadhaarOtpVerify({ aadhaarNumber, consent, verified, ver
             type="text"
             inputMode="numeric"
             autoComplete="one-time-code"
+            name="aadhaar-otp"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            disabled={otp.verifying}
             maxLength={6}
             placeholder="6-digit OTP"
             value={otp.otp}

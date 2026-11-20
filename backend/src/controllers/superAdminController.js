@@ -1,6 +1,7 @@
 import * as superAdminService from '../services/superAdminService.js';
 import * as auditService from '../services/auditService.js';
 import * as accountDeletionService from '../services/accountDeletionService.js';
+import * as userExportService from '../services/userExportService.js';
 import prisma from '../config/db.js';
 
 // Dashboard
@@ -77,11 +78,12 @@ export async function getUserDeletionCheck(req, res, next) {
 
 export async function deleteUserAccount(req, res, next) {
   try {
-    const { reason, note, confirmation, adminPassword } = req.body;
+    const { reason, otherReason, note, confirmation, adminPassword } = req.body;
     const data = await accountDeletionService.adminDeleteAccount({
       admin: req.user,
       targetUserId: req.params.id,
       reason,
+      otherReason,
       note,
       confirmation,
       adminPassword,
@@ -94,31 +96,29 @@ export async function deleteUserAccount(req, res, next) {
   }
 }
 
-export async function exportUsersCsv(req, res, next) {
+/**
+ * User Directory export: GET /super-admin/users/export/:format (csv | xlsx | pdf), with the directory filters
+ * (role, status, search) as query parameters. Recorded in the audit log.
+ */
+export async function exportUsers(req, res, next) {
   try {
-    const result = await superAdminService.getUsers({ limit: 1000, ...req.query });
-    const header = 'ID,Name,Email,Role,Status,Company,Phone,City,Country,KYC Status,Verified,Joined At\n';
-    const rows = result.users.map((u) => {
-      const clean = (val) => `"${String(val || '').replace(/"/g, '""')}"`;
-      return [
-        clean(u.id),
-        clean(u.name),
-        clean(u.email),
-        clean(u.role),
-        clean(u.status),
-        clean(u.company),
-        clean(u.phone),
-        clean(u.city),
-        clean(u.country),
-        clean(u.kycStatus),
-        clean(u.isVerified ? 'YES' : 'NO'),
-        clean(u.createdAt ? new Date(u.createdAt).toISOString() : ''),
-      ].join(',');
-    }).join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=users_export_${Date.now()}.csv`);
-    res.status(200).send(header + rows);
+    const format = String(req.params.format || 'csv').toLowerCase();
+    const { role, status, search } = req.query;
+    const file = await userExportService.buildUserExport({ format, role, status, search });
+    await auditService.logAuditAction({
+      req,
+      actorId: req.user?.id,
+      actorEmail: req.user?.email,
+      action: 'USERS_EXPORT',
+      resource: 'USERS',
+      details: { format, role: role || 'ALL', status: status || 'ALL', search: search ? String(search).slice(0, 100) : null, rows: file.count },
+    });
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.setHeader('Content-Length', file.buffer.length);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Export-Rows', String(file.count));
+    res.status(200).send(file.buffer);
   } catch (err) {
     next(err);
   }

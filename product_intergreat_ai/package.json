@@ -1,0 +1,10 @@
+{
+  "name": "tradeexpress-dev",
+  "private": true,
+  "description": "Repo-level helper scripts only. Each app has its own package.json / pyproject.toml.",
+  "scripts": {
+    "dev": "node scripts/dev-all.mjs",
+    "dev:3001": "node scripts/dev-all.mjs --port 3001",
+    "dev:3100": "node scripts/dev-all.mjs --port 3100"
+  }
+}

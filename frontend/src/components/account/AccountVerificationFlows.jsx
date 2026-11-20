@@ -137,6 +137,7 @@ export function CodeStep({ title, description, send, verify, onBack }) {
             resending={busy}
             cooldown={cooldown}
             label="Enter the 6-digit code"
+            group="account"
             error={error}
           />
           {onBack ? <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={onBack}>Back</Button> : null}

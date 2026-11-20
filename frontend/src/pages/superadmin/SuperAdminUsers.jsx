@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search,
   Filter,
-  Download,
   MoreVertical,
   ShieldAlert,
   ShieldCheck,
@@ -13,11 +12,14 @@ import {
   RefreshCw,
   Lock,
   Trash2,
+  X,
 } from 'lucide-react';
 import superAdminApi from '../../api/superAdminApi';
 import useNotifications from '../../hooks/useNotifications';
 import CustomSelect from '../../components/common/CustomSelect';
 import AdminDeleteUserModal from '../../components/superadmin/AdminDeleteUserModal';
+import UserDetailPanel from '../../components/superadmin/UserDetailPanel';
+import UserExportMenu from '../../components/superadmin/UserExportMenu';
 
 export default function SuperAdminUsers() {
   const { showToast } = useNotifications();
@@ -30,38 +32,51 @@ export default function SuperAdminUsers() {
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [role, setRole] = useState('ALL');
-  const [status, setStatus] = useState('ALL');
+  // Active accounts are shown first by default
+  const [status, setStatus] = useState('ACTIVE');
 
   // Modals state
   const [selectedUser, setSelectedUser] = useState(null);
-  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  // Full details of the user opened from the directory ({ user, recentOrders, auditTrail })
+  const [details, setDetails] = useState(null);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [statusAction, setStatusAction] = useState('SUSPENDED');
   const [statusReason, setStatusReason] = useState('');
   const [userToDelete, setUserToDelete] = useState(null);
 
-  const fetchUsers = async (page = 1) => {
+  // Only the newest request may update the table (typing fast must not show an older, slower answer)
+  const requestSeqRef = useRef(0);
+  const fetchUsers = async (page = 1, term = search) => {
+    const seq = ++requestSeqRef.current;
     try {
       setLoading(true);
       const res = await superAdminApi.getUsers({
         page,
         limit: pagination.limit,
-        search,
+        search: term.trim(),
         role,
         status,
       });
+      if (seq !== requestSeqRef.current) return;
       setUsers(res.users);
       setPagination(res.pagination);
     } catch (err) {
-      showToast(err.message || 'Failed to fetch users from database.', 'error');
+      if (seq === requestSeqRef.current) showToast(err.message || 'Failed to fetch users from database.', 'error');
     } finally {
-      setLoading(false);
+      if (seq === requestSeqRef.current) setLoading(false);
     }
   };
 
+  // Filters apply at once; the search applies while typing, shortly after the last key press
+  const firstSearchRef = useRef(true);
   useEffect(() => {
     fetchUsers(1);
   }, [role, status]);
+  useEffect(() => {
+    if (firstSearchRef.current) { firstSearchRef.current = false; return undefined; }
+    const timer = setTimeout(() => fetchUsers(1, search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -98,13 +113,17 @@ export default function SuperAdminUsers() {
     }
   };
 
+  /**
+   * Opens the panel at once with the row's data, then loads the full details of that one user only
+   * (never ahead of a click, so no other user's data is requested). Always fresh, so status changes show.
+   */
   const viewDetails = async (u) => {
+    setDetails({ user: u, recentOrders: [], auditTrail: [], loading: true });
     try {
-      const data = await superAdminApi.getUserDetails(u.id);
-      setSelectedUser(data.user);
-      setDetailModalOpen(true);
+      const full = await superAdminApi.getUserDetails(u.id);
+      setDetails((current) => (current?.user?.id === u.id ? full : current));
     } catch (err) {
-      showToast(err.message || 'Failed to load user details.', 'error');
+      setDetails((current) => (current?.user?.id === u.id ? { ...current, loading: false, error: err.message || 'Failed to load user details.' } : current));
     }
   };
 
@@ -130,15 +149,16 @@ export default function SuperAdminUsers() {
         </div>
 
         <div className="flex items-center gap-2">
-          <a
-            href={superAdminApi.getExportUsersCsvUrl({ role, status, search })}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200 transition-colors"
-          >
-            <Download className="size-4" />
-            <span>Export CSV</span>
-          </a>
+          <UserExportMenu
+            onExport={async (format) => {
+              try {
+                const { rows } = await superAdminApi.downloadUsersExport(format, { role, status, search: search.trim() });
+                showToast(`Export ready${rows !== null ? `: ${rows} user${rows === 1 ? '' : 's'}` : ''}.`, 'success');
+              } catch (err) {
+                showToast(err.message || 'The export could not be created.', 'error');
+              }
+            }}
+          />
 
           <button
             type="button"
@@ -159,9 +179,20 @@ export default function SuperAdminUsers() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, email, company, phone, or city..."
-            className="w-full pl-10 pr-4 py-2 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+            placeholder="Search by name, email, company, phone, city, GSTIN, PAN or supplier code..."
+            aria-label="Search users"
+            className="w-full pl-10 pr-9 py-2 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
           />
+          {search ? (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : null}
         </form>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -231,7 +262,14 @@ export default function SuperAdminUsers() {
                   const isDeleted = u.status === 'DEACTIVATED';
 
                   return (
-                    <tr key={u.id} className="hover:bg-slate-50/80 transition-colors group">
+                    <tr
+                      key={u.id}
+                      onClick={() => viewDetails(u)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); viewDetails(u); } }}
+                      tabIndex={0}
+                      aria-label={`Open full details of ${u.name || u.email}`}
+                      className="cursor-pointer hover:bg-slate-50/80 focus:bg-emerald-50/60 focus:outline-none transition-colors group"
+                    >
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <div
@@ -320,7 +358,11 @@ export default function SuperAdminUsers() {
                         {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
                       </td>
 
-                      <td className="py-3.5 px-4 text-right sticky right-0 bg-white group-hover:bg-[#f8faf7] transition-colors z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)]">
+                      <td
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="py-3.5 px-4 text-right sticky right-0 bg-white group-hover:bg-[#f8faf7] transition-colors z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)]"
+                      >
                         <div className="flex items-center justify-end gap-1.5">
                           {(u.role === 'BUYER' || u.role === 'SUPPLIER') && u.kycStatus !== 'VERIFIED' && !isDeleted && !isSuspended && (
                             <button
@@ -486,101 +528,16 @@ export default function SuperAdminUsers() {
         />
       )}
 
-      {/* Detailed User Modal */}
-      {detailModalOpen && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] overflow-y-auto space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="size-10 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-sm">
-                  {selectedUser.name?.charAt(0)}
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">{selectedUser.name}</h3>
-                  <p className="text-xs text-slate-500 font-mono">{selectedUser.email}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDetailModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-400 font-semibold block">Role & Status</span>
-                <span className="font-bold text-slate-800">{selectedUser.role} / {selectedUser.status}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-400 font-semibold block">Company</span>
-                <span className="font-bold text-slate-800">{selectedUser.company || 'Not provided'}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-400 font-semibold block">Phone</span>
-                <span className="font-bold text-slate-800">{selectedUser.phone || 'Not provided'}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-400 font-semibold block">Location</span>
-                <span className="font-bold text-slate-800">{selectedUser.city ? `${selectedUser.city}, ${selectedUser.country}` : 'Not provided'}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-400 font-semibold block">GSTIN</span>
-                <span className="font-bold text-slate-800 font-mono">{selectedUser.gstin || 'Not registered'}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-400 font-semibold block">PAN</span>
-                <span className="font-bold text-slate-800 font-mono">{selectedUser.pan || 'Not registered'}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-400 font-semibold block">KYC / Verification</span>
-                <span className={`inline-flex items-center gap-1 font-bold text-xs mt-0.5 ${selectedUser.kycStatus === 'VERIFIED' ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  <ShieldCheck className="size-3.5" />
-                  {selectedUser.kycStatus === 'VERIFIED' ? 'VERIFIED' : (selectedUser.kycStatus || 'PENDING')}
-                </span>
-              </div>
-            </div>
-
-            {selectedUser.addresses?.length > 0 && (
-              <div className="pt-2">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Saved Addresses</h4>
-                <div className="space-y-2">
-                  {selectedUser.addresses.map((addr) => (
-                    <div key={addr.id} className="p-2.5 rounded-xl border border-slate-200 text-xs text-slate-700">
-                      <p className="font-bold">{addr.name} ({addr.label})</p>
-                      <p>{addr.street}, {addr.city}, {addr.state} - {addr.postalCode}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              {(selectedUser.role === 'BUYER' || selectedUser.role === 'SUPPLIER') && selectedUser.kycStatus !== 'VERIFIED' ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await handleVerifyUser(selectedUser);
-                    setDetailModalOpen(false);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors"
-                >
-                  <ShieldCheck className="size-4" />
-                  Verify {selectedUser.role === 'BUYER' ? 'Buyer' : 'Supplier'} Account &amp; Issue Certificate
-                </button>
-              ) : <div />}
-              <button
-                type="button"
-                onClick={() => setDetailModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Full user details (opens from any row) */}
+      {details && (
+        <UserDetailPanel
+          details={details}
+          onClose={() => setDetails(null)}
+          onVerify={async (user) => {
+            await handleVerifyUser(user);
+            try { setDetails(await superAdminApi.getUserDetails(user.id)); } catch { setDetails(null); }
+          }}
+        />
       )}
     </div>
   );

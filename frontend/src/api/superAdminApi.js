@@ -27,6 +27,17 @@ function getHeaders(token) {
   };
 }
 
+// User Directory export files: the type the server must send, and how a real file of that type begins
+const startsWith = (bytes, ...codes) => codes.every((code, i) => bytes[i] === code);
+const EXPORT_TYPES = {
+  // Text (after the UTF-8 BOM), never an HTML page
+  csv: { mime: 'text/csv', isFile: (b) => b.length > 3 && startsWith(b, 0xef, 0xbb, 0xbf) && b[3] !== 0x3c },
+  // .xlsx is a ZIP file: "PK"
+  xlsx: { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', isFile: (b) => startsWith(b, 0x50, 0x4b, 0x03, 0x04) },
+  // "%PDF"
+  pdf: { mime: 'application/pdf', isFile: (b) => startsWith(b, 0x25, 0x50, 0x44, 0x46) },
+};
+
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}/super-admin${endpoint}`;
   const token = ensureAdminToken();
@@ -87,8 +98,52 @@ export const superAdminApi = {
     request(`/users/${id}/verify`, { method: 'POST', body: JSON.stringify({ status: 'VERIFIED' }) }),
   reviewUserKyc: (id, payload) =>
     request(`/users/${id}/kyc/review`, { method: 'POST', body: JSON.stringify(payload) }),
-  getExportUsersCsvUrl: (params = {}) => {
-    return `${API_BASE}/super-admin/users/export/csv${buildQueryString(params)}`;
+  /**
+   * Downloads the User Directory export ('csv' | 'xlsx' | 'pdf') with the current filters.
+   * Sent with the admin token (a plain link cannot carry it). Returns { rows }.
+   */
+  downloadUsersExport: async (format, params = {}) => {
+    const expected = EXPORT_TYPES[format];
+    if (!expected) throw new Error('Choose an export format: CSV, Excel or PDF.');
+    const token = ensureAdminToken();
+    const res = await fetch(`${API_BASE}/super-admin/users/export/${format}${buildQueryString(params)}`, {
+      headers: {
+        Accept: `${expected.mime}, application/json`,
+        // A dev tunnel otherwise answers a browser request with its HTML warning page instead of the file
+        'X-Tunnel-Skip-Anti-Phishing-Page': 'true',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.status === 401) {
+      handleRejectedToken(token);
+      const error = new Error('Your admin session has expired. Please sign in again.');
+      error.status = 401;
+      throw error;
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const error = new Error(data.message || 'The export could not be created. Please try again.');
+      error.status = res.status;
+      throw error;
+    }
+    // Only the real file is saved: never an HTML page or JSON error under a .csv / .xlsx / .pdf name
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
+    if (!contentType.startsWith(expected.mime) || !expected.isFile(bytes)) {
+      throw new Error('The export could not be downloaded (the server sent an unexpected reply). Please refresh the page and try again.');
+    }
+    const blob = new Blob([bytes], { type: expected.mime });
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const filename = /filename="?([^";]+)"?/i.exec(disposition)?.[1] || `tradeexpress-users.${format}`;
+    const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    return { rows: Number(res.headers.get('X-Export-Rows')) || null };
   },
 
   // Suppliers & KYC

@@ -7,7 +7,6 @@ import {
   sendAadhaarOtp,
   verifyAadhaarOtp,
 } from '../../src/services/aadhaarOtpService.js';
-import { encryptionAvailable, isEncrypted, readEncryptedField } from '../../src/utils/dataCrypto.js';
 
 // Test-only provider configuration; requests and the database are stubbed (no network, no real DB rows)
 process.env.PAN_AADHAAR_API_BASE_URL = 'https://provider.test/v1/prod/pan/aadhaar-link-status';
@@ -144,8 +143,7 @@ test('Aadhaar OTP verification', async (t) => {
     assert.equal(done.verified, true);
     assert.equal(done.fullName, 'Test Holder');
     assert.equal(row.status, 'VERIFIED');
-    assert.deepEqual(JSON.parse(readEncryptedField(row.responseData)), verifiedReply.data, 'the whole provider response (incl. image) is saved');
-    if (encryptionAvailable()) assert.ok(isEncrypted(row.responseData), 'stored encrypted when DATA_ENCRYPTION_KEY is set');
+    assert.deepEqual(JSON.parse(row.responseData), verifiedReply.data, 'the whole provider response (incl. image) is saved as readable JSON text');
 
     await assert.rejects(resolveAadhaarVerification({ token: done.verificationToken, aadhaarNumber: '999912341234', db }), (e) => e.code === 'AADHAAR_MISMATCH');
     const resolved = await resolveAadhaarVerification({ token: done.verificationToken, aadhaarNumber: '123412341234', db });
@@ -218,6 +216,37 @@ test('Aadhaar OTP verification', async (t) => {
     db.aadhaarVerification.rows.get(sent.verificationId).expiresAt = new Date(Date.now() - 1000);
     await assert.rejects(verifyAadhaarOtp({ verificationId: sent.verificationId, otp: '123456', aadhaarNumber: VALID_AADHAAR, request: p.request, db }), (e) => e.code === 'OTP_EXPIRED');
     assert.equal(p.calls.length, 1);
+  });
+
+  await t.test('the direct provider format (status { code, type }, no "success") is accepted, saved and returned as is', async () => {
+    const db = fakeDb();
+    const photo = '/9j/4AAQSkZJRgABAgsss\nAAAQABAAD/2wBDAAgGBgcGBQ==';
+    const directSent = { status: 200, data: { status: { code: 200, type: 'success', message: 'OTP sent.' }, data: { reference_id: 'ref_direct' } } };
+    const directVerified = { status: 200, data: {
+      status: { code: 200, type: 'success', message: 'Aadhaar verified successfully.' },
+      message: 'Aadhaar verified successfully.',
+      data: { full_name: 'Test Holder', aadhaar_number: VALID_AADHAAR, dob: '2000-01-01', gender: 'M', care_of: 'S/O: Test', profile_image: photo, has_image: true, status: 'success_aadhaar' },
+    } };
+    const p = provider(directSent, directVerified);
+    const sent = await sendAadhaarOtp({ aadhaarNumber: VALID_AADHAAR, userConsent: true, request: p.request, db });
+    const done = await verifyAadhaarOtp({ verificationId: sent.verificationId, otp: '123456', aadhaarNumber: VALID_AADHAAR, request: p.request, db });
+    assert.equal(done.verified, true);
+    assert.deepEqual(done.providerResponse, directVerified.data, 'the provider reply is returned unchanged');
+    assert.deepEqual(JSON.parse(db.aadhaarVerification.rows.get(sent.verificationId).responseData), directVerified.data, 'and saved unchanged');
+    assert.equal(done.holder.fullName, 'Test Holder');
+    assert.equal(done.holder.photo, `data:image/jpeg;base64,${photo.replace(/\s+/g, '')}`, 'photo keeps every character (only line breaks removed)');
+  });
+
+  await t.test('the direct format with type "error" is a rejection, never verified', async () => {
+    const db = fakeDb();
+    const failed = { status: 200, data: { status: { code: 400, type: 'error', message: 'Invalid OTP.' }, message: 'Invalid OTP.' } };
+    const p = provider(otpSent, failed);
+    const sent = await sendAadhaarOtp({ aadhaarNumber: VALID_AADHAAR, userConsent: true, request: p.request, db });
+    await assert.rejects(
+      verifyAadhaarOtp({ verificationId: sent.verificationId, otp: '000000', aadhaarNumber: VALID_AADHAAR, request: p.request, db }),
+      (e) => e.code === 'OTP_INVALID',
+    );
+    assert.equal(db.aadhaarVerification.rows.get(sent.verificationId).status, 'OTP_SENT');
   });
 
   await t.test('signup without an Aadhaar OTP token is refused', async () => {

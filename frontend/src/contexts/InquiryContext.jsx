@@ -8,7 +8,7 @@ import { apiPost } from '../services/apiClient';
 export { InquiryContext };
 
 export function InquiryProvider({ children }) {
-  const { items: inquiries, setItems, loading, error, reload } = useCollection(inquiryService.listInquiries, inquiryService.saveInquiries);
+  const { items: inquiries, setItems, loading, error, reload, refresh } = useCollection(inquiryService.listInquiries, inquiryService.saveInquiries);
   const { addNotification } = useContext(NotificationContext);
 
   const submitInquiry = useCallback(async (values, related) => {
@@ -181,13 +181,14 @@ export function InquiryProvider({ children }) {
     loading,
     error,
     reload,
+    refresh,
     submitInquiry,
     setInquiryStatus,
     respondToInquiry,
     counterInquiry,
     acceptInquiryQuote,
     rejectInquiryQuote,
-  }), [inquiries, loading, error, reload, submitInquiry, setInquiryStatus, respondToInquiry, counterInquiry, acceptInquiryQuote, rejectInquiryQuote]);
+  }), [inquiries, loading, error, reload, refresh, submitInquiry, setInquiryStatus, respondToInquiry, counterInquiry, acceptInquiryQuote, rejectInquiryQuote]);
 
   return <InquiryContext.Provider value={value}>{children}</InquiryContext.Provider>;
 }

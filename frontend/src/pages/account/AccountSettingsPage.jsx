@@ -85,7 +85,9 @@ export default function AccountSettingsPage() {
   const sectionRow = cards.flatMap((card) => card.rows).find((row) => row.id === section && !row.to);
   const SectionComponent = sectionRow?.available ? SECTION_COMPONENTS[section] : null;
   const sectionTitle = sectionRow?.label || ALL_SECTION_TITLES[section];
-  useDocumentTitle(section && sectionTitle ? `${sectionTitle} | Account Settings` : 'Account Settings | TradeExpress');
+  // Buyers know this page as "My Business Profile"
+  const pageTitle = role === 'buyer' ? 'My Business Profile' : 'Account Settings';
+  useDocumentTitle(section && sectionTitle ? `${sectionTitle} | ${pageTitle}` : `${pageTitle} | TradeExpress`);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,7 +141,7 @@ export default function AccountSettingsPage() {
 
   const breadcrumbs = [
     { label: 'Dashboard', to: DASHBOARD_HOME[role] || '/' },
-    section && SectionComponent ? { label: 'Account Settings', to: basePath } : { label: 'Account Settings' },
+    section && SectionComponent ? { label: pageTitle, to: basePath } : { label: pageTitle },
     ...(section && SectionComponent ? [{ label: sectionTitle }] : []),
   ];
 
@@ -148,7 +150,7 @@ export default function AccountSettingsPage() {
       <div>
         <Breadcrumbs items={breadcrumbs} />
         <h1 className="mt-2 font-display text-2xl font-extrabold tracking-tight text-navy-900 sm:text-3xl">
-          {section && SectionComponent ? sectionTitle : 'Account Settings'}
+          {section && SectionComponent ? sectionTitle : pageTitle}
         </h1>
       </div>
 
@@ -164,7 +166,7 @@ export default function AccountSettingsPage() {
       {settings && section && SectionComponent ? (
         <div className="space-y-4">
           <Link to={basePath} className="inline-flex items-center gap-1.5 text-sm font-semibold text-success hover:underline">
-            <ArrowLeft className="size-4" aria-hidden="true" /> Back to Account Settings
+            <ArrowLeft className="size-4" aria-hidden="true" /> Back to {pageTitle}
           </Link>
           <SectionComponent settings={settings} role={role} onUpdated={handleUpdated} onEmailChanged={handleEmailChanged} onPhoneChanged={handlePhoneChanged} />
         </div>

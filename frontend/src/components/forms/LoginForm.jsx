@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, startTransition } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { postAuthPath } from "../../utils/postAuthRedirect";
+import { otpBoxProps } from "../../utils/otpDigits";
 import {
   Eye,
   EyeOff,
@@ -216,11 +217,14 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       return;
     }
 
-    // If server timed out or network glitched, the code may still have been dispatched to user's inbox/phone.
-    // Ensure the OTP boxes are displayed so the user who received the code can type it in!
-    const isNetworkOrTimeout =
-      !res.ok && (!res.status || res.status === 0 || /timeout|network|connect|fetch/i.test(res.error || data.message || ""));
-    if (isNetworkOrTimeout) {
+    // The server could not be reached at all: no code was sent, so say so (never "code dispatched")
+    if (res.reason === "unreachable" || res.reason === "not-api") {
+      setFormError(res.error || "Unable to connect to the server. Please check your connection and try again.");
+      return;
+    }
+
+    // The request reached the server but the reply was late: a code MAY have been sent, so keep the boxes open
+    if (res.reason === "timeout") {
       if (method === "email") {
         setEmailOtpSent(true);
         setTimeout(() => emailOtpRefs.current[0]?.focus(), 150);
@@ -230,8 +234,8 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
       }
       setFormError(
         method === "email"
-          ? "Verification code was dispatched. Please check your email and enter the 6-digit OTP below."
-          : "Verification code was dispatched. Please check your SMS and enter the 6-digit OTP below."
+          ? "The server is taking longer than usual. If a code arrives in your email, enter it below; otherwise use Resend in a moment."
+          : "The server is taking longer than usual. If a code arrives by SMS, enter it below; otherwise use Resend in a moment."
       );
       return;
     }
@@ -914,10 +918,11 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
                     <input
                       key={idx}
                       ref={(el) => (emailOtpRefs.current[idx] = el)}
+                      {...otpBoxProps("login-email", idx)}
+                      disabled={busy}
                       type="text"
                       inputMode="numeric"
                       maxLength={1}
-                      autoComplete="off"
                       placeholder=""
                       value={digit}
                       onChange={(e) => handleOtpBoxChange("email", idx, e.target.value)}
@@ -1128,10 +1133,11 @@ export default function LoginForm({ mode = "member", role = null, adminType = "a
                     <input
                       key={idx}
                       ref={(el) => (mobileOtpRefs.current[idx] = el)}
+                      {...otpBoxProps("login-mobile", idx)}
+                      disabled={busy}
                       type="text"
                       inputMode="numeric"
                       maxLength={1}
-                      autoComplete="off"
                       placeholder=""
                       value={digit}
                       onChange={(e) => handleOtpBoxChange("mobile", idx, e.target.value)}

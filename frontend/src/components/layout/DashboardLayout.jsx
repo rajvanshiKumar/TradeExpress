@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { PageSkeleton } from '../common/Skeleton';
 import PageOutlet from './PageOutlet';
@@ -14,6 +14,7 @@ import VerificationBadge from '../common/VerificationBadge';
 import useAuth from '../../hooks/useAuth';
 import useProducts from '../../hooks/useProducts';
 import { dashboardNav } from '../../data/navigation';
+import { preloadPortalPages } from '../../utils/preloadPortalPages';
 
 const ICONS = { LayoutDashboard, Package, FileText, Scale, MessageSquare, Heart, MapPin, Settings, Boxes, ChartColumn, Building2, Users, LayoutGrid, ShieldCheck, Truck, CircleDollarSign, Bell, User, ClipboardList, Warehouse };
 
@@ -31,6 +32,8 @@ export default function DashboardLayout({ role }) {
   const { getCompany } = useProducts();
   const items = dashboardNav[role] ?? [];
   const company = role === 'supplier' && user?.companyId ? getCompany(user.companyId) : null;
+  // The portal's other pages are fetched in the background, so opening any of them is instant
+  useEffect(() => { preloadPortalPages(role); }, [role]);
   const isActive = (to) => (to === `/${role}` ? location.pathname === to : location.pathname === to || location.pathname.startsWith(`${to}/`));
 
   // Dedicated Buyer Workspace Layout with Premium Collapsible Sidebar & Mobile Drawer
@@ -43,11 +46,13 @@ export default function DashboardLayout({ role }) {
           <div className="lg:flex lg:gap-8 items-start">
             <BuyerSidebar />
             <main id="main" tabIndex={-1} className="flex-1 min-w-0 focus:outline-none scroll-smooth">
-              <div key={location.pathname} className="ts-page-enter">
-                <Suspense fallback={<PageSkeleton />}>
+              {/* One loading boundary for the whole portal: while the next page loads, the current one stays
+                  on screen (navigation runs as a transition), so the portal never blanks or "reloads" */}
+              <Suspense fallback={<PageSkeleton />}>
+                <div key={location.pathname} className="ts-page-enter">
                   <PageOutlet />
-                </Suspense>
-              </div>
+                </div>
+              </Suspense>
               <div className="mt-8 rounded-[1.25rem] bg-white p-4 text-xs text-muted ring-1 ring-navy-900/[0.06] lg:hidden">
                 <p className="flex gap-2">
                   <Info className="mt-0.5 size-3.5 shrink-0 text-brand-600" aria-hidden="true" />
@@ -73,11 +78,13 @@ export default function DashboardLayout({ role }) {
           <div className="lg:flex lg:gap-8 items-start">
             <SupplierSidebar />
             <main id="main" tabIndex={-1} className="flex-1 min-w-0 focus:outline-none scroll-smooth">
-              <div key={location.pathname} className="ts-page-enter">
-                <Suspense fallback={<PageSkeleton />}>
+              {/* One loading boundary for the whole portal: while the next page loads, the current one stays
+                  on screen (navigation runs as a transition), so the portal never blanks or "reloads" */}
+              <Suspense fallback={<PageSkeleton />}>
+                <div key={location.pathname} className="ts-page-enter">
                   <PageOutlet />
-                </Suspense>
-              </div>
+                </div>
+              </Suspense>
             </main>
           </div>
         </div>
@@ -149,7 +156,7 @@ export default function DashboardLayout({ role }) {
           </div>
         </aside>
         <main id="main" tabIndex={-1} className="min-w-0 focus:outline-none">
-          <div key={location.pathname} className="ts-page-enter"><Suspense fallback={<PageSkeleton />}><PageOutlet /></Suspense></div>
+          <Suspense fallback={<PageSkeleton />}><div key={location.pathname} className="ts-page-enter"><PageOutlet /></div></Suspense>
           <div className="mt-8 rounded-[1.25rem] bg-white p-4 text-xs text-muted ring-1 ring-navy-900/[0.06] lg:hidden">
             <p className="flex gap-2"><Info className="mt-0.5 size-3.5 shrink-0 text-brand-600" aria-hidden="true" />{NOTES[role]}</p>
             <ResetDataButton className="mt-3" />

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
+import rateLimit from 'express-rate-limit';
 import * as supplierProductController from '../controllers/supplierProductController.js';
+import * as listingAiController from '../controllers/listingAiController.js';
 import { authenticateJWT, requireRole } from '../middleware/authMiddleware.js';
 import { uploadMemory } from '../middleware/uploadMiddleware.js';
 import { validate } from '../middleware/validate.js';
@@ -9,6 +11,29 @@ const router = Router();
 
 // Require supplier or admin role
 router.use(authenticateJWT, requireRole('SUPPLIER', 'ADMIN'));
+
+// Product Listing AI: photos -> suggested details (each job uses paid AI quota, so starts are limited per supplier)
+const isProduction = process.env.NODE_ENV === 'production';
+const aiJobLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: isProduction ? 20 : 200,
+  keyGenerator: (req) => `ai-listing:${req.user.id}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, code: 'AI_LISTING_LIMIT', message: 'You have used the AI listing assistant many times this hour. Please try again later.' },
+});
+const aiPollLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: (req) => `ai-listing-poll:${req.user.id}`, standardHeaders: true, legacyHeaders: false });
+router.get('/ai-listing/status', listingAiController.status);
+router.post(
+  '/ai-listing',
+  aiJobLimiter,
+  validate([
+    body('photos').isArray({ min: 1, max: 5 }).withMessage('Send between 1 and 5 product photos.'),
+    body('photos.*').isString().isLength({ min: 1, max: 600 }).withMessage('Each photo must be an uploaded photo address.'),
+  ]),
+  listingAiController.startJob,
+);
+router.get('/ai-listing/:token', aiPollLimiter, listingAiController.getJob);
 
 router.get('/', supplierProductController.listProducts);
 router.get('/bulk/template', supplierProductController.downloadBulkTemplate);

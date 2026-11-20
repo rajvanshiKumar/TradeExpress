@@ -11,7 +11,6 @@ import {
   Package,
   Sparkles,
   UserCog,
-  UserRound,
 } from 'lucide-react';
 import Dropdown from '../common/Dropdown';
 import useAuth from '../../hooks/useAuth';
@@ -238,23 +237,12 @@ export default function UserMenu() {
                   <span className="flex size-6 items-center justify-center rounded-lg bg-slate-100 text-slate-700 shrink-0 group-hover:bg-slate-700 group-hover:text-white transition-colors">
                     <UserCog className="size-3.5" aria-hidden="true" />
                   </span>
-                  <span>Account Settings</span>
+                  <span>{user.role === 'buyer' ? 'My Business Profile' : 'Account Settings'}</span>
                 </span>
                 <ChevronRight className="size-3 text-slate-300 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
               </Link>
             ) : null}
 
-            {user.role === 'buyer' && (
-              <Link to="/buyer/profile" onClick={close} className={menuItemClass}>
-                <span className="flex items-center gap-2.5">
-                  <span className="flex size-6 items-center justify-center rounded-lg bg-slate-100 text-slate-700 shrink-0 group-hover:bg-slate-700 group-hover:text-white transition-colors">
-                    <UserRound className="size-3.5" aria-hidden="true" />
-                  </span>
-                  <span>Profile & Settings</span>
-                </span>
-                <ChevronRight className="size-3 text-slate-300 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
-              </Link>
-            )}
 
             {user.role === 'supplier' && (
               <Link to="/supplier/profile" onClick={close} className={menuItemClass}>

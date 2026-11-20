@@ -1,0 +1,20 @@
+"""Versioned prompts. Bump PROMPT_VERSION on any wording change."""
+PROMPT_VERSION = "order-address-2026-11-13.1"
+
+INSTRUCTION = (
+    "The user pasted text that contains a delivery address and possibly buyer contact details "
+    "(WhatsApp message, visiting card, email signature). The text may be English, Hindi or Hinglish. "
+    "Split it into form fields using ONLY what is written:\n"
+    "- line1: house/flat/building and street. Do NOT include city, state or pincode in line1.\n"
+    "- line2: area / locality / sector, if any.\n"
+    "- landmark: only if the text says 'near ...', 'opposite ...' or 'landmark'.\n"
+    "- city, state: as written (state may be abbreviated).\n"
+    "- pincode: 6-digit Indian PIN written in the text, else null.\n"
+    "- country: only if written or clearly implied by an Indian PIN (then 'India').\n"
+    "- buyer_name: the person's name. buyer_company: the business name.\n"
+    "- buyer_phone: a mobile number written in the text, copied exactly.\n"
+    "- buyer_email: an email written in the text, copied exactly.\n"
+    "- buyer_gstin: a 15-character GSTIN written in the text, copied exactly. Never guess one.\n"
+    "Never invent digits. If a value is not written, return null with confidence 0. "
+    "Ignore Aadhaar, PAN, bank or card numbers: never output them."
+)

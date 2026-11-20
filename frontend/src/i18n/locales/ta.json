@@ -22,11 +22,12 @@
   "nav.suppliers": "சப்ளையர்கள்",
   "nav.exporters": "ஏற்றுமதியாளர்கள்",
   "nav.rfq": "விலைப்புள்ளி கோரிக்கை (RFQ)",
+  "nav.compare": "ஒப்பீடு",
   "nav.compareProducts": "தயாரிப்புகளை ஒப்பிடுக",
   "nav.compareShort": "ஒப்பிடு",
   "nav.wishlist": "விருப்பப்பட்டியல்",
   "nav.help": "உதவி",
-  "nav.about": "எங்களை பற்றி",
+  "nav.about": "அறிமுகம்",
   "nav.becomeSupplier": "சப்ளையராகுங்கள்",
 
   "header.searchPlaceholder": "தயாரிப்புகள், வகைகள் அல்லது சப்ளையர்களைத் தேடுங்கள்...",

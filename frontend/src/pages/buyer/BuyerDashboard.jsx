@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Check,
@@ -9,9 +9,6 @@ import {
   MapPin,
   MessageSquare,
   Package,
-  Receipt,
-  Scale,
-  Search,
 } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import StatCard from '../../components/common/StatCard';
@@ -19,18 +16,15 @@ import Button from '../../components/common/Button';
 import { StatusBadge } from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import { TableSkeleton } from '../../components/common/Skeleton';
-import ProductGrid from '../../components/products/ProductGrid';
 import TaxInvoiceModal from '../../components/common/TaxInvoiceModal';
 import useAuth from '../../hooks/useAuth';
 import useOrders from '../../hooks/useOrders';
 import useInquiries from '../../hooks/useInquiries';
 import useWishlist from '../../hooks/useWishlist';
 import useMessages from '../../hooks/useMessages';
-import useProducts from '../../hooks/useProducts';
 import useCurrency from '../../hooks/useCurrency';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { formatDate } from '../../utils/formatDate';
-import { consolidateConversations } from '../../utils/messageUtils';
 import paymentMethodService, { isUsableCard } from '../../services/paymentMethodService';
 
 /**
@@ -86,7 +80,6 @@ export default function BuyerDashboard() {
   const { inquiries, loading: inquiriesLoading } = useInquiries();
   const { conversations: myConversations, unreadCount: unreadMessages, loading: messagesLoading } = useMessages();
   const { count: savedCount } = useWishlist();
-  const { products, recentlyViewed, loading: productsLoading, getCompany } = useProducts();
   const { money } = useCurrency();
   useDocumentTitle('Buyer dashboard');
 
@@ -105,30 +98,6 @@ export default function BuyerDashboard() {
   const myOrders = orders.filter((order) => order.buyerId === user.id);
   const myQuotes = inquiries.filter((inquiry) => inquiry.buyerId === user.id);
   const openQuotes = myQuotes.filter((inquiry) => inquiry.status !== 'Closed');
-  const viewed = recentlyViewed.map((id) => products.find((product) => product.id === id && product.status === 'Active')).filter(Boolean).slice(0, 12);
-
-  // Deduplicate conversations so each supplier appears only once
-  const uniqueConversations = useMemo(() => {
-    const consolidated = consolidateConversations(myConversations || [], 'buyer', getCompany);
-    const seen = new Set();
-    const result = [];
-    for (const c of consolidated) {
-      const suppKey = (
-        c.supplierId ||
-        c.supplier?.id ||
-        c.companyId ||
-        c.supplierName ||
-        c.supplier?.company ||
-        c.supplier?.name ||
-        c.id
-      ).toString().trim().toLowerCase();
-      if (!seen.has(suppKey)) {
-        seen.add(suppKey);
-        result.push(c);
-      }
-    }
-    return result;
-  }, [myConversations, getCompany]);
 
   return (
     <div className="space-y-6">
@@ -137,68 +106,10 @@ export default function BuyerDashboard() {
         description={`${user.company || 'Enterprise Procurement Account'} · ${user?.kycStatus === 'VERIFIED' ? 'Verified Buyer' : 'Verification Pending'}`}
       />
 
-      {/* Quick Navigation Shortcuts */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <Link
-          to="/products"
-          className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
-        >
-          <div className="size-7 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0">
-            <Search className="size-3.5" />
-          </div>
-          <span className="truncate">Find Products</span>
-        </Link>
-
-        <Link
-          to="/compare-products"
-          className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
-        >
-          <div className="size-7 rounded-lg bg-blue-50 text-blue-800 flex items-center justify-center shrink-0">
-            <Scale className="size-3.5" />
-          </div>
-          <span className="truncate">Compare Items</span>
-        </Link>
-
-        <Link
-          to="/messages"
-          className="relative flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
-        >
-          <div className="size-7 rounded-lg bg-emerald-100 text-emerald-900 flex items-center justify-center shrink-0">
-            <MessageSquare className="size-3.5" />
-          </div>
-          <span className="truncate">Messages & Inbox</span>
-          {unreadMessages > 0 ? (
-            <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white shrink-0">
-              {unreadMessages}
-            </span>
-          ) : null}
-        </Link>
-
-        <Link
-          to="/buyer/payments"
-          className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
-        >
-          <div className="size-7 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0">
-            <Receipt className="size-3.5" />
-          </div>
-          <span className="truncate">Invoices & Escrow</span>
-        </Link>
-
-        <Link
-          to="/buyer/addresses"
-          className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-xs font-semibold text-slate-800 shadow-2xs hover:border-emerald-600 hover:text-emerald-900 transition-colors"
-        >
-          <div className="size-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-            <MapPin className="size-3.5" />
-          </div>
-          <span className="truncate">Address Book</span>
-        </Link>
-      </div>
-
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Package} label="Orders" value={ordersLoading ? '…' : myOrders.length} hint={`${myOrders.filter((order) => !['Delivered', 'Cancelled'].includes(order.status)).length} in progress`} to="/buyer/orders" />
         <StatCard icon={FileText} tone="brand" label="Open quote requests" value={inquiriesLoading ? '…' : openQuotes.length} hint={`${myQuotes.filter((inquiry) => inquiry.quote).length} with a quote`} to="/buyer/quotes" />
-        <StatCard icon={MessageSquare} tone={unreadMessages > 0 ? "brand" : "default"} label="Messages" value={messagesLoading ? '…' : myConversations.length} hint={unreadMessages > 0 ? `${unreadMessages} unread from suppliers` : 'Direct supplier inbox'} to="/messages" />
+        <StatCard icon={MessageSquare} tone={unreadMessages > 0 ? "brand" : "default"} label="Messages" value={messagesLoading ? '…' : myConversations.length} hint={unreadMessages > 0 ? `${unreadMessages} unread from suppliers` : 'Direct supplier inbox'} to="/buyer/messages" />
         <StatCard icon={Heart} tone="warning" label="Saved products" value={savedCount} hint="In your wishlist" to="/buyer/wishlist" />
       </div>
 
@@ -251,186 +162,6 @@ export default function BuyerDashboard() {
         )}
       </section>
 
-      {/* Messages & Invoices Hub */}
-      <section aria-labelledby="messages-and-invoices-title" className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 id="messages-and-invoices-title" className="text-base font-bold text-navy-950 flex items-center gap-2">
-              <MessageSquare className="size-5 text-emerald-700" />
-              Messages & Invoices
-            </h2>
-            <p className="text-xs text-muted">
-              Direct supplier communication, order inquiries, and B2B GST tax invoices
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button to="/messages" size="sm" variant="outline" icon={MessageSquare}>
-              Supplier Inbox
-            </Button>
-            <Button to="/buyer/payments" size="sm" variant="outline" icon={Receipt}>
-              All Invoices
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Supplier Messages */}
-          <div className="ts-card flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="size-4 text-emerald-700" />
-                <h3 className="text-sm font-bold text-navy-950">Supplier Messages</h3>
-                {unreadMessages > 0 && (
-                  <span className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[11px] font-bold">
-                    {unreadMessages} unread
-                  </span>
-                )}
-              </div>
-              <Link to="/messages" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-                View all
-              </Link>
-            </div>
-            {messagesLoading ? (
-              <TableSkeleton rows={2} />
-            ) : uniqueConversations.length === 0 ? (
-              <EmptyState
-                icon={MessageSquare}
-                className="!py-8"
-                title="No supplier messages yet"
-                text="When suppliers message you regarding your inquiries or orders, their direct messages will appear here."
-                action={<Button to="/products" variant="navy" size="sm">Browse Products to Contact Suppliers</Button>}
-              />
-            ) : (
-              <ul className="divide-y flex-1">
-                {uniqueConversations.slice(0, 4).map((conv) => {
-                  const lastMsg = conv.messages?.[conv.messages.length - 1];
-                  const supplierName = conv.supplierName || conv.supplier?.company || conv.supplier?.name || 'Supplier';
-                  const unread = (conv.unread?.buyer ?? 0) > 0;
-                  const initials = (supplierName || 'S')
-                    .split(' ')
-                    .filter(Boolean)
-                    .map((w) => w[0])
-                    .slice(0, 2)
-                    .join('')
-                    .toUpperCase();
-
-                  return (
-                    <li
-                      key={conv.id}
-                      className={`flex items-center justify-between gap-3 px-4 py-3 transition-colors ${
-                        unread ? 'bg-emerald-50/40' : 'hover:bg-slate-50/70'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-800 font-display text-xs font-extrabold text-brand-300 shadow-2xs">
-                          {initials}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm truncate ${unread ? 'font-bold text-navy-950' : 'font-semibold text-slate-800'}`}>
-                              {supplierName}
-                            </span>
-                            {unread && (
-                              <span className="inline-flex items-center rounded-full bg-emerald-600 px-1.5 py-0.2 text-[10px] font-bold text-white shrink-0">
-                                New
-                              </span>
-                            )}
-                          </div>
-                          <p className="truncate text-xs text-muted mt-0.5">
-                            <span className="font-medium text-slate-700">{conv.subject}:</span>{' '}
-                            {lastMsg ? (lastMsg.text || lastMsg.content) : 'No messages'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[11px] text-muted hidden sm:inline">
-                          {formatDate(conv.lastMessageAt || conv.createdAt)}
-                        </span>
-                        <Button to={`/messages?c=${conv.id}`} size="sm" variant={unread ? 'navy' : 'outline'}>
-                          Reply
-                        </Button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-
-          {/* Tax Invoices & Billing */}
-          <div className="ts-card flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
-              <div className="flex items-center gap-2">
-                <Receipt className="size-4 text-emerald-700" />
-                <h3 className="text-sm font-bold text-navy-950">Tax Invoices & Billing</h3>
-                {myOrders.length > 0 && (
-                  <span className="rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-[11px] font-bold">
-                    {myOrders.length} Invoices
-                  </span>
-                )}
-              </div>
-              <Link to="/buyer/payments" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-                View all
-              </Link>
-            </div>
-            {ordersLoading ? (
-              <TableSkeleton rows={2} />
-            ) : myOrders.length === 0 ? (
-              <EmptyState
-                icon={Receipt}
-                className="!py-8"
-                title="No invoices generated yet"
-                text="Official GST tax invoices will be generated automatically once orders are placed."
-                action={<Button to="/products" variant="navy" size="sm">Browse Products</Button>}
-              />
-            ) : (
-              <ul className="divide-y flex-1">
-                {myOrders.slice(0, 4).map((order) => {
-                  const invNumber = order.supplierInvoiceNumber || `INV-${order.id.slice(-8).toUpperCase()}`;
-                  return (
-                    <li
-                      key={order.id}
-                      className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50/70 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-800 border border-amber-200/80 shadow-2xs">
-                          <Receipt className="size-4.5" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-bold text-navy-900 truncate">
-                              {invNumber}
-                            </span>
-                            <StatusBadge status={order.status} />
-                          </div>
-                          <p className="text-xs text-muted truncate mt-0.5">
-                            Order <span className="font-semibold text-slate-700">#{order.orderNumber || order.id}</span> · {formatDate(order.createdAt)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2.5 shrink-0">
-                        <span className="font-mono text-xs font-bold text-emerald-800">
-                          {money(order.totals.total)}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          icon={FileText}
-                          onClick={() => setSelectedInvoiceOrder(order)}
-                          aria-label={`View tax invoice ${invNumber}`}
-                        >
-                          Invoice
-                        </Button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </div>
-      </section>
-
       <section aria-labelledby="recent-quotes-title" className="ts-card overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-5 py-4">
           <h2 id="recent-quotes-title" className="text-base font-bold">Latest quote requests</h2>
@@ -456,12 +187,7 @@ export default function BuyerDashboard() {
         )}
       </section>
 
-      <section aria-labelledby="recently-viewed-title">
-        <h2 id="recently-viewed-title" className="mb-4 text-base font-bold">Recently viewed</h2>
-        <ProductGrid products={viewed} loading={productsLoading} skeletonCount={4} columns="grid grid-cols-1 gap-4 xs:grid-cols-2 sm:gap-6 xl:grid-cols-4" emptyTitle="Nothing viewed yet" emptyText="Products you open will be listed here." emptyAction={<Button to="/products" variant="navy" size="sm">Browse products</Button>} />
-      </section>
-
-      {/* GST Tax Invoice Modal */}
+      {/* GST Tax Invoice Modal (opened from Recent orders) */}
       <TaxInvoiceModal
         order={selectedInvoiceOrder}
         isOpen={Boolean(selectedInvoiceOrder)}

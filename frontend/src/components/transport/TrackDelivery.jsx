@@ -19,10 +19,13 @@ export default function TrackDelivery({ orderRef, highlight = '' }) {
   const load = useCallback(async () => {
     if (!orderRef) return;
     try {
-      const result = await transportApi.orderShipments(orderRef);
+      const raw = await transportApi.orderShipments(orderRef);
+      // A reply without a shipment list means "no shipments yet": never let it break the order details
+      const shipments = Array.isArray(raw?.shipments) ? raw.shipments : [];
+      const result = { ...(raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}), shipments };
       setData(result);
       setError('');
-      setOpenId((current) => current || result.shipments.find((s) => s.shipmentNumber === highlight)?.id || (result.shipments.length === 1 ? result.shipments[0].id : null));
+      setOpenId((current) => current || shipments.find((s) => s.shipmentNumber === highlight)?.id || (shipments.length === 1 ? shipments[0].id : null));
     } catch (err) {
       setError(err.status === 404 ? '' : err.message || 'Tracking is unavailable right now.');
       setData({ shipments: [], order: null });

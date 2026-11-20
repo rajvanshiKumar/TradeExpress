@@ -22,11 +22,12 @@
   "nav.suppliers": "आपूर्तिकर्ता",
   "nav.exporters": "निर्यातक",
   "nav.rfq": "कोटेशन अनुरोध (RFQ)",
+  "nav.compare": "तुलना",
   "nav.compareProducts": "उत्पादों की तुलना करें",
   "nav.compareShort": "तुलना करें",
   "nav.wishlist": "इच्छा-सूची",
   "nav.help": "सहायता",
-  "nav.about": "हमारे बारे में",
+  "nav.about": "परिचय",
   "nav.becomeSupplier": "आपूर्तिकर्ता बनें",
 
   "header.searchPlaceholder": "उत्पाद, श्रेणियाँ या आपूर्तिकर्ता खोजें...",

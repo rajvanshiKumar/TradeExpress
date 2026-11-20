@@ -22,11 +22,12 @@
   "nav.suppliers": "సరఫరాదారులు",
   "nav.exporters": "ఎగుమతిదారులు",
   "nav.rfq": "కొటేషన్ కోసం అభ్యర్థన (RFQ)",
+  "nav.compare": "పోలిక",
   "nav.compareProducts": "ఉత్పత్తులను సరిపోల్చండి",
   "nav.compareShort": "పోల్చండి",
   "nav.wishlist": "విష్‌లిస్ట్",
   "nav.help": "సహాయం",
-  "nav.about": "మా గురించి",
+  "nav.about": "పరిచయం",
   "nav.becomeSupplier": "సరఫరాదారు అవ్వండి",
 
   "header.searchPlaceholder": "ఉత్పత్తులు, వర్గాలు లేదా సరఫరాదారులను శోధించండి...",

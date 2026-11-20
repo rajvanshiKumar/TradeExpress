@@ -60,7 +60,7 @@ import { clearSignupSession, loadSignupSession, resolveResume, saveSignupSession
 
 // Never kept in the browser between visits: the password, and Aadhaar / PAN details and proofs
 const SESSION_EXCLUDED_FIELDS = [
-  'password', 'confirmPassword', 'aadhaarNumber', 'aadhaarLast4', 'aadhaarConsent', 'aadhaarOtpToken', 'aadhaarOtpName',
+  'password', 'confirmPassword', 'aadhaarNumber', 'aadhaarLast4', 'aadhaarConsent', 'aadhaarOtpToken', 'aadhaarOtpName', 'aadhaarOtpHolder',
   'aadhaarOtpEnv', 'panAadhaarStatus', 'panAadhaarLinked', 'panAadhaarMaskedPan', 'panAadhaarToken', 'panAadhaarCheckedAt',
   'panAadhaarMessage', 'agreeTerms',
 ];
@@ -118,6 +118,8 @@ const YEAR_ESTABLISHED_OPTIONS = [
 const SERVER_UNREACHABLE = 'Unable to reach the TradeExpress server. Please check your connection and try again.';
 // OTP and registration calls wait for email/SMS delivery and password hashing on the server
 const AUTH_REQUEST_TIMEOUT_MS = 20000;
+// Identity checks wait for the government-data provider (up to 25 s on the server): the browser waits longer
+const VERIFICATION_REQUEST_TIMEOUT_MS = 35000;
 
 export default function SupplierRegisterForm() {
   const { preferences, setAuthUser, accounts: authAccounts } = useAuth();
@@ -183,6 +185,7 @@ export default function SupplierRegisterForm() {
     // Aadhaar verified with OTP first; the PAN–Aadhaar link check needs this token
     aadhaarOtpToken: null,
     aadhaarOtpName: '',
+    aadhaarOtpHolder: null,
     aadhaarOtpEnv: '',
     documents: [],
     agreeTerms: false,
@@ -936,6 +939,7 @@ export default function SupplierRegisterForm() {
       panAadhaarToken: prev.aadhaarNumber !== digits ? null : prev.panAadhaarToken,
       aadhaarOtpToken: prev.aadhaarNumber !== digits ? null : prev.aadhaarOtpToken,
       aadhaarOtpName: prev.aadhaarNumber !== digits ? '' : prev.aadhaarOtpName,
+      aadhaarOtpHolder: prev.aadhaarNumber !== digits ? null : prev.aadhaarOtpHolder,
       aadhaarOtpEnv: prev.aadhaarNumber !== digits ? '' : prev.aadhaarOtpEnv,
     }));
     setPanAadhaarError('');
@@ -952,7 +956,7 @@ export default function SupplierRegisterForm() {
     setPanAadhaarError(message || '');
     setValues((prev) => ({
       ...prev,
-      ...(scope === 'aadhaar' ? { aadhaarOtpToken: null, aadhaarOtpName: '', aadhaarOtpEnv: '' } : {}),
+      ...(scope === 'aadhaar' ? { aadhaarOtpToken: null, aadhaarOtpName: '', aadhaarOtpHolder: null, aadhaarOtpEnv: '' } : {}),
       panAadhaarStatus: message ? 'UNABLE_TO_VERIFY' : 'NOT_STARTED',
       panAadhaarLinked: false,
       panAadhaarToken: null,
@@ -1114,7 +1118,7 @@ export default function SupplierRegisterForm() {
           Accept: 'application/json',
         },
         body: JSON.stringify({ gstin: rawGst }),
-        signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(VERIFICATION_REQUEST_TIMEOUT_MS),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -1127,9 +1131,12 @@ export default function SupplierRegisterForm() {
       } else {
         setErrors((prev) => ({ ...prev, taxId: data.message || data.error?.message || 'Unable to verify GSTIN. Please try again.' }));
       }
-    } catch {
+    } catch (err) {
       // Never mark a GSTIN as verified without an answer from the server
-      setErrors((prev) => ({ ...prev, taxId: 'Could not reach the TradeExpress verification server. Please check your connection and try again.' }));
+      const message = err?.name === 'TimeoutError'
+        ? 'GST verification is taking longer than usual. Please try again in a few minutes.'
+        : 'Could not reach TradeExpress. Please check your internet connection and try again.';
+      setErrors((prev) => ({ ...prev, taxId: message }));
     } finally {
       setGstVerifying(false);
     }
@@ -1872,10 +1879,12 @@ export default function SupplierRegisterForm() {
                       onChange={handleChange('phone')}
                       onKeyDown={handlePhoneKeyDown}
                       disabled={phoneVerified}
+                      readOnly={phoneOtpSent && !phoneVerified}
+                      title={phoneOtpSent && !phoneVerified ? 'Close the code box below to change the number' : undefined}
                       autoComplete="off"
                       className={`w-full h-11 rounded-xl border bg-white pl-3.5 pr-28 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
                         errors.phone ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                      } ${phoneVerified ? 'bg-slate-100/70 text-slate-600' : ''}`}
+                      } ${phoneVerified || phoneOtpSent ? 'bg-slate-100/70 text-slate-600' : ''}`}
                     />
                     <div className="absolute right-1.5 flex items-center">
                       {phoneVerified ? (
@@ -1919,6 +1928,7 @@ export default function SupplierRegisterForm() {
                     resending={phoneOtpSending}
                     cooldown={phoneCooldown}
                     label="Enter Mobile Verification Code"
+                    group="signup-mobile"
                     targetHint={`${COUNTRY_PHONE_RULES[values.countryCode]?.dial ? `+${COUNTRY_PHONE_RULES[values.countryCode].dial} ` : ''}${values.phone}`}
                     error={phoneOtpError}
                     onClose={() => setPhoneOtpSent(false)}
@@ -1942,10 +1952,12 @@ export default function SupplierRegisterForm() {
                     value={values.email || ''}
                     onChange={handleChange('email')}
                     disabled={emailVerified}
+                    readOnly={emailOtpSent && !emailVerified}
+                    title={emailOtpSent && !emailVerified ? 'Close the code box below to change the email' : undefined}
                     autoComplete="off"
                     className={`w-full h-11 rounded-xl border bg-white pl-3.5 pr-28 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${
                       errors.email ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'
-                    } ${emailVerified ? 'bg-slate-100/70 text-slate-600' : ''}`}
+                    } ${emailVerified || emailOtpSent ? 'bg-slate-100/70 text-slate-600' : ''}`}
                   />
                   <div className="absolute right-1.5 flex items-center">
                     {emailVerified ? (
@@ -1988,6 +2000,7 @@ export default function SupplierRegisterForm() {
                     resending={emailOtpSending}
                     cooldown={emailCooldown}
                     label="Enter Email Verification Code"
+                    group="signup-email"
                     targetHint={values.email}
                     error={emailOtpError}
                     onClose={() => setEmailOtpSent(false)}
@@ -2630,12 +2643,14 @@ export default function SupplierRegisterForm() {
                       consent={values.aadhaarConsent}
                       verified={Boolean(values.aadhaarOtpToken)}
                       verifiedName={values.aadhaarOtpName}
+                      holder={values.aadhaarOtpHolder}
                       environment={values.aadhaarOtpEnv}
                       onVerified={(result) => {
                         setValues((prev) => ({
                           ...prev,
                           aadhaarOtpToken: result.verificationToken,
                           aadhaarOtpName: result.fullName,
+                          aadhaarOtpHolder: result.holder,
                           aadhaarOtpEnv: result.environment,
                         }));
                         setErrors((prev) => {

@@ -30,6 +30,8 @@ export default function MobileMenu({ open, onClose }) {
     ? mainNav.filter((item) => !item.to.includes('compare'))
     : mainNav
   ).filter((item) => {
+    // Request a Quote: guests and buyers only, never on the sign-in / sign-up pages
+    if (item.buyerOnly && (isAuthPage || (user && user.role !== 'buyer'))) return false;
     // When signed in as a supplier (or authenticated), do not show Become / Join as a Supplier
     if ((isSupplier || user) && (item.to.includes('role=supplier') || item.to.includes('/supplier/register') || item.label.toLowerCase().includes('become a supplier'))) {
       return false;

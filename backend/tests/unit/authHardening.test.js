@@ -5,6 +5,7 @@ import prisma from '../../src/config/db.js';
 import { changePassword, loginUser, registerBuyer } from '../../src/services/authService.js';
 import { activeResendWindow, issueVerifiedEmailToken, lockOtpSession } from '../../src/services/otpService.js';
 import { identityQuery, verifiedIdentity } from '../helpers/verifiedIdentity.js';
+import { liveShop } from '../helpers/liveShop.js';
 
 // Phase 1 audit regressions: admin access through the public login, password change sign-out,
 // email OTP resend window and invented signup location data.
@@ -179,6 +180,7 @@ describe('Buyer signup stores only entered location data', () => {
       name: 'Location Buyer', email: 'location@example.com', phone: '9876543210', country: 'India',
       verificationToken: 'verified', emailVerificationToken: issueVerifiedEmailToken('location@example.com'),
       ...verifiedIdentity(),
+      ...liveShop(t),
     });
     assert.ok(created, 'account was created');
     assert.equal(created.city, null);

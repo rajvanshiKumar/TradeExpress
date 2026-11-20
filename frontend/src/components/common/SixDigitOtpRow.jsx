@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { Check, RefreshCw, X, ShieldAlert } from 'lucide-react';
-import { enterOtpDigits, isCompleteOtp, otpSlots, pastedOtp } from '../../utils/otpDigits';
+import { enterOtpDigits, isCompleteOtp, isTypingElsewhere, otpBoxProps, otpSlots, pastedOtp } from '../../utils/otpDigits';
 
 export default function SixDigitOtpRow({
   otp = '',
@@ -14,6 +14,8 @@ export default function SixDigitOtpRow({
   targetHint = '',
   error = '',
   onClose,
+  // Name of this code (e.g. "signup-mobile"): keeps two code rows on one page apart
+  group = 'otp',
 }) {
   const inputsRef = useRef([]);
 
@@ -21,13 +23,12 @@ export default function SixDigitOtpRow({
   const digits = otpSlots(otp);
   const complete = isCompleteOtp(otp);
 
-  // Auto-focus first empty slot when mounted
+  // The first empty box takes the cursor when the row opens, unless the person is typing in another field
   useEffect(() => {
+    if (isTypingElsewhere(inputsRef.current)) return;
     const firstEmptyIndex = digits.findIndex((d) => !d);
     const targetIdx = firstEmptyIndex === -1 ? 5 : firstEmptyIndex;
-    if (inputsRef.current[targetIdx]) {
-      inputsRef.current[targetIdx].focus();
-    }
+    inputsRef.current[targetIdx]?.focus();
   }, []);
 
   const handleDigitChange = (index, value) => {
@@ -91,7 +92,9 @@ export default function SixDigitOtpRow({
             <input
               key={index}
               ref={(el) => (inputsRef.current[index] = el)}
+              {...otpBoxProps(group, index)}
               type="text"
+              disabled={verifying}
               inputMode="numeric"
               pattern="[0-9]*"
               maxLength={index === 0 ? 6 : 1}
@@ -99,7 +102,7 @@ export default function SixDigitOtpRow({
               onChange={(e) => handleDigitChange(index, e.target.value)}
               onKeyDown={(e) => handleKeyDown(index, e)}
               onPaste={handlePaste}
-              className={`w-9 h-11 sm:w-11 sm:h-12 text-center text-base sm:text-lg font-black font-mono rounded-xl border bg-white transition-all outline-none ${
+              className={`w-9 h-11 sm:w-11 sm:h-12 text-center text-base sm:text-lg font-black font-mono rounded-xl border bg-white transition-all outline-none disabled:cursor-not-allowed disabled:opacity-60 ${
                 digits[index]
                   ? 'border-emerald-600 bg-emerald-50/40 text-emerald-950 ring-1 ring-emerald-600/30'
                   : 'border-slate-300 text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20'

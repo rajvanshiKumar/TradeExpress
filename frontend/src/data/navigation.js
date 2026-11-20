@@ -5,6 +5,8 @@ export const mainNav = [
   { label: 'Categories', to: '/categories', megaMenu: true },
   { label: 'Suppliers', to: '/suppliers' },
   { label: 'Compare Products', to: '/compare-products' },
+  // Buyers and guests only (hidden for suppliers and admins in the header and mobile menu)
+  { label: 'Request a Quote', to: '/rfq', buyerOnly: true },
   { label: 'Wishlist', to: '/wishlist' },
   { label: 'Help', to: '/help' },
   { label: 'About Us', to: '/info/about' },
@@ -66,18 +68,13 @@ export const footerColumns = [
 export const dashboardNav = {
   buyer: [
     { label: 'Dashboard', to: '/buyer', icon: 'LayoutDashboard' },
-    { label: 'Find Products', to: '/products', icon: 'Search' },
-    { label: 'Compare Similar Products', to: '/compare-products', icon: 'Scale' },
-    { label: 'Request a Quote (RFQ)', to: '/rfq', icon: 'FileSpreadsheet' },
-    { label: 'My Quotes', to: '/buyer/quotes', icon: 'ClipboardList' },
     { label: 'My Orders', to: '/buyer/orders', icon: 'Package' },
-    { label: 'Messages', to: '/messages', icon: 'MessageSquare' },
     { label: 'Payments & Invoices', to: '/buyer/payments', icon: 'Receipt' },
     { label: 'Saved Products', to: '/buyer/wishlist', icon: 'Heart' },
-    { label: 'My Business Profile', to: '/buyer/profile', icon: 'Building2' },
+    { label: 'Messages', to: '/buyer/messages', icon: 'MessageSquare' },
+    { label: 'My Quotes', to: '/buyer/quotes', icon: 'ClipboardList' },
     { label: 'TradeExpress ID & Certificates', to: '/buyer/documents', icon: 'FileBadge2' },
-    { label: 'Notifications', to: '/buyer/notifications', icon: 'Bell' },
-    { label: 'Account Settings', to: '/buyer/account-settings', icon: 'Settings' },
+    { label: 'My Business Profile', to: '/buyer/account-settings', icon: 'Building2' },
   ],
   supplier: [
     { label: 'Overview', to: '/supplier/dashboard', icon: 'LayoutDashboard' },

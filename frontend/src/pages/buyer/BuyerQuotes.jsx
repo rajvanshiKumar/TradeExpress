@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileText, Plus } from 'lucide-react';
 import { SectionHeading } from '../../components/common/PageHeader';
 import Button from '../../components/common/Button';
@@ -13,7 +13,9 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 export default function BuyerQuotes() {
   const { user } = useAuth();
-  const { inquiries, loading, error, reload } = useInquiries();
+  const { inquiries, loading, error, reload, refresh } = useInquiries();
+  // Opening this page refreshes only its own data (quote requests), quietly and without duplicate requests
+  useEffect(() => { refresh(); }, [refresh]);
   const [tab, setTab] = useState('all');
   useDocumentTitle('My quotes');
 

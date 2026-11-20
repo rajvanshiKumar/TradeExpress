@@ -54,7 +54,8 @@ const sameDay = (a, b) => {
   return !Number.isNaN(da.getTime()) && !Number.isNaN(db.getTime()) && da.toDateString() === db.toDateString();
 };
 
-export default function Messages() {
+/** embedded: shown inside a portal layout (buyer portal), which already provides the page spacing. */
+export default function Messages({ embedded = false }) {
   const { user } = useAuth();
   const { getCompany, getProduct } = useProducts();
   const {
@@ -62,6 +63,7 @@ export default function Messages() {
     loading,
     error,
     reload,
+    refresh,
     side,
     sendMessage,
     startConversation,
@@ -70,6 +72,8 @@ export default function Messages() {
     typingUsers,
   } = useMessages();
   const { showToast } = useNotifications();
+  // Opening Messages refreshes only the conversations, quietly and without duplicate requests
+  useEffect(() => { refresh(); }, [refresh]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [listFilter, setListFilter] = useState('all');
@@ -308,7 +312,7 @@ export default function Messages() {
   const threadMessages = active?.messages || [];
 
   return (
-    <div className="ts-container py-4 sm:py-6">
+    <div className={embedded ? '' : 'ts-container py-4 sm:py-6'}>
       <h1 className="sr-only">Messages</h1>
       {error ? (
         <div className="ts-card">

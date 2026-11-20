@@ -30,7 +30,8 @@ router.patch('/supplier-documents/:id/validity', documents.adminValidity);
 
 // Users
 router.get('/users', controller.listUsers);
-router.get('/users/export/csv', controller.exportUsersCsv);
+// User Directory export: csv | xlsx | pdf
+router.get('/users/export/:format', controller.exportUsers);
 router.get('/users/:id', controller.getUserDetails);
 router.patch('/users/:id/status', controller.updateUserStatus);
 // Sends the user a reset link; the Super Admin never sets or sees another user's password

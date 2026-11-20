@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle,
   Clock,
@@ -27,7 +27,9 @@ import { formatDate } from '../../utils/formatDate';
 
 export default function BuyerPayments() {
   const { user } = useAuth();
-  const { orders, loading } = useOrders();
+  const { orders, loading, refresh } = useOrders();
+  // Opening this page refreshes only its own data (orders and their payments), quietly and without duplicate requests
+  useEffect(() => { refresh(); }, [refresh]);
   const { money } = useCurrency();
   useDocumentTitle('Payments & Invoices — Buyer Workspace');
 

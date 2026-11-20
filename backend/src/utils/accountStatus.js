@@ -29,6 +29,7 @@ export const AUTH_MESSAGES = {
   EMAIL_NOT_FOUND: 'No account found with this email. Please sign up first.',
   MOBILE_NOT_FOUND: 'No account found with this mobile number. Please sign up first.',
   SIGNUP_INCOMPLETE: 'Your registration is incomplete. Please complete your signup to continue.',
+  EMAIL_SUSPENDED: 'This email is linked to a suspended TradeExpress account and cannot be used again. Please contact TradeExpress support.',
   ACCOUNT_EXISTS: 'This email is already registered. Please log in.',
   MOBILE_EXISTS: 'An account with this mobile number already exists. Please log in.',
   OTP_INVALID: 'Invalid OTP. Please enter the correct verification code.',
@@ -126,6 +127,10 @@ export function assertCanSignIn(user, { role, via = 'email' } = {}) {
  * by this signup (a different role, or a completed registration).
  */
 export function existingAccountError(user, requestedRole) {
+  // A suspended account's email can never be used for another signup
+  if (user.status === 'SUSPENDED' || (user.isActive === false && user.status !== 'DEACTIVATED')) {
+    return authError(AUTH_MESSAGES.EMAIL_SUSPENDED, 403, AUTH_ERROR_CODES.ACCOUNT_SUSPENDED);
+  }
   const expectedRole = normalizePublicRole(requestedRole);
   if (expectedRole && user.role !== expectedRole) {
     const message = PUBLIC_ROLES.includes(user.role)
@@ -143,5 +148,6 @@ export function existingAccountError(user, requestedRole) {
 
 /** True when a signup for `requestedRole` may continue on this existing (incomplete) account. */
 export function canResumeSignup(user, requestedRole) {
-  return Boolean(user) && user.role === normalizePublicRole(requestedRole) && !isSignupComplete(user);
+  if (!user || user.status === 'SUSPENDED' || user.isActive === false) return false;
+  return user.role === normalizePublicRole(requestedRole) && !isSignupComplete(user);
 }

@@ -1,6 +1,8 @@
 import prisma from '../config/db.js';
 import { getCommandCenter } from './adminDashboardService.js';
 import { readEncryptedField } from '../utils/dataCrypto.js';
+import { aadhaarHolderDetails } from '../utils/aadhaarResponse.js';
+import { blockUserIdentities, unblockUserIdentities } from './identityBlockService.js';
 import { syncAfterVerification } from './supplierDocumentService.js';
 import {
   getActiveCommissionPolicy,
@@ -28,6 +30,9 @@ export async function getDashboardStats(query = {}) {
 // ==========================================
 // 2. USER MANAGEMENT
 // ==========================================
+// Fields the User Directory search looks in
+const SEARCHABLE_USER_FIELDS = ['name', 'email', 'company', 'phone', 'businessPhone', 'city', 'state', 'gstin', 'pan', 'supplierCode'];
+
 export async function getUsers({
   page = 1,
   limit = 20,
@@ -56,14 +61,12 @@ export async function getUsers({
   if (status && status !== 'ALL') {
     where.status = status;
   }
-  if (search) {
-    where.OR = [
-      { name: { contains: search } },
-      { email: { contains: search } },
-      { company: { contains: search } },
-      { phone: { contains: search } },
-      { city: { contains: search } },
-    ];
+  // Every word typed must match at least one field (so "ravi surat" finds Ravi in Surat)
+  const words = String(search || '').trim().split(/\s+/).filter(Boolean).slice(0, 5).map((w) => w.slice(0, 100));
+  if (words.length) {
+    where.AND = words.map((word) => ({
+      OR: SEARCHABLE_USER_FIELDS.map((field) => ({ [field]: { contains: word } })),
+    }));
   }
 
   const orderBy = {};
@@ -121,8 +124,12 @@ export async function getUsers({
   };
 }
 
+// Aadhaar holder details (Super Admin user details); shared with the Aadhaar OTP verify response
+export { aadhaarHolderDetails };
+
 export async function getUserDetails(userId) {
-  const user = await prisma.user.findUnique({
+  // The user, their recent orders and audit trail are read at the same time (not one after another)
+  const userQuery = prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -137,9 +144,37 @@ export async function getUserDetails(userId) {
       company: true,
       phone: true,
       city: true,
+      state: true,
+      postalCode: true,
       country: true,
+      avatarUrl: true,
+      googleId: true,
+      // Business (suppliers, and buyers who entered them)
+      supplierCode: true,
+      legalStructure: true,
+      registrationNumber: true,
+      businessType: true,
+      businessTypeOther: true,
+      businessPhone: true,
+      yearEstablished: true,
+      companyDescription: true,
+      logoUrl: true,
+      businessImages: true,
+      businessAddress: true,
+      factoryAddress: true,
+      factoryAddressSame: true,
+      gstStatus: true,
       gstin: true,
+      taxId: true,
+      // Identity
       pan: true,
+      aadhaarConsent: true,
+      aadhaarLast4: true,
+      panAadhaarStatus: true,
+      panAadhaarLinked: true,
+      panAadhaarCheckedAt: true,
+      panAadhaarMaskedPan: true,
+      // Banking & logistics
       bankAccountNumber: true,
       bankIfsc: true,
       bankName: true,
@@ -152,8 +187,22 @@ export async function getUserDetails(userId) {
       isPhoneVerified: true,
       createdAt: true,
       updatedAt: true,
-      addresses: true,
-      kycDocuments: true,
+      kycDocuments: { orderBy: { createdAt: 'desc' } },
+      supplierDocument: { select: { supplierId: true, certificateNumber: true, verifiedAt: true, issueDate: true, validUntil: true, publicProfileUrl: true } },
+      // Buyer signup Step 4: live shop photo, live location and the address resolved from it, social links
+      shopProfile: true,
+      // Signup identity checks: the latest Aadhaar OTP verification of this user only
+      aadhaarVerifications: {
+        where: { status: 'VERIFIED' },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { id: true, aadhaarLast4: true, environment: true, status: true, verifiedAt: true, responseData: true },
+      },
+      panAadhaarLinkChecks: {
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: { id: true, pan: true, maskedPan: true, linkingStatus: true, result: true, reason: true, environment: true, createdAt: true },
+      },
       _count: {
         select: {
           orders: true,
@@ -167,14 +216,8 @@ export async function getUserDetails(userId) {
     },
   });
 
-  if (!user) {
-    const error = new Error('User not found.');
-    error.statusCode = 404;
-    throw error;
-  }
-
-  // Get recent 5 orders and recent 5 audit logs targeted at this user
-  const [recentOrders, auditTrail] = await Promise.all([
+  const [user, recentOrders, auditTrail] = await Promise.all([
+    userQuery,
     prisma.order.findMany({
       where: { OR: [{ userId }, { supplierId: userId }] },
       take: 5,
@@ -196,7 +239,23 @@ export async function getUserDetails(userId) {
     }),
   ]);
 
-  return { user: { ...user, bankAccountNumber: readEncryptedField(user.bankAccountNumber) }, recentOrders, auditTrail };
+  if (!user) {
+    const error = new Error('User not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // Aadhaar: the stored provider response stays on the server; only the holder's identity details are returned
+  const aadhaarVerifications = (user.aadhaarVerifications || []).map(({ responseData, ...rest }) => ({
+    ...rest,
+    holder: aadhaarHolderDetails(responseData),
+  }));
+
+  return {
+    user: { ...user, aadhaarVerifications, bankAccountNumber: readEncryptedField(user.bankAccountNumber) },
+    recentOrders,
+    auditTrail,
+  };
 }
 
 export async function updateUserStatus({ userId, status, isActive, reason, req }) {
@@ -228,22 +287,29 @@ export async function updateUserStatus({ userId, status, isActive, reason, req }
     throw error;
   }
 
-  const updatedUser = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      status: status || (isActive ? 'ACTIVE' : 'SUSPENDED'),
-      isActive: typeof isActive === 'boolean' ? isActive : status === 'ACTIVE',
-      statusReason: reason || null,
-    },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      status: true,
-      isActive: true,
-      statusReason: true,
-    },
+  // Status and identity block change together: a suspended account's email, PAN and Aadhaar cannot sign up
+  // again (even after the account is deleted); reactivating lifts the block
+  const updatedUser = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data: {
+        status: status || (isActive ? 'ACTIVE' : 'SUSPENDED'),
+        isActive: typeof isActive === 'boolean' ? isActive : status === 'ACTIVE',
+        statusReason: reason || null,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        status: true,
+        isActive: true,
+        statusReason: true,
+      },
+    });
+    if (updated.status === 'SUSPENDED' || updated.isActive === false) await blockUserIdentities(userId, reason, tx);
+    else await unblockUserIdentities(userId, tx);
+    return updated;
   });
 
   await logAuditAction({

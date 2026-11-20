@@ -3,6 +3,7 @@ import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/db.js';
 import { ENV } from '../config/env.js';
+import { identityHash, isIdentityBlocked, suspendedIdentityError } from './identityBlockService.js';
 
 /*
  * PAN–Aadhaar link verification.
@@ -286,6 +287,8 @@ const MAX_PAN_CHECKS_PER_AADHAAR = 5;
 export async function assertPanNotRegistered({ pan, excludeUserId = null, db = prisma }) {
   const cleanPan = String(pan || '').trim().toUpperCase();
   if (!PAN_REGEX.test(cleanPan)) return;
+  // A PAN of a suspended account (even one deleted later) can never be used again
+  if (await isIdentityBlocked('PAN', identityHash('PAN', cleanPan), db)) throw suspendedIdentityError('PAN');
   const owner = await db.user.findFirst({
     where: {
       pan: cleanPan,
@@ -293,8 +296,9 @@ export async function assertPanNotRegistered({ pan, excludeUserId = null, db = p
       NOT: { email: { endsWith: DELETED_ACCOUNT_EMAIL_DOMAIN } },
       ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
     },
-    select: { id: true },
+    select: { id: true, status: true, isActive: true },
   });
+  if (owner && (owner.status === 'SUSPENDED' || owner.isActive === false)) throw suspendedIdentityError('PAN');
   if (owner) throw inputError('This PAN is already registered with another TradeExpress account.', 'PAN_ALREADY_REGISTERED', 409);
 }
 

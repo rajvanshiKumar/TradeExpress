@@ -7,7 +7,7 @@ const REQUEST_ENDED = ['OTP_LOCKED', 'OTP_EXPIRED', 'OTP_REQUEST_NOT_FOUND', 'AA
 /**
  * Aadhaar OTP state for signup forms: send an OTP to the Aadhaar-linked mobile, then verify it.
  * Everything resets when the Aadhaar number changes. onVerified receives
- * { verificationToken, fullName, aadhaarLast4, environment }.
+ * { verificationToken, fullName, aadhaarLast4, environment, holder, providerResponse }.
  */
 export default function useAadhaarOtp({ aadhaarNumber, onVerified }) {
   const digits = String(aadhaarNumber || '').replace(/\D/g, '');
@@ -68,6 +68,9 @@ export default function useAadhaarOtp({ aadhaarNumber, onVerified }) {
         fullName: result.fullName || '',
         aadhaarLast4: result.aadhaarLast4,
         environment: result.environment,
+        // The holder's own details and photo from UIDAI, and the provider's full reply (kept in memory only)
+        holder: result.holder || null,
+        providerResponse: result.providerResponse || null,
       });
     } catch (err) {
       setError(err.message);

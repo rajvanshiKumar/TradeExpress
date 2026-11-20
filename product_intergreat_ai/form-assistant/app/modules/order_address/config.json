@@ -1,0 +1,24 @@
+{
+  "form": "order_address",
+  "version": 1,
+  "description": "User pastes an address / contact text (WhatsApp message, visiting card, email signature). AI splits it into the delivery address parts and buyer contact fields. Nothing is saved automatically.",
+  "thresholds": { "prefill": 0.85, "confirm": 0.5 },
+  "address_json_note": "Order.deliveryAddress is a Json column. Suggestions come back as flat keys 'deliveryAddress.<part>'; assemble your JSON from them (rename keys to your existing shape).",
+  "fields": [
+    { "key": "deliveryAddress.line1", "label": "Address line 1 (house/building/street)", "type": "string", "max_length": 200, "ai_fillable": true },
+    { "key": "deliveryAddress.line2", "label": "Address line 2 (area/locality)", "type": "string", "max_length": 200, "ai_fillable": true },
+    { "key": "deliveryAddress.landmark", "label": "Landmark", "type": "string", "max_length": 100, "ai_fillable": true },
+    { "key": "deliveryAddress.city", "label": "City", "type": "string", "ai_fillable": true },
+    { "key": "deliveryAddress.state", "label": "State (normalised to the official name)", "type": "enum", "ai_fillable": true },
+    { "key": "deliveryAddress.pincode", "label": "Pincode", "type": "string", "pattern": "^[1-9][0-9]{5}$", "ai_fillable": true, "note": "Only if written in the text" },
+    { "key": "deliveryAddress.country", "label": "Country", "type": "string", "ai_fillable": true },
+    { "key": "buyerName", "label": "Buyer name", "type": "string", "ai_fillable": true },
+    { "key": "buyerPhone", "label": "Buyer phone (10-digit Indian mobile)", "type": "string", "ai_fillable": true, "note": "Only if written in the text" },
+    { "key": "buyerEmail", "label": "Buyer email", "type": "string", "ai_fillable": true, "note": "Only if written in the text" },
+    { "key": "buyerCompany", "label": "Buyer company", "type": "string", "ai_fillable": true },
+    { "key": "buyerGstin", "label": "Buyer GSTIN", "type": "string", "ai_fillable": true, "note": "Format and checksum are verified in code; must be written in the text" },
+    { "key": "supplierGstin", "label": "Supplier GSTIN", "type": "string", "ai_fillable": false, "reason": "Comes from the supplier's verified profile" },
+    { "key": "subtotal", "label": "Amounts, tax, CGST/SGST/IGST, total", "type": "decimal", "ai_fillable": false, "reason": "Calculated by deterministic code, never by AI" },
+    { "key": "orderStatus", "label": "Status fields", "type": "string", "ai_fillable": false, "reason": "System fields" }
+  ]
+}

@@ -9,6 +9,7 @@ import Image from '../../components/common/Image';
 import EmptyState from '../../components/common/EmptyState';
 import PriceTiers from '../../components/products/PriceTiers';
 import ProductMediaUploader from '../../components/products/ProductMediaUploader';
+import AiListingAssistant from '../../components/products/AiListingAssistant';
 import DynamicSpecFields from '../../components/products/DynamicSpecFields';
 import useCategorySpecSchema from '../../hooks/useCategorySpecSchema';
 import { incompatibleValueKeys, pickSchemaValues, validateSpecValues } from '../../utils/specValidation';
@@ -118,6 +119,34 @@ function Form({ company, product }) {
     if (errors[field]) setErrors((previous) => ({ ...previous, [field]: '' }));
   };
   const setFlag = (field) => (checked) => setValues((previous) => ({ ...previous, [field]: checked }));
+
+  /**
+   * Applies the AI listing suggestions: name, summary, description and colours are filled from the AI; new
+   * specification lines are added to the ones already typed; the category changes only when the AI's category
+   * matched a TradeExpress category. Price, MOQ, stock and tax are never touched.
+   */
+  const applyAiSuggestions = (suggestion) => {
+    const matched = suggestion.category && categories.some((item) => item.slug === suggestion.category);
+    setValues((previous) => {
+      const existingSpecs = previous.specifications.split('\n').map((line) => line.trim()).filter(Boolean);
+      const known = new Set(existingSpecs.map((line) => line.split(':')[0].trim().toLowerCase()));
+      const newSpecs = (suggestion.specifications || '').split('\n').filter((line) => line.trim() && !known.has(line.split(':')[0].trim().toLowerCase()));
+      return {
+        ...previous,
+        name: suggestion.name || previous.name,
+        summary: suggestion.summary || previous.summary,
+        description: suggestion.description || previous.description,
+        colours: suggestion.colours || previous.colours,
+        specifications: [...existingSpecs, ...newSpecs].join('\n'),
+        ...(matched ? { category: suggestion.category, subcategory: suggestion.subcategory || '' } : {}),
+      };
+    });
+    if (matched && suggestion.category !== values.category) setProductType('');
+    setErrors((previous) => ({ ...previous, name: '', summary: '', description: '', ...(matched ? { category: '' } : {}) }));
+    showToast(matched
+      ? 'AI details added. Review them, then add price, MOQ, stock and tax details.'
+      : 'AI details added. Please choose the category, then add price, MOQ, stock and tax details.');
+  };
 
   const handleImageFileChange = async (event) => {
     const file = event.target.files?.[0];
@@ -268,6 +297,8 @@ function Form({ company, product }) {
 
       <form onSubmit={submit} noValidate className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-6">
+          <AiListingAssistant images={values.images} onApply={applyAiSuggestions} disabled={submitting} />
+
           <fieldset className="ts-card p-5 sm:p-6">
             <legend className="float-left mb-4 w-full font-display text-base font-bold text-navy-900">Basic details</legend>
             <div className="grid grid-cols-1 clear-both gap-4 sm:grid-cols-2">

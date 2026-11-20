@@ -2,9 +2,13 @@ import seedOrders from '../data/orders';
 import { STORAGE_KEYS } from '../utils/constants';
 import { createCollection } from './localCollection';
 import { apiGet, apiPost, isApiConfigured } from './apiClient';
-import { getAuthToken } from '../utils/authSession';
+import { getAuthToken, readTokenPayload } from '../utils/authSession';
+import { apiOrderStatus, apiPaymentStatus } from '../utils/orderStatus';
 
 const localOrders = createCollection(STORAGE_KEYS.orders, seedOrders);
+
+// A signed-in buyer: their orders are read only from the server (no local sample orders)
+const isBuyerSession = () => String(readTokenPayload(getAuthToken())?.role || '').toLowerCase() === 'buyer';
 
 function formatApiOrder(created, source = 'cart') {
   return {
@@ -30,7 +34,7 @@ function formatApiOrder(created, source = 'cart') {
     })),
     shippingMethod: created.shippingMethod,
     paymentMethod: created.paymentMethod,
-    paymentStatus: created.paymentStatus === 'PAID' ? 'paid' : (created.paymentStatus === 'PARTIALLY_PAID' ? 'partially_paid' : (created.paymentStatus === 'COD' ? 'cod' : 'pending')),
+    paymentStatus: apiPaymentStatus(created.paymentStatus),
     isPartialPayment: created.isPartialPayment || false,
     advanceAmount: created.advanceAmount ? Number(created.advanceAmount) : null,
     balanceDue: created.balanceDue ? Number(created.balanceDue) : null,
@@ -57,7 +61,7 @@ function formatApiOrder(created, source = 'cart') {
       company: created.buyerCompany,
     },
     address: created.deliveryAddress,
-    status: created.orderStatus === 'ORDER_CONFIRMED' ? 'Confirmed' : (created.orderStatus === 'ORDER_PLACED' ? 'Pending' : created.orderStatus),
+    status: apiOrderStatus(created.orderStatus),
     createdAt: created.createdAt,
   };
 }
@@ -68,14 +72,21 @@ const orderService = {
     if (isApiConfigured && getAuthToken()) {
       try {
         const res = await apiGet('orders/my-orders');
-        if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+        if (res.data && Array.isArray(res.data) && (res.data.length > 0 || isBuyerSession())) {
           return res.data.map((item) => formatApiOrder(item));
         }
-      } catch {
-        // Fall back to local collection if not authenticated or error
+      } catch (error) {
+        // A buyer's orders come only from the database: an error is shown, never sample orders
+        if (isBuyerSession()) throw new Error(error?.message || 'Your orders could not be loaded. Please try again.');
       }
     }
     return localOrders.list(options);
+  },
+
+  /** Buyer cancels an order on the server (allowed before packing; the server checks ownership and status). */
+  cancelOrder: async (identifier, reason = '') => {
+    const res = await apiPost(`orders/${encodeURIComponent(identifier)}/cancel`, { reason });
+    return res;
   },
 
   saveOrders: (records) => localOrders.saveAll(records),

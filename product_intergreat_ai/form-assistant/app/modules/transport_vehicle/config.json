@@ -1,0 +1,39 @@
+{
+  "form": "transport_vehicle",
+  "version": 1,
+  "description": "User uploads photos of the vehicle documents (RC, insurance, fitness, permit, PUC) and/or pastes text. AI proposes the vehicle form fields. Nothing is saved automatically and the AI never verifies a vehicle.",
+  "thresholds": { "prefill": 0.85, "confirm": 0.5 },
+  "enums": {
+    "vehicleType": ["Open Truck", "Container 20ft", "Container 32ft", "Trailer", "Mini Truck", "Flatbed", "Reefer"],
+    "bodyType": ["OPEN", "CLOSED", "CONTAINER", "FLATBED", "REEFER", "TANKER"],
+    "permitType": ["NATIONAL", "STATE"]
+  },
+  "always_confirm": ["vehicleType", "bodyType", "capacityTons", "gpsImei", "ownershipType"],
+  "fields": [
+    { "key": "vehicleNumber", "label": "Vehicle number", "type": "string", "ai_fillable": true, "note": "Returned compact and uppercase, e.g. MH12AB1234. Format it as your DB expects." },
+    { "key": "make", "label": "Make", "type": "string", "ai_fillable": true },
+    { "key": "model", "label": "Model", "type": "string", "ai_fillable": true },
+    { "key": "yearOfManufacture", "label": "Year of manufacture", "type": "integer", "ai_fillable": true },
+    { "key": "ownerName", "label": "Owner name (as printed)", "type": "string", "ai_fillable": true },
+    { "key": "rcNumber", "label": "RC number", "type": "string", "ai_fillable": true, "note": "On most Indian RCs this equals the registration number; check your own meaning of this column" },
+    { "key": "rcExpiryDate", "label": "RC validity date", "type": "date", "format": "YYYY-MM-DD", "ai_fillable": true },
+    { "key": "insuranceNumber", "label": "Insurance policy number", "type": "string", "ai_fillable": true },
+    { "key": "insuranceExpiryDate", "label": "Insurance expiry", "type": "date", "ai_fillable": true },
+    { "key": "fitnessExpiryDate", "label": "Fitness certificate expiry", "type": "date", "ai_fillable": true },
+    { "key": "permitNumber", "label": "Permit number", "type": "string", "ai_fillable": true },
+    { "key": "permitType", "label": "Permit type", "type": "enum", "ai_fillable": true },
+    { "key": "permitExpiryDate", "label": "Permit expiry", "type": "date", "ai_fillable": true },
+    { "key": "pucExpiryDate", "label": "PUC expiry", "type": "date", "ai_fillable": true },
+    { "key": "vehicleType", "label": "Vehicle type", "type": "enum", "ai_fillable": true, "note": "Suggestion only (always 'confirm')" },
+    { "key": "bodyType", "label": "Body type", "type": "enum", "ai_fillable": true, "note": "Suggestion only (always 'confirm')" },
+    { "key": "capacityTons", "label": "Capacity (tons)", "type": "decimal", "ai_fillable": true, "note": "Only if a payload/capacity is printed; always 'confirm'. Gross vehicle weight is not capacity." },
+    { "key": "gpsProvider", "label": "GPS provider", "type": "string", "ai_fillable": true },
+    { "key": "gpsImei", "label": "GPS IMEI", "type": "string", "ai_fillable": true, "note": "15 digits, Luhn-checked; always 'confirm'" },
+    { "key": "ownershipType", "label": "Ownership (OWNED/LEASED/HIRED)", "type": "enum", "ai_fillable": true, "note": "Only suggests OWNED, and only when request.company_name matches the owner name on the document; computed in code" },
+    { "key": "cargoVolumeCbm", "label": "Cargo volume", "type": "decimal", "ai_fillable": false, "reason": "Calculate length x width x height in your code" },
+    { "key": "cargoLengthM", "label": "Cargo length/width/height", "type": "decimal", "ai_fillable": false, "reason": "Owner measures; AI would only guess" },
+    { "key": "isVerified", "label": "Verification fields", "type": "boolean", "ai_fillable": false, "reason": "Admin decision, never AI" },
+    { "key": "status", "label": "Status / currentLocation / vehicleCode", "type": "string", "ai_fillable": false, "reason": "System fields" },
+    { "key": "maintenanceNotes", "label": "Maintenance / operational notes", "type": "text", "ai_fillable": false, "reason": "Not covered: free-form notes are written by the owner" }
+  ]
+}

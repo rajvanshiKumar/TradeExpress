@@ -19,23 +19,36 @@ export function MessageProvider({ children }) {
 
   const side = sideFor(user);
 
+  // When the conversations last arrived, and whether a load is running (see refresh)
+  const loadedAtRef = useRef(0);
+  const loadingRef = useRef(false);
+
   // Fetch conversations from the backend
   const reload = useCallback(async () => {
     if (!user) {
       setConversations([]);
       return;
     }
+    loadingRef.current = true;
     try {
       setError(null);
       const data = await messageService.listConversations();
       setConversations(consolidateConversations(data || [], side));
+      loadedAtRef.current = Date.now();
     } catch (err) {
       console.warn('Failed to fetch conversations:', err);
       setError(err.message || 'Unable to load conversations.');
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   }, [user, side]);
+
+  /** Refresh when the Messages page opens: skipped while loading or when the list is only seconds old. */
+  const refresh = useCallback((maxAgeMs = 5000) => {
+    if (!user || loadingRef.current || Date.now() - loadedAtRef.current < maxAgeMs) return;
+    reload();
+  }, [user, reload]);
 
   // Initial load when user signs in
   useEffect(() => {
@@ -317,6 +330,7 @@ export function MessageProvider({ children }) {
       loading,
       error,
       reload,
+      refresh,
       unreadCount,
       side,
       sending,
@@ -330,6 +344,7 @@ export function MessageProvider({ children }) {
       loading,
       error,
       reload,
+      refresh,
       unreadCount,
       side,
       sending,

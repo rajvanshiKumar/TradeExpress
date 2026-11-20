@@ -1,5 +1,5 @@
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -107,6 +107,7 @@ model User {
   accountVerifications AccountVerification[]
   aadhaarVerifications AadhaarVerification[]
   panAadhaarLinkChecks PanAadhaarLinkCheck[]
+  shopProfile          BuyerShopProfile?
   rfqs             Rfq[]                @relation("BuyerRfqs")
   quotations          Quotation[]          @relation("SupplierQuotes")
   disputesRaised      Dispute[]            @relation("BuyerDisputes")
@@ -1471,4 +1472,42 @@ model PanAadhaarLinkCheck {
   @@index([userId])
   @@index([pan])
   @@map("pan_aadhaar_link_checks")
+}
+
+/// Buyer shop verification captured at signup (Step 4): a live camera photo of the shop with the live GPS position
+/// taken at that moment, the address resolved from that position on the server, an optional shop name and the
+/// buyer's social media links. One per buyer.
+model BuyerShopProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopName       String?
+  photoUrl       String   // /uploads/... path of the live photo
+  latitude       Float
+  longitude      Float
+  accuracyMeters Float?
+  address        String?  @db.Text // resolved on the server from latitude / longitude
+  addressDetails Json?    // provider's structured address (road, city, state, postcode, ...)
+  capturedAt     DateTime // when the photo and location were taken
+  socialLinks    Json?    // [{ platform, url }]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("buyer_shop_profiles")
+}
+
+/// Identities of suspended accounts that may not be used again: their email, PAN and Aadhaar (as keyed hashes,
+/// never the plain values). Kept when the account is later deleted, removed when the account is reactivated.
+/// userId is a plain reference (no relation) so the block outlives the account.
+model BlockedIdentity {
+  id        String   @id @default(uuid())
+  kind      String   // EMAIL | PAN | AADHAAR
+  valueHash String
+  userId    String
+  reason    String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@unique([kind, valueHash])
+  @@index([userId])
+  @@map("blocked_identities")
 }

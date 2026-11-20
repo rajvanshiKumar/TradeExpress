@@ -36,14 +36,16 @@ describe('Header & About Section Navigation Test Suite', () => {
     assert.ok(headerContent.includes('{ label: "Products", to: "/products" }'), 'Must contain Products link');
     assert.ok(headerContent.includes('{ label: "Categories", to: "/categories", megaMenu: true }'), 'Must contain Categories link');
     assert.ok(headerContent.includes('{ label: "Suppliers", to: "/suppliers" }'), 'Must contain Suppliers link');
-    assert.ok(!headerContent.includes('{ label: "Request a Quote", to: "/rfq" }'), 'Header navigation must not contain Request a Quote link');
+    // RFQ (moved from the buyer dashboard): shown as "RFQ" to guests and buyers, not suppliers/admins
+    assert.ok(headerContent.includes('{ label: "RFQ", to: "/rfq"'), 'Header navigation contains RFQ');
+    assert.ok(headerContent.includes('(!user || user.role === "buyer")'), 'RFQ is for guests and buyers only');
     // Deals is shown from 1280px up (wideOnly), so it may carry extra options after its path
     assert.ok(/\{ label: "Deals", to: "\/products\?deal=1"[ ,}]/.test(headerContent), 'Must contain Deals link');
   });
 
-  it('verifies AboutMenu contains only the first and second options', () => {
+  it('verifies AboutMenu contains only About TradeExpress (How It Works removed)', () => {
     assert.ok(aboutMenuContent.includes('/info/about'), 'AboutMenu must contain /info/about');
-    assert.ok(aboutMenuContent.includes('/info/about#how-it-works'), 'AboutMenu must contain /info/about#how-it-works');
+    assert.ok(!aboutMenuContent.includes('/info/about#how-it-works'), 'AboutMenu must not contain How It Works');
     assert.ok(!aboutMenuContent.includes('/info/buyer-protection'), 'AboutMenu must not contain /info/buyer-protection');
     assert.ok(!aboutMenuContent.includes("to: '/help'"), 'AboutMenu must not contain /help');
     assert.ok(!aboutMenuContent.includes('/info/contact'), 'AboutMenu must not contain /info/contact');

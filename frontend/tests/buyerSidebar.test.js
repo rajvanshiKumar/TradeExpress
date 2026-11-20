@@ -8,27 +8,33 @@ import { dashboardNav } from '../src/data/navigation.js';
 describe('Buyer Dashboard Sidebar Navigation & Architecture Test Suite', () => {
   const REQUIRED_ITEMS = [
     { label: 'Dashboard', path: '/buyer' },
-    { label: 'Find Products', path: '/products' },
-    { label: 'Compare Similar Products', path: '/compare-products' },
-    { label: 'Request a Quote (RFQ)', path: '/rfq' },
-    { label: 'My Quotes', path: '/buyer/quotes' },
+    // Order requested by the business: My Orders, Payments & Invoices, Saved Products, Messages, My Quotes
     { label: 'My Orders', path: '/buyer/orders' },
-    { label: 'Messages', path: '/messages' },
     { label: 'Payments & Invoices', path: '/buyer/payments' },
     { label: 'Saved Products', path: '/buyer/wishlist' },
-    { label: 'My Business Profile', path: '/buyer/profile' },
+    { label: 'Messages', path: '/buyer/messages' },
+    { label: 'My Quotes', path: '/buyer/quotes' },
     { label: 'TradeExpress ID & Certificates', path: '/buyer/documents' },
-    { label: 'Notifications', path: '/buyer/notifications' },
-    { label: 'Account Settings', path: '/buyer/account-settings' },
+    { label: 'My Business Profile', path: '/buyer/account-settings' },
   ];
 
-  it('contains all 13 primary buyer navigation routes with valid labels and icons in navigation.js', () => {
+  it('contains all 8 primary buyer navigation routes with valid labels and icons in navigation.js', () => {
     assert.ok(Array.isArray(dashboardNav.buyer), 'dashboardNav.buyer must be an array');
-    assert.equal(dashboardNav.buyer.length, 13, 'Must contain exactly 13 navigation items (14th is Logout)');
-    // Messages and Payments & Invoices follow My Orders
+    assert.equal(dashboardNav.buyer.length, 8, 'Must contain exactly 8 navigation items (9th is Logout)');
+    // Notifications open from the header bell, not from Account & Support
+    assert.ok(!dashboardNav.buyer.some((item) => item.to === '/buyer/notifications'), 'No Notifications item');
+    // The old separate business profile page is gone: Account Settings is now named My Business Profile
+    assert.ok(!dashboardNav.buyer.some((item) => item.to === '/buyer/profile'), 'No separate /buyer/profile item');
+    // Find Products, Compare Similar Products and Request a Quote live in the site header, not the buyer dashboard
+    for (const moved of ['/products', '/compare-products', '/rfq']) {
+      assert.ok(!dashboardNav.buyer.some((item) => item.to === moved), `${moved} is not in the buyer dashboard menu`);
+    }
+    // My Orders, then Payments & Invoices, Saved Products, Messages and My Quotes
     const ordersIdx = dashboardNav.buyer.findIndex((item) => item.to === '/buyer/orders');
-    assert.equal(dashboardNav.buyer[ordersIdx + 1].to, '/messages');
-    assert.equal(dashboardNav.buyer[ordersIdx + 2].to, '/buyer/payments');
+    assert.deepEqual(
+      dashboardNav.buyer.slice(ordersIdx, ordersIdx + 5).map((item) => item.to),
+      ['/buyer/orders', '/buyer/payments', '/buyer/wishlist', '/buyer/messages', '/buyer/quotes'],
+    );
 
     REQUIRED_ITEMS.forEach((req, idx) => {
       const item = dashboardNav.buyer[idx];
@@ -192,9 +198,10 @@ describe('Buyer Dashboard Sidebar Navigation & Architecture Test Suite', () => {
 describe('Buyer account has Account Settings only (separate Settings page removed)', () => {
   const read = (rel) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', rel), 'utf8');
 
-  it('the buyer sidebar shows Account Settings and no separate Settings item', () => {
+  it('the buyer sidebar shows Account Settings (named My Business Profile) and no separate Settings item', () => {
     const sidebar = read('src/components/layout/BuyerSidebar.jsx');
-    assert.match(sidebar, /label: 'Account Settings', to: '\/buyer\/account-settings'/);
+    assert.match(sidebar, /label: 'My Business Profile', to: '\/buyer\/account-settings'/);
+    assert.doesNotMatch(sidebar, /'\/buyer\/profile'/);
     assert.doesNotMatch(sidebar, /'\/buyer\/settings'/);
     assert.doesNotMatch(sidebar, /label: 'Settings'/);
   });

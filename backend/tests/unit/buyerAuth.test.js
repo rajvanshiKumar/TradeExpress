@@ -8,9 +8,11 @@ import { loginUser, registerBuyer } from '../../src/services/authService.js';
 import { issueVerifiedEmailToken, resendMobileOtp, verifyMobileOtp } from '../../src/services/otpService.js';
 import { sendOtp } from '../../src/services/msg91Service.js';
 import { identityQuery, verifiedIdentity, TEST_PAN } from '../helpers/verifiedIdentity.js';
+import { liveShop } from '../helpers/liveShop.js';
 
 let prismaStub;
-prisma.$use(async (params, next) => (prismaStub ? prismaStub(params) : null));
+let prismaStubCapture = null;
+prisma.$use(async (params, next) => { prismaStubCapture?.(params); return prismaStub ? prismaStub(params) : null; });
 
 const registration = (overrides = {}) => ({
   name: 'Test Buyer', email: 'buyer@example.com', phone: '9876543210', country: 'India',
@@ -57,7 +59,12 @@ describe('Buyer registration validation', () => {
       }
       return null;
     });
-    const result = await registerBuyer(registration(verifiedIdentity()));
+    let createdData = null;
+    t.after(() => { prismaStubCapture = null; });
+    prismaStubCapture = (q) => { if (q.model === 'User' && q.action === 'create') createdData = q.args.data; };
+    const result = await registerBuyer(registration({ ...verifiedIdentity(), ...liveShop(t) }));
+    assert.equal(createdData?.shopProfile?.create?.shopName, 'Test Shop', 'the shop profile is saved with the account');
+    assert.deepEqual(createdData?.shopProfile?.create?.socialLinks, [{ platform: 'Instagram', url: 'https://instagram.com/testshop' }]);
     assert.equal(result.user.panAadhaarStatus, 'LINKED');
     assert.equal(linkedVerification?.data?.userId, 'buyer-test', 'the Aadhaar verification is linked to the new account');
     // Buyers start with PENDING KYC until approved by Admin as required by TradeExpress verification policy

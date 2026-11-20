@@ -7,7 +7,6 @@ import {
   ChevronRight,
   ClipboardList,
   FileBadge2,
-  FileSpreadsheet,
   Heart,
   LayoutDashboard,
   LogOut,
@@ -15,9 +14,6 @@ import {
   MessageSquare,
   Package,
   Receipt,
-  Scale,
-  Search,
-  UserCog,
   X,
 } from 'lucide-react';
 import Logo from '../common/Logo';
@@ -35,28 +31,23 @@ export const BUYER_NAV_GROUPS = [
     group: 'Marketplace & Sourcing',
     items: [
       { id: 'overview', label: 'Dashboard', to: '/buyer', icon: LayoutDashboard },
-      { id: 'products', label: 'Find Products', to: '/products', icon: Search },
-      { id: 'compare', label: 'Compare Similar Products', to: '/compare-products', icon: Scale },
-      { id: 'rfq', label: 'Request a Quote (RFQ)', to: '/rfq', icon: FileSpreadsheet },
     ],
   },
   {
     group: 'Orders & Transactions',
     items: [
-      { id: 'quotes', label: 'My Quotes', to: '/buyer/quotes', icon: ClipboardList, badgeKey: 'quotes' },
       { id: 'orders', label: 'My Orders', to: '/buyer/orders', icon: Package, badgeKey: 'orders' },
-      { id: 'messages', label: 'Messages', to: '/messages', icon: MessageSquare, badgeKey: 'messages' },
       { id: 'payments', label: 'Payments & Invoices', to: '/buyer/payments', icon: Receipt },
       { id: 'saved', label: 'Saved Products', to: '/buyer/wishlist', icon: Heart, badgeKey: 'wishlist' },
+      { id: 'messages', label: 'Messages', to: '/buyer/messages', icon: MessageSquare, badgeKey: 'messages' },
+      { id: 'quotes', label: 'My Quotes', to: '/buyer/quotes', icon: ClipboardList, badgeKey: 'quotes' },
     ],
   },
   {
     group: 'Account & Support',
     items: [
-      { id: 'profile', label: 'My Business Profile', to: '/buyer/profile', icon: Building2 },
       { id: 'documents', label: 'TradeExpress ID & Certificates', to: '/buyer/documents', icon: FileBadge2 },
-      { id: 'notifications', label: 'Notifications', to: '/buyer/notifications', icon: Bell, badgeKey: 'notifications' },
-      { id: 'account-settings', label: 'Account Settings', to: '/buyer/account-settings', icon: UserCog },
+      { id: 'account-settings', label: 'My Business Profile', to: '/buyer/account-settings', icon: Building2 },
     ],
   },
 ];

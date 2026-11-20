@@ -1,5 +1,6 @@
 import * as verificationService from '../services/verificationService.js';
 import * as aadhaarOtpService from '../services/aadhaarOtpService.js';
+import * as buyerShopService from '../services/buyerShopService.js';
 import prisma from '../config/db.js';
 
 /**
@@ -309,6 +310,27 @@ export async function verifyAadhaarOtp(req, res, next) {
       aadhaarNumber: req.body.aadhaarNumber,
     });
     return res.json({ success: true, data, message: data.message || 'Aadhaar verified.' });
+  } catch (error) {
+    if (error.statusCode) return sendVerificationError(res, error);
+    next(error);
+  }
+}
+
+/**
+ * Address for a live location (buyer shop photo preview).
+ * POST /api/verification/location/reverse-geocode
+ */
+export async function reverseGeocodeLocation(req, res, next) {
+  try {
+    const result = await buyerShopService.reverseGeocode(req.body.latitude, req.body.longitude);
+    return res.json({
+      success: true,
+      data: {
+        address: result?.address || null,
+        fullAddress: result?.fullAddress || null,
+        found: Boolean(result?.address),
+      },
+    });
   } catch (error) {
     if (error.statusCode) return sendVerificationError(res, error);
     next(error);

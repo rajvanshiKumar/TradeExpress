@@ -12,21 +12,14 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');
 }
 
-describe('Buyer Dashboard Messages & Invoices Hub Suite', () => {
-  it('renders a unified Messages & Invoices section in BuyerDashboard.jsx', () => {
+describe('Buyer Dashboard: removed sections and invoice popup', () => {
+  it('no longer shows the Messages & Invoices, Tax Invoices & Billing or Recently viewed sections', () => {
     const dashboard = read('src/pages/buyer/BuyerDashboard.jsx');
-
-    // Section title and accessibility heading
-    assert.match(dashboard, /id="messages-and-invoices-title"/, 'Must contain messages-and-invoices-title heading id');
-    assert.match(dashboard, /Messages & Invoices/, 'Must display "Messages & Invoices" heading');
-
-    // Sub-cards for Supplier Messages and Tax Invoices
-    assert.match(dashboard, /Supplier Messages/, 'Must render Supplier Messages panel');
-    assert.match(dashboard, /Tax Invoices & Billing/, 'Must render Tax Invoices & Billing panel');
-
-    // Navigation shortcuts for quick access
-    assert.match(dashboard, /to="\/messages"/, 'Must link to /messages inbox');
-    assert.match(dashboard, /to="\/buyer\/payments"/, 'Must link to /buyer/payments');
+    assert.doesNotMatch(dashboard, /messages-and-invoices-title|Messages & Invoices/, 'Messages & Invoices section removed');
+    assert.doesNotMatch(dashboard, /Tax Invoices & Billing/, 'Tax Invoices & Billing panel removed');
+    assert.doesNotMatch(dashboard, /recently-viewed-title|Recently viewed/, 'Recently viewed section removed');
+    // Messages stay one click away through the stat card, inside the buyer portal
+    assert.match(dashboard, /to="\/buyer\/messages"/, 'Messages card opens the inbox inside the buyer portal');
   });
 
   it('integrates TaxInvoiceModal with instant view in BuyerDashboard', () => {
@@ -45,14 +38,6 @@ describe('Buyer Dashboard Messages & Invoices Hub Suite', () => {
     // Table headers and invoice button
     assert.match(dashboard, /<th scope="col" className="text-right">Invoice<\/th>/, 'Must have Invoice column header in Recent orders table');
     assert.match(dashboard, /setSelectedInvoiceOrder\(order\)/, 'Invoice button must set selectedInvoiceOrder on click');
-  });
-
-  it('deduplicates supplier conversations so each supplier appears only once', () => {
-    const dashboard = read('src/pages/buyer/BuyerDashboard.jsx');
-
-    // Deduplication logic
-    assert.match(dashboard, /uniqueConversations/, 'Must define uniqueConversations memo');
-    assert.match(dashboard, /seen\.has\(suppKey\)/, 'Must deduplicate supplier conversations by suppKey');
   });
 });
 

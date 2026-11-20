@@ -1,0 +1,24 @@
+{
+  "form": "transport_driver",
+  "version": 1,
+  "description": "User uploads a photo of the driving licence and/or pastes contact text. AI proposes the driver form fields. Nothing is saved automatically and the AI never verifies a driver.",
+  "privacy": "Licence photos contain personal data and are sent to the configured AI provider. Aadhaar-like numbers found in pasted text are redacted before sending. Aadhaar and PAN are never extracted. Disable the whole module with ASSIST_ENABLE_DRIVER_DOCUMENTS=false.",
+  "thresholds": { "prefill": 0.85, "confirm": 0.5 },
+  "enums": { "licenseType": ["LMV", "COMMERCIAL_HEAVY", "HAZARDOUS", "ODC"] },
+  "always_confirm": ["licenseType", "licenseNumber"],
+  "fields": [
+    { "key": "name", "label": "Driver name (as printed)", "type": "string", "ai_fillable": true },
+    { "key": "licenseNumber", "label": "Driving licence number", "type": "string", "ai_fillable": true, "note": "Returned compact uppercase, e.g. MH1220190001234; always 'confirm'" },
+    { "key": "licenseType", "label": "Licence type", "type": "enum", "ai_fillable": true, "note": "Mapped from the printed class (LMV, HMV, HGMV, TRANS...); always 'confirm'" },
+    { "key": "licenseExpiryDate", "label": "Licence validity date", "type": "date", "format": "YYYY-MM-DD", "ai_fillable": true, "note": "Transport (TR) validity is used for commercial licences" },
+    { "key": "phone", "label": "Phone (10-digit Indian mobile)", "type": "string", "ai_fillable": true, "note": "From pasted text only, and must be written in it" },
+    { "key": "alternatePhone", "label": "Alternate phone", "type": "string", "ai_fillable": true, "note": "From pasted text only" },
+    { "key": "emergencyContactName", "label": "Emergency contact name", "type": "string", "ai_fillable": true, "note": "From pasted text only" },
+    { "key": "emergencyContactPhone", "label": "Emergency contact phone", "type": "string", "ai_fillable": true, "note": "From pasted text only" },
+    { "key": "aadhaarNumber", "label": "Aadhaar number / document", "type": "string", "ai_fillable": false, "reason": "Sensitive government id: never sent to or returned by the AI" },
+    { "key": "panNumber", "label": "PAN number", "type": "string", "ai_fillable": false, "reason": "Sensitive government id: not extracted by the AI" },
+    { "key": "experienceYears", "label": "Experience years", "type": "integer", "ai_fillable": false, "reason": "Cannot be read from a licence; also note your schema default of 5 can mislead" },
+    { "key": "isVerified", "label": "Verification fields", "type": "boolean", "ai_fillable": false, "reason": "Admin decision, never AI" },
+    { "key": "status", "label": "Status / currentLocation / driverCode", "type": "string", "ai_fillable": false, "reason": "System fields" }
+  ]
+}

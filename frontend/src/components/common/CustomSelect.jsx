@@ -92,6 +92,30 @@ export default function CustomSelect({
     }
   }, [open, showSearch]);
 
+  // Where the list opens and how tall it may be: below the field when there is room, otherwise above (whichever side
+  // has more space), always inside the screen. Measured when the list opens and when the page scrolls or resizes.
+  const [placement, setPlacement] = useState({ up: false, maxHeight: 384 });
+  useEffect(() => {
+    if (!open) return undefined;
+    const measure = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const margin = 12;
+      const below = window.innerHeight - rect.bottom - margin;
+      const above = rect.top - margin;
+      const chrome = showSearch ? 64 : 16; // search row and list padding
+      const up = below < 240 && above > below;
+      setPlacement({ up, maxHeight: Math.max(140, Math.min(384, (up ? above : below) - chrome)) });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [open, showSearch]);
+
   // Click outside and Esc key listener
   useEffect(() => {
     if (!open) return undefined;
@@ -234,7 +258,7 @@ export default function CustomSelect({
           id={selectId}
           role="listbox"
           tabIndex={-1}
-          className={`ts-dropdown-anim absolute top-full z-50 mt-1.5 w-max min-w-full sm:min-w-[15.5rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 backdrop-blur-2xl shadow-[0_20px_50px_-12px_rgba(11,39,22,0.18),0_0_0_1px_rgba(0,0,0,0.08)] ${
+          className={`ts-dropdown-anim absolute ${placement.up ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} z-[60] w-max min-w-full sm:min-w-[15.5rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 backdrop-blur-2xl shadow-[0_20px_50px_-12px_rgba(11,39,22,0.18),0_0_0_1px_rgba(0,0,0,0.08)] ${
             align === 'right' ? 'right-0 left-auto' : 'left-0'
           } ${panelClassName}`}
         >
@@ -273,7 +297,8 @@ export default function CustomSelect({
           {/* Options List */}
           <div
             ref={listboxRef}
-            className="max-h-96 overflow-y-auto p-1.5 space-y-1"
+            className="overflow-y-auto overscroll-contain p-1.5 space-y-0.5"
+            style={{ maxHeight: placement.maxHeight }}
           >
             {filteredOptions.length === 0 ? (
               <div className="px-3 py-4 text-center text-xs text-slate-400">
@@ -292,7 +317,7 @@ export default function CustomSelect({
                     aria-selected={isSelected}
                     onClick={() => handleSelect(opt.value)}
                     onMouseEnter={() => setHighlightedIndex(idx)}
-                    className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs transition-all cursor-pointer whitespace-nowrap ${
+                    className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2 text-left text-xs transition-all cursor-pointer whitespace-nowrap ${
                       isSelected
                         ? 'bg-emerald-50 text-emerald-950 font-bold border border-emerald-300/70 shadow-2xs'
                         : isHighlighted

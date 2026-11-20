@@ -5,6 +5,7 @@ import DashboardLayout from '../components/layout/DashboardLayout';
 import SuperAdminLayout from '../components/layout/SuperAdminLayout';
 import ProtectedRoute from './ProtectedRoute';
 import RoleRoute from './RoleRoute';
+import MessagesEntry from './MessagesEntry';
 import Home from '../pages/Home';
 import Products from '../pages/Products';
 import ProductDetails from '../pages/ProductDetails';
@@ -38,7 +39,6 @@ const BuyerDashboard = lazy(() => import('../pages/buyer/BuyerDashboard'));
 const BuyerOrders = lazy(() => import('../pages/buyer/BuyerOrders'));
 const BuyerQuotes = lazy(() => import('../pages/buyer/BuyerQuotes'));
 const ProductComparison = lazy(() => import('../pages/buyer/ProductComparison'));
-const BuyerProfile = lazy(() => import('../pages/buyer/BuyerProfile'));
 const BuyerAddresses = lazy(() => import('../pages/buyer/BuyerAddresses'));
 const BuyerPayments = lazy(() => import('../pages/buyer/BuyerPayments'));
 const BuyerCardsAccounts = lazy(() => import('../pages/buyer/BuyerCardsAccounts'));
@@ -133,7 +133,8 @@ export default function AppRoutes() {
 
         {/* Signed-in pages that keep the marketplace layout */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/messages" element={<Messages />} />
+          {/* Buyers are sent to /buyer/messages (inside the buyer portal); others stay here */}
+          <Route path="/messages" element={<MessagesEntry />} />
           <Route element={<RoleRoute roles={['buyer']} />}>
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
@@ -149,6 +150,7 @@ export default function AppRoutes() {
           <Route element={<DashboardLayout role="buyer" />}>
             <Route path="/buyer" element={<BuyerDashboard />} />
             <Route path="/buyer/orders" element={<BuyerOrders />} />
+            <Route path="/buyer/messages" element={<Messages embedded />} />
             <Route path="/buyer/quotes" element={<BuyerQuotes />} />
             <Route path="/buyer/products/compare" element={<ProductComparison />} />
             <Route path="/buyer/products/compare/:productId" element={<ProductComparison />} />
@@ -156,7 +158,8 @@ export default function AppRoutes() {
             <Route path="/buyer/quotes/compare/:rfqId" element={<Navigate to="/buyer/quotes" replace />} />
             <Route path="/buyer/wishlist" element={<BuyerWishlist />} />
             <Route path="/buyer/addresses" element={<BuyerAddresses />} />
-            <Route path="/buyer/profile" element={<BuyerProfile />} />
+            {/* My Business Profile is now the buyer Account Settings page; the old address keeps working */}
+            <Route path="/buyer/profile" element={<Navigate to="/buyer/account-settings" replace />} />
             <Route path="/buyer/documents" element={<BuyerDocuments />} />
             <Route path="/buyer/payments" element={<BuyerPayments />} />
             <Route path="/buyer/payment-methods" element={<BuyerCardsAccounts />} />

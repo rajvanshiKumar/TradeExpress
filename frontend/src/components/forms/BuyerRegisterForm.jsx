@@ -18,6 +18,8 @@ import {
   ArrowRight,
   Shield,
   FileCheck2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 import CustomSelect from '../common/CustomSelect';
@@ -29,10 +31,14 @@ import {
   COUNTRY_PHONE_RULES,
 } from '../../utils/constants';
 import { normalizeEmail, parseMobile, mobileExample } from '../../utils/validators';
-import { enterOtpDigits, isCompleteOtp, otpSlots } from '../../utils/otpDigits';
+import { enterOtpDigits, isCompleteOtp, otpBoxProps, otpSlots } from '../../utils/otpDigits';
 import { GoogleSignInCancelled, isGoogleSignInConfigured, signInWithGoogle } from '../../services/googleAuth';
 import { apiUrl } from '../../config/api.js';
 import useAadhaarOtp from '../../hooks/useAadhaarOtp.js';
+import AadhaarHolderCard from './AadhaarHolderCard.jsx';
+import PasswordValidationIndicator from '../common/PasswordValidationIndicator';
+import { evaluatePassword } from '../../utils/passwordRules.js';
+import ShopVerificationStep from './ShopVerificationStep.jsx';
 import { clearSignupSession, loadSignupSession, resolveResume, saveSignupSession } from '../../utils/signupSession.js';
 import { apiErrorCode, identityReverifyScope, IDENTITY_EXPIRED_MESSAGE, IDENTITY_PROOF_LIFETIME_MS } from '../../utils/identityVerification.js';
 
@@ -74,7 +80,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
   const { showToast } = useNotifications();
   const navigate = useNavigate();
 
-  // Registration Steps: 1: Account, 2: Phone Verification, 3: Profile Verification
+  // Registration Steps: 1: Account, 2: Phone Verification, 3: Identity (Aadhaar + PAN), 4: Shop (live photo + location)
   const [currentStep, setCurrentStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
@@ -143,8 +149,9 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       setPhoneVerified(true);
       setPhoneToken(session.phoneToken);
     }
-    setCurrentStep(resume.step);
-    setResumeStep(resume.resumeStep);
+    // Aadhaar / PAN proofs and the live shop photo are not stored, so a restored signup continues at most at Step 3
+    setCurrentStep(Math.min(resume.step, 3));
+    setResumeStep(resume.resumeStep ? Math.min(resume.resumeStep, 3) : null);
     setSessionNotice(resume.emailValid ? '' : 'Your session has expired. Please verify your email again to continue where you left off.');
   }, []);
 
@@ -189,8 +196,18 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       });
     },
   });
-  // Terms & Conditions, accepted after both checks are verified
+  // Terms & Conditions, accepted on Step 4 where the account is created
   const [agreeTerms, setAgreeTerms] = useState(false);
+  // Step 4: the account password (kept in memory only, never in the saved signup session)
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const passwordCheck = evaluatePassword(password, confirmPassword);
+  const passwordReady = passwordCheck.allPassed && passwordCheck.confirmMatch === true;
+  // Step 4: live shop photo with its live location, optional shop name and social links
+  const [shopCapture, setShopCapture] = useState(null);
+  const [shopName, setShopName] = useState('');
+  const [socialLinks, setSocialLinks] = useState([]);
 
   /** Clears the PAN proof (scope 'pan') or both proofs (scope 'aadhaar') so the user verifies again. */
   const resetIdentityVerification = (message, scope = 'aadhaar') => {
@@ -727,9 +744,18 @@ export default function BuyerRegisterForm({ onRoleChange }) {
     } else if (!panAadhaarLinked) {
       stepErrors.panAadhaar = 'Please verify that your Aadhaar is linked with your PAN card to proceed.';
     }
-    if (!agreeTerms) {
-      stepErrors.agreeTerms = 'Please accept the TradeExpress Terms & Conditions.';
-    }
+    setErrors(stepErrors);
+    return Object.keys(stepErrors).length === 0;
+  };
+
+  const validateStep4 = () => {
+    const stepErrors = {};
+    if (!shopCapture?.photoUrl) stepErrors.shop = 'Please take a live photo of your shop.';
+    if (!password) stepErrors.password = 'Create a password for your account.';
+    else if (!passwordCheck.allPassed) stepErrors.password = 'Your password does not meet all the requirements below.';
+    if (!confirmPassword) stepErrors.confirmPassword = 'Confirm your password.';
+    else if (password !== confirmPassword) stepErrors.confirmPassword = 'Passwords do not match.';
+    if (!agreeTerms) stepErrors.agreeTerms = 'Please accept the TradeExpress Terms & Conditions.';
     setErrors(stepErrors);
     return Object.keys(stepErrors).length === 0;
   };
@@ -772,6 +798,10 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       setCurrentStep(3);
       return;
     }
+    if (!validateStep4()) {
+      setCurrentStep(4);
+      return;
+    }
 
     submitLockRef.current = true;
     setBusy(true);
@@ -783,8 +813,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
 
     const payload = {
       name: values.name.trim(),
-      company: values.companyName?.trim() || `${values.name.trim()}'s Business`,
-      companyName: values.companyName?.trim() || `${values.name.trim()}'s Business`,
+      company: shopName.trim() || values.companyName?.trim() || `${values.name.trim()}'s Business`,
+      companyName: shopName.trim() || values.companyName?.trim() || `${values.name.trim()}'s Business`,
       email: normalizeEmail(values.email),
       phone: parsedPhone.international || values.phone.trim(),
       country: values.countryCode || 'India',
@@ -797,8 +827,18 @@ export default function BuyerRegisterForm({ onRoleChange }) {
       panAadhaarLinked: Boolean(panAadhaarLinked),
       panAadhaarToken: panAadhaarLinked ? panAadhaarToken : null,
       aadhaarVerificationToken: aadhaarOtp?.verificationToken || null,
+      // Step 4 (the server resolves the address from the coordinates itself)
+      shopName: shopName.trim(),
+      shopPhotoUrl: shopCapture?.photoUrl || null,
+      shopLatitude: shopCapture?.latitude ?? null,
+      shopLongitude: shopCapture?.longitude ?? null,
+      shopLocationAccuracy: shopCapture?.accuracy ?? null,
+      shopCapturedAt: shopCapture?.capturedAt || null,
+      socialLinks: socialLinks.map((link) => link.url),
       verificationToken: phoneToken,
       emailVerificationToken: emailToken,
+      password,
+      confirmPassword,
       agree: true,
       agreeTerms: true,
     };
@@ -818,6 +858,9 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           storeAuthToken(data.data.token);
         }
         clearSignupSession('buyer');
+        // The password is not kept in memory once the account exists
+        setPassword('');
+        setConfirmPassword('');
         if (setAuthUser && data.data) {
           await setAuthUser(data.data.user || data.data, data.data.token, '');
         }
@@ -829,6 +872,16 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           email: payload.email,
         });
         window.scrollTo({ top: 80, behavior: 'smooth' });
+        return;
+      }
+
+      // The server refused the shop details (old photo, missing location, bad link): fix them on Step 4
+      const shopCode = apiErrorCode(data);
+      if (shopCode && (shopCode.startsWith('SHOP_') || shopCode === 'INVALID_SOCIAL_LINKS')) {
+        if (shopCode.startsWith('SHOP_PHOTO') || shopCode === 'SHOP_LOCATION_INVALID') setShopCapture(null);
+        setErrors((prev) => ({ ...prev, shop: data.message }));
+        setFormError('');
+        setCurrentStep(4);
         return;
       }
 
@@ -965,7 +1018,9 @@ export default function BuyerRegisterForm({ onRoleChange }) {
               ? 'CREATE ACCOUNT'
               : currentStep === 2
               ? 'PHONE VERIFICATION'
-              : 'PROFILE VERIFICATION'}
+              : currentStep === 3
+              ? 'IDENTITY VERIFICATION'
+              : 'SHOP VERIFICATION'}
           </span>
         </div>
         <h2 className="mt-1.5 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
@@ -973,14 +1028,18 @@ export default function BuyerRegisterForm({ onRoleChange }) {
             ? 'Create your account'
             : currentStep === 2
             ? 'Verify your mobile number'
-            : 'Statutory Identity & Profile'}
+            : currentStep === 3
+            ? 'Statutory Identity & Profile'
+            : 'Your shop'}
         </h2>
         <p className="mt-1 text-xs sm:text-sm text-slate-500">
           {currentStep === 1
             ? 'Start with your name and verify your email.'
             : currentStep === 2
             ? 'We will send a 6-digit verification code to your mobile number.'
-            : 'Verify your Aadhaar and PAN to activate your enterprise buyer privileges.'}
+            : currentStep === 3
+            ? 'Verify your Aadhaar and PAN to activate your enterprise buyer privileges.'
+            : 'Take a live photo of your shop. We record its location so suppliers can trust your business.'}
         </p>
       </div>
 
@@ -1078,19 +1137,59 @@ export default function BuyerRegisterForm({ onRoleChange }) {
           >
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
-                currentStep === 3
+                currentStep > 3
+                  ? 'bg-emerald-800 text-white'
+                  : currentStep === 3
                   ? 'bg-emerald-800 text-white ring-4 ring-emerald-600/20 shadow-xs'
                   : 'bg-slate-100 text-slate-500'
               }`}
             >
-              3
+              {currentStep > 3 ? <Check className="h-4 w-4" /> : '3'}
             </div>
             <span
               className={`text-xs font-semibold ${currentStep === 3 ? '' : 'hidden sm:inline'} ${
-                currentStep === 3 ? 'text-slate-900 font-bold' : 'text-slate-400'
+                currentStep >= 3 ? 'text-slate-900 font-bold' : 'text-slate-400'
               }`}
             >
-              Profile
+              Identity
+            </span>
+          </button>
+
+          <div
+            className={`flex-1 mx-2 sm:mx-3 h-0.5 min-w-4 rounded-full transition-all ${
+              currentStep > 3 ? 'bg-emerald-800' : 'bg-slate-200'
+            }`}
+          />
+
+          {/* Step 4 Indicator */}
+          <button
+            type="button"
+            disabled={!(aadhaarOtp && panAadhaarLinked)}
+            onClick={() => {
+              if (aadhaarOtp && panAadhaarLinked) {
+                setCurrentStep(4);
+                window.scrollTo({ top: 80, behavior: 'smooth' });
+              }
+            }}
+            className={`flex items-center gap-2 text-left bg-transparent border-0 p-0 ${
+              aadhaarOtp && panAadhaarLinked ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'
+            }`}
+          >
+            <div
+              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                currentStep === 4
+                  ? 'bg-emerald-800 text-white ring-4 ring-emerald-600/20 shadow-xs'
+                  : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              4
+            </div>
+            <span
+              className={`text-xs font-semibold ${currentStep === 4 ? '' : 'hidden sm:inline'} ${
+                currentStep === 4 ? 'text-slate-900 font-bold' : 'text-slate-400'
+              }`}
+            >
+              Shop
             </span>
           </button>
         </div>
@@ -1199,6 +1298,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                     <input
                       key={index}
                       ref={(el) => (emailOtpInputsRef.current[index] = el)}
+                      {...otpBoxProps('buyer-email', index)}
+                      disabled={emailVerifying}
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
@@ -1403,6 +1504,8 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                     <input
                       key={index}
                       ref={(el) => (phoneOtpInputsRef.current[index] = el)}
+                      {...otpBoxProps('buyer-mobile', index)}
+                      disabled={phoneVerifying}
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
@@ -1566,6 +1669,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
               ) : !aadhaarFlow.request && (
                 <p className="mt-1.5 text-[11px] text-slate-500">An OTP will be sent to the mobile number linked with your Aadhaar.</p>
               )}
+              {aadhaarOtp ? <AadhaarHolderCard holder={aadhaarOtp.holder} /> : null}
 
               {/* 6-digit OTP, shown after Verify */}
               {!aadhaarOtp && aadhaarFlow.request && (
@@ -1581,11 +1685,12 @@ export default function BuyerRegisterForm({ onRoleChange }) {
                       <input
                         key={index}
                         ref={(el) => (aadhaarOtpInputsRef.current[index] = el)}
+                        {...otpBoxProps('buyer-aadhaar', index)}
+                        aria-label={`Aadhaar OTP digit ${index + 1}`}
+                        disabled={aadhaarFlow.verifying}
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
-                        autoComplete={index === 0 ? 'one-time-code' : 'off'}
-                        aria-label={`Aadhaar OTP digit ${index + 1}`}
                         maxLength={1}
                         value={otpSlots(aadhaarFlow.otp)[index]}
                         onChange={(e) => handleOtpBoxChange('aadhaar', index, e.target.value)}
@@ -1688,8 +1793,108 @@ export default function BuyerRegisterForm({ onRoleChange }) {
             By verifying, you consent to Aadhaar and PAN verification under the Aadhaar Act, 2016 and DPDP Act, 2023.
           </p>
 
-          {/* Terms & Conditions: shown once Aadhaar and PAN are verified */}
-          {aadhaarOtp && panAadhaarLinked && (
+          {/* Step 3 navigation: the account is created on Step 4 */}
+          <div className="flex items-center justify-between pt-2">
+            <button
+              type="button"
+              onClick={handlePrevStep}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Back</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!validateStep3()) return;
+                setFormError('');
+                setCurrentStep(4);
+                window.scrollTo({ top: 80, behavior: 'smooth' });
+              }}
+              disabled={!aadhaarOtp || !panAadhaarLinked}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-7 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40 transition"
+            >
+              <span>Next: Shop details</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* STEP 4: SHOP (LIVE PHOTO + LIVE LOCATION) AND REGISTRATION */}
+      {/* ============================================================ */}
+      {currentStep === 4 && (
+        <div className="space-y-4">
+          <ShopVerificationStep
+            capture={shopCapture}
+            onCapture={(next) => {
+              setShopCapture(next);
+              if (next) setErrors((prev) => { const rest = { ...prev }; delete rest.shop; return rest; });
+            }}
+            shopName={shopName}
+            onShopNameChange={setShopName}
+            socialLinks={socialLinks}
+            onSocialLinksChange={setSocialLinks}
+            error={errors.shop}
+          />
+
+          {/* Account password: the last details before the account is created */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="text-sm font-bold text-slate-900">Set your password</h3>
+            <p className="mt-0.5 text-xs text-slate-500">You can sign in with this password, or with an email / mobile OTP.</p>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="buyer-password" className="mb-1 block text-xs font-semibold text-slate-700">
+                  Password <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    id="buyer-password"
+                    name="buyer_new_password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    placeholder="Minimum 8 characters"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setErrors((prev) => { const next = { ...prev }; delete next.password; return next; }); }}
+                    aria-invalid={Boolean(errors.password)}
+                    className={`w-full rounded-xl border px-3.5 py-2.5 pr-10 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${errors.password ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {errors.password && <p className="mt-1 text-xs font-medium text-red-600">{errors.password}</p>}
+              </div>
+              <div>
+                <label htmlFor="buyer-confirm-password" className="mb-1 block text-xs font-semibold text-slate-700">
+                  Confirm Password <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="buyer-confirm-password"
+                  name="buyer_confirm_password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  placeholder="Repeat password"
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); setErrors((prev) => { const next = { ...prev }; delete next.confirmPassword; return next; }); }}
+                  aria-invalid={Boolean(errors.confirmPassword)}
+                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-600/30 ${errors.confirmPassword ? 'border-red-500 bg-red-50/30' : 'border-slate-300 focus:border-emerald-600'}`}
+                />
+                {errors.confirmPassword && <p className="mt-1 text-xs font-medium text-red-600">{errors.confirmPassword}</p>}
+              </div>
+            </div>
+            <PasswordValidationIndicator password={password} confirmPassword={confirmPassword} showConfirmMatch />
+          </div>
+
+          {/* Terms & Conditions: accepted where the account is created */}
+          {(
             <div>
               <label className="flex cursor-pointer select-none items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
                 <input
@@ -1724,7 +1929,7 @@ export default function BuyerRegisterForm({ onRoleChange }) {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={busy || !aadhaarVerified || !panVerified || !agreeTerms}
+              disabled={busy || !aadhaarVerified || !panVerified || !shopCapture || !passwordReady || !agreeTerms}
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-7 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40 transition"
             >
               {busy ? (

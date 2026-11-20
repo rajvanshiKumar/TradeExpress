@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronRight,
   Info,
-  Layers,
   Sparkles,
 } from 'lucide-react';
 import { useTranslation } from '../../i18n/LanguageContext';
@@ -17,13 +16,6 @@ const ABOUT_ITEMS = [
     icon: Building2,
     badge: 'Company',
     description: 'Our mission, marketplace story and verified B2B network.',
-  },
-  {
-    title: 'How It Works',
-    to: '/info/about#how-it-works',
-    icon: Layers,
-    badge: 'Guide',
-    description: 'Discover products, check MOQ tiers and trade securely.',
   },
 ];
 
@@ -85,7 +77,7 @@ export default function AboutMenu({ active = false }) {
         }`}
       >
         <Info className="hidden 2xl:block size-3.5 shrink-0 opacity-75" aria-hidden="true" />
-        <span>{t('nav.about', {}, 'About Us')}</span>
+        <span>{t('nav.about', {}, 'About')}</span>
         <button
           type="button"
           onClick={(e) => {
@@ -169,19 +161,6 @@ export default function AboutMenu({ active = false }) {
               );
             })}
           </ul>
-
-          {/* Footer Callout */}
-          <div className="mt-1 pt-2 border-t border-slate-100 px-3 py-1.5 bg-slate-50/70 rounded-xl flex items-center justify-between text-[11px]">
-            <span className="text-slate-600 font-medium">Safe B2B Trading & Escrow</span>
-            <Link
-              to="/info/about"
-              onClick={() => setOpen(false)}
-              className="font-bold text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5"
-            >
-              <span>Explore</span>
-              <span aria-hidden="true">→</span>
-            </Link>
-          </div>
         </div>
       )}
     </div>

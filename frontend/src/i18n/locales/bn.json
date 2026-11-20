@@ -22,11 +22,12 @@
   "nav.suppliers": "সরবরাহকারী",
   "nav.exporters": "রপ্তানিকারক",
   "nav.rfq": "কোটেশন অনুরোধ (RFQ)",
+  "nav.compare": "তুলনা",
   "nav.compareProducts": "পণ্য তুলনা করুন",
   "nav.compareShort": "তুলনা",
   "nav.wishlist": "পছন্দের তালিকা",
   "nav.help": "সহায়তা",
-  "nav.about": "আমাদের সম্পর্কে",
+  "nav.about": "পরিচিতি",
   "nav.becomeSupplier": "সরবরাহকারী হন",
 
   "header.searchPlaceholder": "পণ্য, বিভাগ বা সরবরাহকারী খুঁজুন...",

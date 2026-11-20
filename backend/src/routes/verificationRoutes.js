@@ -100,6 +100,20 @@ router.post(
 );
 
 /**
+ * POST /api/verification/location/reverse-geocode
+ * Address for the live shop location (shown under the shop photo at buyer signup). Signup saves its own lookup.
+ */
+router.post(
+  '/location/reverse-geocode',
+  verificationLimiter,
+  validate([
+    body('latitude').isFloat({ min: -90, max: 90 }).withMessage('Latitude must be between -90 and 90.'),
+    body('longitude').isFloat({ min: -180, max: 180 }).withMessage('Longitude must be between -180 and 180.'),
+  ]),
+  verificationController.reverseGeocodeLocation
+);
+
+/**
  * GET /api/verification/pan-aadhaar/status
  * Fetches saved PAN-Aadhaar verification status for the logged-in user.
  */

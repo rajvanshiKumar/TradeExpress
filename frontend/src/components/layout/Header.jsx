@@ -168,6 +168,10 @@ export default function Header() {
               ...(!isAuthPage
                 ? [{ label: "Compare Products", to: "/compare-products" }]
                 : []),
+              // RFQ (Request for Quotation): for guests and buyers (suppliers answer RFQs, they do not post them)
+              ...(!isAuthPage && (!user || user.role === "buyer")
+                ? [{ label: "RFQ", to: "/rfq", title: t('nav.rfq', {}, 'Request for Quotation') }]
+                : []),
               // Laptop widths (1024–1279px) have no room for Deals next to About Us; it returns from 1280px
               { label: "Deals", to: "/products?deal=1", wideOnly: true },
             ].map((item) => {
@@ -182,8 +186,10 @@ export default function Header() {
                 if (label === "Compare Products") {
                   return (
                     <span className="inline-flex items-center gap-1 xl:gap-1.5">
-                      <Scale className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
-                      <span>{t('nav.compareProducts', {}, 'Compare Products')}</span>
+                      <Scale className="hidden xl:block size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                      {/* Below 1360px the short name keeps the links clear of the icons on the right */}
+                      <span className="min-[1360px]:hidden">{t('nav.compare', {}, 'Compare')}</span>
+                      <span className="hidden min-[1360px]:inline">{t('nav.compareProducts', {}, 'Compare Products')}</span>
                     </span>
                   );
                 }
@@ -195,12 +201,12 @@ export default function Header() {
                     </span>
                   );
                 }
-                if (label === "Request a Quote") {
+                if (label === "RFQ") {
+                  // Always the short "RFQ" (the same in every language); the full name is in the tooltip
                   return (
                     <span className="inline-flex items-center gap-1 xl:gap-1.5">
-                      <FileSpreadsheet className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
-                      <span className="hidden xl:inline">{t('nav.rfqLong', {}, 'Request a Quote')}</span>
-                      <span className="xl:hidden">{t('nav.rfq', {}, 'RFQ')}</span>
+                      <FileSpreadsheet className="hidden xl:block size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+                      <span>RFQ</span>
                     </span>
                   );
                 }
@@ -254,6 +260,8 @@ export default function Header() {
                   to={item.to}
                   onMouseEnter={scheduleClose}
                   aria-current={active ? "page" : undefined}
+                  title={item.title}
+                  aria-label={item.title}
                   className={pillClass}
                 >
                   {renderLabel(item.label)}
@@ -291,7 +299,8 @@ export default function Header() {
             )}
             {user && user.role !== "super_admin" && (
               <IconLink
-                to="/messages"
+                // Buyers read messages inside their portal
+                to={user.role === "buyer" ? "/buyer/messages" : "/messages"}
                 icon={MessageSquare}
                 label="Messages"
                 count={unreadMessages}
@@ -314,7 +323,8 @@ export default function Header() {
             />
             {/* Help & support menu, right after the cart (phones reach Help from the menu). Guests get it in
                 place of the notifications bell, which for them only says "Login to view". */}
-            {user?.role !== "super_admin" && <SupportMenu className="hidden sm:block" />}
+            {/* From 1280px (laptops reach Help from the footer and the menu); tablets and phones keep it from 640px */}
+            {user?.role !== "super_admin" && <SupportMenu className="hidden sm:block lg:hidden xl:block" />}
 
             {/* Direct Super Admin / Admin quick pill if logged in */}
             {user?.role === "super_admin" ? (

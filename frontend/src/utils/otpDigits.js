@@ -44,6 +44,41 @@ export function enterOtpDigits(current, index, input) {
   return { value: joinOtpSlots(slots), focusIndex: index < OTP_LENGTH - 1 ? index + 1 : null };
 }
 
+/**
+ * Attributes for one OTP box. Every box is marked as a one-time code with its own name, so the browser never
+ * treats the six boxes as parts of a phone number or address and never fills them while another field
+ * (mobile number, email…) is being autofilled. Password managers are told to leave them alone too.
+ * `group` keeps the boxes of different codes on one page apart (e.g. "signup-mobile", "signup-email").
+ */
+export function otpBoxProps(group, index) {
+  return {
+    id: `${group}-otp-${index + 1}`,
+    name: `${group}-otp-${index + 1}`,
+    autoComplete: 'one-time-code',
+    autoCorrect: 'off',
+    autoCapitalize: 'off',
+    spellCheck: false,
+    'aria-label': `Digit ${index + 1} of ${OTP_LENGTH}`,
+    'data-lpignore': 'true',
+    'data-1p-ignore': 'true',
+    'data-bwignore': 'true',
+    'data-form-type': 'other',
+  };
+}
+
+/**
+ * True when the person is typing in some other field right now. A code box only takes the cursor on its own when
+ * this is false, so opening a code box never pulls the cursor out of the field being filled in.
+ */
+export function isTypingElsewhere(boxes = []) {
+  if (typeof document === 'undefined') return false;
+  const active = document.activeElement;
+  if (!active || active === document.body) return false;
+  if (boxes.includes(active)) return false;
+  const tag = active.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || active.isContentEditable;
+}
+
 /** Code string from pasted text (digits only, from the first box). */
 export function pastedOtp(text) {
   return String(text || '').replace(/\D/g, '').slice(0, OTP_LENGTH);

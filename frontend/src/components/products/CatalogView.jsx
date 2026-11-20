@@ -10,7 +10,6 @@ import Button from '../common/Button';
 import ErrorState from '../common/ErrorState';
 import useProducts from '../../hooks/useProducts';
 import useCatalogFilters from '../../hooks/useCatalogFilters';
-import useFitToViewport from '../../hooks/useFitToViewport';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import useDisclosure from '../../hooks/useDisclosure';
 import { filterProducts } from '../../services/productService';
@@ -50,7 +49,6 @@ export default function CatalogView({ lockedCategory = '' }) {
   const [view, setView] = useLocalStorage('catalog-view', 'grid');
   const drawer = useDisclosure();
   const topRef = useRef(null);
-  const sidebarRef = useFitToViewport();
 
   const filters = useMemo(() => (lockedCategory ? { ...urlFilters, category: lockedCategory } : urlFilters), [urlFilters, lockedCategory]);
   const results = useMemo(() => filterProducts(products, companies, filters), [products, companies, filters]);
@@ -104,10 +102,11 @@ export default function CatalogView({ lockedCategory = '' }) {
 
   return (
     <div ref={topRef} className="scroll-mt-40 lg:grid lg:grid-cols-[18.75rem_minmax(0,1fr)] lg:gap-7">
-      {/* The column keeps a fixed minimum height, so the panel fitting itself to the screen never moves the page */}
-      <aside aria-label="Filters" className="hidden lg:block lg:min-h-[calc(100dvh-7.5rem)]">
-        {/* Always fits the visible screen: the header and the Reset / Apply bar stay in view while the options scroll */}
-        <div ref={sidebarRef} className="sticky top-24 flex h-[calc(100dvh-7.5rem)] max-h-[58rem] flex-col overflow-hidden rounded-xl border border-line bg-white shadow-[0_8px_24px_-16px_rgb(16_40_24/0.25)]">
+      <aside aria-label="Filters" className="hidden lg:block">
+        {/* Stays still while the page scrolls: its height follows its content (up to a fixed limit that fits the
+            screen) and never changes with the scroll position. Longer option lists scroll inside the panel, so the
+            header and the Reset / Apply bar are always in view. */}
+        <div className="sticky top-24 flex max-h-[min(58rem,calc(100dvh-7.5rem))] flex-col overflow-hidden rounded-xl border border-line bg-white shadow-[0_8px_24px_-16px_rgb(16_40_24/0.25)]">
           {filterPanel('filter')}
         </div>
       </aside>

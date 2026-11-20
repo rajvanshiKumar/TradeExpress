@@ -298,7 +298,7 @@ export default function InquiryList({ inquiries }) {
                           if (targetComp) {
                             contact(targetComp, product, `Inquiring about quotation #${quote.quoteNumber || inquiry.id}`);
                           } else {
-                            navigate(`/messages?rfq=${encodeURIComponent(inquiry.rfqId || inquiry.id)}&supplierId=${encodeURIComponent(quote.supplierId || '')}`);
+                            navigate(`/buyer/messages?rfq=${encodeURIComponent(inquiry.rfqId || inquiry.id)}&supplierId=${encodeURIComponent(quote.supplierId || '')}`);
                           }
                         }}
                       >
